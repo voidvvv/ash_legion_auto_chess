@@ -56,7 +56,7 @@ configure(subprojects - project(':android')) {
 
 subprojects {
   version = "$projectVersion"
-  ext.appName = 'kz_auto_chess———_n'
+  ext.appName = 'ember-legion'
   repositories {
     mavenCentral()
     // You may want to remove the following line if you have errors downloading dependencies.

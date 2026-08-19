@@ -5,7 +5,14 @@ dependencies {
   api "com.badlogicgames.gdx:gdx-ai:$aiVersion"
   api "com.badlogicgames.gdx:gdx:$gdxVersion"
 
+  testImplementation "org.junit.jupiter:junit-jupiter:5.11.4"
+  testImplementation "org.assertj:assertj-core:3.27.3"
+
   if(enableGraalNative == 'true') {
     implementation "io.github.berstanio:gdx-svmhelper-annotations:$graalHelperVersion"
   }
+}
+
+test {
+  useJUnitPlatform()
 }
