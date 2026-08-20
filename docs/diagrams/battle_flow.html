@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>余烬军团 · 战斗系统流程图 V1.0</title>
+<style>
+  :root {
+    --bg:#f6f8fa; --card:#ffffff; --line:#d8dee4; --ink:#1f2328; --sub:#57606a;
+    --stage:#0969da; --stage-bg:#ddf4ff;
+    --cond:#9a6700; --cond-bg:#fff8c5;
+    --dmg:#cf222e; --dmg-bg:#ffebe9;
+    --heal:#1a7f37; --heal-bg:#dafbe1;
+    --proj:#0d7d8c; --proj-bg:#e0f7fa;
+    --evt:#8250df; --evt-bg:#f3eaff;
+    --gray:#6e7781; --gray-bg:#f0f2f4;
+  }
+  * { box-sizing: border-box; }
+  body { font-family:"Segoe UI","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--ink); margin:0; padding:28px 20px 60px; line-height:1.65; }
+  .wrap { max-width:1080px; margin:0 auto; }
+  h1 { font-size:22px; margin:0 0 6px; }
+  .meta { color:var(--sub); font-size:13px; margin-bottom:14px; }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px; }
+  .chip { font-size:12px; padding:3px 12px; border-radius:999px; border:1px solid var(--line); background:var(--card); }
+  .chip b { color:var(--stage); }
+
+  section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px 20px; margin-top:22px; }
+  section h2 { font-size:16px; margin:0 0 4px; display:flex; align-items:center; gap:10px; }
+  .num { display:inline-flex; align-items:center; justify-content:center; min-width:26px; height:26px; border-radius:50%; background:var(--stage); color:#fff; font-size:14px; font-weight:700; }
+  .lead { color:var(--sub); font-size:13px; margin:0 0 14px; }
+
+  /* 横向管线 */
+  .pipe { display:flex; align-items:stretch; flex-wrap:wrap; gap:0; }
+  .node { flex:1 1 150px; border:1px solid var(--line); border-radius:8px; padding:10px 12px; background:#fff; min-width:150px; }
+  .node .t { font-weight:700; font-size:13px; margin-bottom:4px; }
+  .node .d { font-size:12px; color:var(--sub); }
+  .arr { display:flex; align-items:center; padding:0 6px; color:var(--gray); font-size:18px; font-weight:700; }
+
+  /* 主循环四阶段 */
+  .stages { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
+  .stage { border-top:4px solid var(--stage); background:var(--stage-bg); border-radius:0 0 8px 8px; padding:10px 12px; }
+  .stage .t { font-weight:700; font-size:13px; color:var(--stage); margin-bottom:6px; }
+  .stage ul { margin:0; padding-left:16px; font-size:12px; color:var(--ink); }
+  .stage li { margin:3px 0; }
+  .loopback { text-align:center; color:var(--stage); font-size:13px; margin-top:10px; font-weight:600; }
+  .loopback span { border:1px dashed var(--stage); border-radius:999px; padding:2px 16px; background:#fff; }
+
+  .note { border-left:4px solid var(--cond); background:var(--cond-bg); border-radius:0 8px 8px 0; padding:10px 14px; font-size:13px; margin-top:14px; }
+  .note b { color:var(--cond); }
+  .note.green { border-color:var(--heal); background:var(--heal-bg); } .note.green b { color:var(--heal); }
+
+  /* 决策链 */
+  .ladder { display:grid; grid-template-columns:44px 250px 60px 1fr; gap:0; align-items:center; }
+  .spine { grid-column:1; grid-row:1 / span 1; display:flex; flex-direction:column; align-items:center; height:100%; }
+  .rung { display:contents; }
+  .q { grid-column:2; background:var(--cond-bg); border:1.5px solid var(--cond); color:var(--cond); font-weight:700; border-radius:8px; padding:8px 12px; text-align:center; font-size:13px; }
+  .no { grid-column:3; text-align:center; color:var(--gray); font-size:12px; padding:2px 0; }
+  .no b { display:block; font-size:13px; }
+  .yes-act { grid-column:4; border:1px solid var(--line); border-radius:8px; padding:8px 12px; background:#fff; font-size:12px; }
+  .yes-act .t { font-weight:700; font-size:12.5px; }
+  .vline { grid-column:1; border-right:2px solid var(--cond); height:26px; margin:-2px auto; }
+  .vlabel { grid-column:1; text-align:center; font-size:11px; color:var(--cond); }
+  .endcap { grid-column:2 / span 3; text-align:center; border:1.5px dashed var(--gray); color:var(--sub); border-radius:8px; padding:6px; font-size:12.5px; background:var(--gray-bg); }
+
+  /* 载体三卡 */
+  .carriers { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:6px; }
+  .carrier { border:1px solid var(--line); border-radius:8px; overflow:hidden; background:#fff; }
+  .carrier .h { padding:7px 12px; font-weight:700; font-size:13px; color:#fff; }
+  .carrier.melee .h { background:#57606a; }
+  .carrier.homing .h { background:var(--proj); }
+  .carrier.line .h { background:#0a5c66; }
+  .carrier .b { padding:8px 12px; font-size:12px; }
+  .carrier .b ul { margin:0; padding-left:16px; }
+  .carrier .b li { margin:3px 0; }
+  .tag { display:inline-block; font-size:11px; background:var(--gray-bg); border-radius:4px; padding:1px 6px; margin-left:6px; color:var(--sub); }
+
+  /* 伤害管线 stepper */
+  .stepper { display:flex; flex-wrap:wrap; align-items:stretch; gap:0; margin-top:6px; }
+  .step { flex:1 1 150px; min-width:150px; border:1px solid var(--line); border-left:4px solid var(--dmg); border-radius:8px; padding:8px 10px; background:#fff; font-size:12px; }
+  .step .t { font-weight:700; font-size:12.5px; margin-bottom:3px; }
+  .step code { background:var(--gray-bg); padding:1px 5px; border-radius:4px; font-size:11px; }
+  .step.g { border-left-color:var(--heal); }
+
+  /* 技能六格 */
+  .skills { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .skill { border:1px solid var(--line); border-radius:8px; padding:8px 12px; background:#fff; font-size:12.5px; }
+  .skill b { font-size:13px; }
+  .skill .c { color:var(--proj); font-size:11.5px; }
+  .skill .d { color:var(--sub); }
+
+  /* 状态框架 */
+  .status-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .panel { border:1px solid var(--line); border-radius:8px; padding:10px 14px; background:#fff; font-size:12.5px; }
+  .panel .t { font-weight:700; margin-bottom:6px; font-size:13px; }
+  .panel ul { margin:0; padding-left:16px; } .panel li { margin:3px 0; }
+
+  /* 事件流 */
+  .events { display:flex; flex-wrap:wrap; gap:8px; }
+  .evt { background:var(--evt-bg); border:1px solid var(--evt); color:var(--evt); border-radius:6px; padding:3px 10px; font-size:12px; font-family:Consolas,monospace; }
+  .uses { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:12px; }
+  .use { border:1px dashed var(--evt); border-radius:8px; padding:8px 12px; font-size:12.5px; background:#fff; }
+  .use b { color:var(--evt); }
+
+  /* 出口 */
+  .exits { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .exit { border-radius:8px; padding:10px 14px; font-size:13px; border:1px solid var(--line); background:#fff; }
+  .exit.win { border-left:4px solid var(--heal); } .exit.lose { border-left:4px solid var(--dmg); }
+  .exit b { display:block; margin-bottom:3px; }
+
+  /* 图例 */
+  .legend { display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; }
+  .lg { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--sub); }
+  .dot { width:12px; height:12px; border-radius:3px; display:inline-block; }
+
+  footer { color:var(--sub); font-size:12px; margin-top:24px; text-align:center; }
+
+  @media (max-width:860px) {
+    .stages, .carriers, .skills, .uses { grid-template-columns:1fr 1fr; }
+    .status-grid, .exits { grid-template-columns:1fr; }
+    .ladder { grid-template-columns:30px 1fr 50px 1fr; }
+  }
+  @media (max-width:560px) {
+    .stages, .carriers, .skills, .uses { grid-template-columns:1fr; }
+    .ladder { grid-template-columns:1fr; }
+    .q,.no,.yes-act,.vline,.vlabel,.endcap { grid-column:1; }
+    .vline { display:none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>⚔️ 余烬军团 · 战斗系统流程图</h1>
+  <div class="meta">依据 <b>docs/battle_design.md V1.0</b>（GDD V0.8 §六）· 2026-08-20 定稿 · 纯静态页面，离线可看可打印</div>
+  <div class="chips">
+    <span class="chip"><b>60Hz</b> 统一逻辑 tick（与命令消费共用 accumulator）</span>
+    <span class="chip"><b>H 语义</b> 立即结算 + 延迟死亡清扫</span>
+    <span class="chip"><b>确定性</b> 固定遍历序 + id 决胜，回放可复现</span>
+  </div>
+
+  <!-- ⓪ 开战准备 -->
+  <section>
+    <h2><span class="num">⓪</span>开战准备（SHOPPING → BATTLE）</h2>
+    <p class="lead">StartBattle 命令触发一次性派生；战斗期间名单（Unit）永不改动——重试即重新派生。</p>
+    <div class="pipe">
+      <div class="node"><div class="t">StartBattle 命令</div><div class="d">零棋子亦允许（战败不计怜悯）</div></div>
+      <div class="arr">→</div>
+      <div class="node"><div class="t">玩家侧派生</div><div class="d">名单 Unit → BattleUnit</div></div>
+      <div class="arr">→</div>
+      <div class="node"><div class="t">基准快照结算</div><div class="d">( 模板 × 星级倍率 + Σ装备 + Σ羁绊 ) × (1 + ΣPCT)</div></div>
+      <div class="arr">→</div>
+      <div class="node"><div class="t">敌方直接构造</div><div class="d">WaveGenerator 按 k=1+0.1×(轮次−1) 生成</div></div>
+      <div class="arr">→</div>
+      <div class="node"><div class="t">进入 BATTLE</div><div class="d">攻击计时器就绪 · 能量 0 · 60s 超时开始</div></div>
+    </div>
+  </section>
+
+  <!-- ① 主循环 -->
+  <section>
+    <h2><span class="num">①</span>主循环 —— 每个逻辑 tick 的四个固定阶段</h2>
+    <p class="lead">四个阶段按序执行，永不改变；一切同 tick 冲突由「单位 id 升序遍历」决胜。</p>
+    <div class="stages">
+      <div class="stage"><div class="t">㈠ 状态推进</div>
+        <ul><li>DOT 每 1s 心跳（<b>真伤</b>、可致死 → 直接进清扫名单）</li><li>持续时间递减、控制倒计时</li></ul>
+      </div>
+      <div class="stage"><div class="t">㈡ 逐单位行动</div>
+        <ul><li>id 升序，跳过清扫名单者</li><li>执行决策链（见 ②）</li><li>每整 2s：全局索敌重评估</li></ul>
+      </div>
+      <div class="stage"><div class="t">㈢ 死亡清扫</div>
+        <ul><li>统一标记死亡、腾格</li><li>亡语 / 掉落钩子预留</li></ul>
+      </div>
+      <div class="stage"><div class="t">㈣ 胜负判定</div>
+        <ul><li>敌全灭 → 胜</li><li>我全灭 / 60s 超时 → 败</li><li>否则进入下一 tick</li></ul>
+      </div>
+    </div>
+    <div class="loopback"><span>↻ 未分胜负 → 下一 tick（循环往复）</span></div>
+    <div class="note"><b>H 语义三原则：</b>① 伤害<b>立即落地</b>——后行动者看到的是最新 HP（治疗能救本 tick 刚被打残的人）；② HP ≤ 0 但<b>尚未清扫</b>的单位，本 tick 仍可行动、仍是合法目标——<b>互秒</b>由此成立；③ 攻击已清扫目标才会扑空，溢出伤害作废。</div>
+  </section>
+
+  <!-- ② 决策链 -->
+  <section>
+    <h2><span class="num">②</span>单位决策链 —— 阶段㈡内部（每单位每 tick，自上而下）</h2>
+    <p class="lead">纯函数优先链，不是行为树；「是」即向右执行并结束本 tick 行动，「否」向下坠落。</p>
+    <div class="ladder">
+      <div class="rung">
+        <div class="vlabel">开始</div>
+        <div class="q">① 被控制？（存在 STUN 等控制状态）</div>
+        <div class="no"><b>是 →</b></div>
+        <div class="yes-act"><div class="t">跳过本 tick</div>不移动、不攻击、能量冻结</div>
+      </div>
+      <div class="vline"></div><div class="vlabel">否</div><div></div><div></div>
+      <div class="rung">
+        <div class="vlabel"></div>
+        <div class="q">② 目标有效？（未被清扫）</div>
+        <div class="no"><b>否 →</b></div>
+        <div class="yes-act"><div class="t">findTarget() 重选</div>NEAREST / BACKLINE / LOWEST_HP / HIGHEST_ATK，末位一律 id 决胜</div>
+      </div>
+      <div class="vline"></div><div class="vlabel">是</div><div></div><div></div>
+      <div class="rung">
+        <div class="vlabel"></div>
+        <div class="q">③ 能量 ≥ 100？</div>
+        <div class="no"><b>是 →</b></div>
+        <div class="yes-act"><div class="t">就地施放技能</div>在能量过百的结算点立即触发（见 ④）· 清零能量</div>
+      </div>
+      <div class="vline"></div><div class="vlabel">否</div><div></div><div></div>
+      <div class="rung">
+        <div class="vlabel"></div>
+        <div class="q">④ 目标在射程内？（曼哈顿距离 ≤ range）</div>
+        <div class="no"><b>是 →</b></div>
+        <div class="yes-act"><div class="t">攻击</div>推进攻击计时器（间隔 1/attackSpeed，结转余数），到点出手（见 ③）</div>
+      </div>
+      <div class="vline"></div><div class="vlabel">否</div><div></div><div></div>
+      <div class="rung">
+        <div class="vlabel"></div>
+        <div class="q">⑤ 跳格冷却就绪？（冷却 = 1 / moveSpeed）</div>
+        <div class="no"><b>是 →</b></div>
+        <div class="yes-act"><div class="t">贪婪步移动一格</div>4 向选「距目标最近」的空格，平局 上&gt;下&gt;左&gt;右；全被堵 → 等待</div>
+      </div>
+      <div class="vline"></div><div class="vlabel">否</div><div></div><div></div>
+      <div class="endcap">⌛ 冷却未就绪 → 本 tick 等待（攻击与移动冷却相互独立）</div>
+    </div>
+  </section>
+
+  <!-- ③ 攻击与弹道 -->
+  <section>
+    <h2><span class="num">③</span>攻击出手与两类弹道</h2>
+    <p class="lead">出手瞬间先 roll 暴击（普攻 20% · ×1.5）并<b>冻结载荷</b>；伤害在「命中时」落地，能量也在命中时结算。</p>
+    <div class="carriers">
+      <div class="carrier melee"><div class="h">近战即时 MELEE_INSTANT</div>
+        <div class="b"><ul><li>出手 = 命中，无飞行过程</li><li>range = 1 单位适用</li></ul></div>
+      </div>
+      <div class="carrier homing"><div class="h">锁定弹 HOMING<span class="tag">不可阻挡</span></div>
+        <div class="b"><ul><li>指定目标，<b>追踪其当前所在格</b></li><li>目标被清扫 → 落空消散（无伤害、无能量）</li><li>用于：远程普攻 · NUKED · AOE（命中点爆炸）</li></ul></div>
+      </div>
+      <div class="carrier line"><div class="h">直线弹 LINE<span class="tag">可被阻挡</span></div>
+        <div class="b"><ul><li>发射时定向，不追踪</li><li>被<b>路径上第一个敌方单位</b>挡下并命中</li><li>出界 / 达射程上限消散</li><li>用于：STUN（直线冲击）等</li></ul></div>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:14px">命中结算 —— 全游戏<b>唯一伤害管线</b>（普攻与技能共用）：</p>
+    <div class="stepper">
+      <div class="step"><div class="t">载荷解冻</div>有效攻击 × 技能倍率(普攻=1) × <code>暴击?1.5:1</code></div>
+      <div class="arr">→</div>
+      <div class="step"><div class="t">护甲公式</div><code>× 100/(100+护甲)</code>（技能同走此管线）</div>
+      <div class="arr">→</div>
+      <div class="step"><div class="t">护盾吸收</div>有盾先扣盾，盾不产生能量</div>
+      <div class="arr">→</div>
+      <div class="step"><div class="t">扣除 HP</div>溢出伤害作废</div>
+      <div class="arr">→</div>
+      <div class="step g"><div class="t">能量结算</div>攻击者 +10 · 受击者 +5（DOT / 落空不回）</div>
+    </div>
+    <div class="note" style="margin-top:12px"><b>补充：</b>弹道连续坐标飞行（不占格、互不碰撞），全局速度 6 格/秒；战斗结束在途弹道全部消散；<b>技能不暴击</b>（暴击为普攻专属）。</div>
+  </section>
+
+  <!-- ④ 技能 -->
+  <section>
+    <h2><span class="num">④</span>技能施放 —— 六模板速览</h2>
+    <p class="lead">能量过百就地施放：无施法时间、无公共 CD、不清攻击计时；动画只是播报。倍率随星级 ×(1 + 0.5×(星−1))。</p>
+    <div class="skills">
+      <div class="skill"><b>NUKED 单体爆发</b><span class="c"> · HOMING</span><div class="d">对目标：攻击 × power，走护甲公式</div></div>
+      <div class="skill"><b>AOE 范围</b><span class="c"> · HOMING</span><div class="d">命中点爆炸：目标及其 4 邻格全体敌人</div></div>
+      <div class="skill"><b>HEAL 治疗</b><span class="c"> · 即时</span><div class="d">HP% 最低友军（含自己）回 maxHp × power；全满则保留能量延后</div></div>
+      <div class="skill"><b>SHIELD 护盾</b><span class="c"> · 即时</span><div class="d">HP% 最低友军获得 maxHp × power 吸收盾</div></div>
+      <div class="skill"><b>BUFF 增益</b><span class="c"> · 即时</span><div class="d">全体友军攻击 +power%，5 秒（以 ATK_UP 状态挂载）</div></div>
+      <div class="skill"><b>STUN 眩晕</b><span class="c"> · LINE</span><div class="d">直线飞行，命中者及其 4 邻格敌人眩晕 power 秒（本 tick 已声明行动不受影响）</div></div>
+    </div>
+  </section>
+
+  <!-- ⑤ 异常状态 -->
+  <section>
+    <h2><span class="num">⑤</span>异常状态统一框架（ActiveStatus）</h2>
+    <div class="status-grid">
+      <div class="panel"><div class="t">四类框架规则</div>
+        <ul>
+          <li><b>控制类</b>（STUN…）：决策链第①步即跳过，能量冻结</li>
+          <li><b>持续类</b>（BLEED/REGEN）：1s 心跳；DOT <b>真伤</b>可致死、不触发受击回能</li>
+          <li><b>属性修改类</b>（ATK_UP/SLOW…）：进修正管线 <code>(基准+ΣADD)×(1+ΣPCT)</code>，状态集变化时重算缓存</li>
+          <li><b>叠加</b>：同 type 不叠加、刷新时长（取更长）；不同 type 独立生效</li>
+          <li>power 取<b>施放者快照</b>，不追踪后续变化</li>
+        </ul>
+      </div>
+      <div class="panel"><div class="t">三个入口 · 一个 StatusSystem</div>
+        <ul>
+          <li>技能 JSON（STUN / BUFF）</li>
+          <li>装备（龙心 = REGEN）</li>
+          <li>羁绊（兽人 6 = 开局 SHIELD）</li>
+          <li>状态随单位死亡销毁</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ⑥ 事件流 -->
+  <section>
+    <h2><span class="num">⑥</span>CombatEvent 事件流 —— 每个结算点记录一条</h2>
+    <div class="events">
+      <span class="evt">AttackLaunched</span><span class="evt">Hit</span><span class="evt">Cast</span>
+      <span class="evt">StatusApplied</span><span class="evt">Healed</span><span class="evt">Shielded</span>
+      <span class="evt">UnitDied</span><span class="evt">ProjectileFizzled</span><span class="evt">BattleEnded</span>
+    </div>
+    <div class="uses">
+      <div class="use"><b>单元测试</b><br>断言「第 N 个 tick 应产生这些事件」——逻辑可测性质变</div>
+      <div class="use"><b>回放 / 调试</b><br>事件流即战斗日志，逐 tick 复盘对账</div>
+      <div class="use"><b>渲染驱动</b><br>动画、飘字、音效全部由事件触发，逻辑表现解耦</div>
+    </div>
+  </section>
+
+  <!-- ⑦ 出口 -->
+  <section>
+    <h2><span class="num">⑦</span>战斗出口</h2>
+    <div class="exits">
+      <div class="exit win"><b>🏆 胜利 → RESULT</b>宝箱内容 roll（RNG 第③消耗点）→ PickChest 三选一 → 非最终轮进下一轮 / 第 25 轮通关演出</div>
+      <div class="exit lose"><b>🛡️ 失败 / 超时 → SHOPPING 同轮重试</b>BattleUnit 整体丢弃 · 敌阵不变 · 名单无损；连续失败第 3 次起怜悯 +1 金（封顶 +3，零棋子战败不计）</div>
+    </div>
+    <div class="note green" style="margin-top:12px"><b>确定性收口：</b>战斗内随机<b>仅暴击判定一处</b>（RNG 第④消耗点，按发射序消耗）；弹道飞行、索敌、移动、技能全部为确定函数——同名单 + 同种子 = 同一场战斗。</div>
+  </section>
+
+  <!-- 图例 -->
+  <section style="background:transparent;border:none;padding:0;margin-top:26px">
+    <div class="legend">
+      <span class="lg"><span class="dot" style="background:var(--stage)"></span>阶段 / 循环结构</span>
+      <span class="lg"><span class="dot" style="background:var(--cond)"></span>条件判断</span>
+      <span class="lg"><span class="dot" style="background:var(--dmg)"></span>伤害结算</span>
+      <span class="lg"><span class="dot" style="background:var(--heal)"></span>恢复 / 正向</span>
+      <span class="lg"><span class="dot" style="background:var(--proj)"></span>弹道载体</span>
+      <span class="lg"><span class="dot" style="background:var(--evt)"></span>事件流</span>
+    </div>
+  </section>
+
+  <footer>余烬军团（ember-legion）· 战斗系统流程图 · 配套文档：docs/battle_design.md（定稿）/ docs/gdd_idea_0.0.0.1.md §六 / docs/architecture_design.md §六</footer>
+</div>
+</body>
+</html>
