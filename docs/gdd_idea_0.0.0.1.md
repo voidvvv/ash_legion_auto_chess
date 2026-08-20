@@ -1,6 +1,6 @@
 # 📄 游戏设计文档（GDD）—— 自走棋肉鸽冒险
 
-> **版本**：V0.9（渲染架构定稿：HUD 布局销账；实现级设计见 `render_design.md` / `battle_design.md`）  
+> **版本**：V0.10（数据 Schema 定稿：cost 补齐、waves 并入 scenes；字段权威移交 data_schema_design.md）  
 > **技术栈**：Java + LibGDX  
 > **目标平台**：单机 PC / Android（横屏）  
 > **美术风格**：像素风（32px 格子 / 640×360 虚拟分辨率）  
@@ -369,7 +369,7 @@ private BattleUnit[][] boardGrid = new BattleUnit[6][7]; // null 代表空格
 ### 9.6 素材目录约定
 ```
 assets/
-├── data/        # units.json / synergies.json / equipments.json / waves.json
+├── data/        # units.json / synergies.json / scenes.json / equipments.json
 ├── units/       # 棋子精灵（TextureAtlas 打包）
 ├── ui/          # UI 九宫格、图标
 ├── fx/          # 粒子与闪光特效
@@ -463,6 +463,8 @@ public class WaveGenerator {
 ```
 
 ### 10.3 配置文件格式（JSON）
+
+> **字段终版、词表与校验规则以 `data_schema_design.md` 为准**——本节示例为示意（另：本节示例缺 `cost` 字段，终版已补；`waves.json` 已并入 `scenes.json`）。
 
 #### `units.json`（棋子模板）
 ```json
@@ -630,6 +632,7 @@ public class WaveGenerator {
 | 2026-08-20 | 评审整改：内容量级 | **MVP 24 棋子**（1 费 10 / 2 费 9 / 3 费 5）**/ 首发 6 羁绊**（兽人/战士/法师/刺客/野兽/游侠；亡灵、巨人随场景解锁） |
 | 2026-08-20 | 评审整改：数据模型 | Unit 瘦身为名单实体 + 新增 BattleUnit 战斗实例（对齐 architecture 双实体终裁） |
 | 2026-08-20 | 渲染架构 | **双通路**（棋盘域自绘 / UI 域 Stage）、UI 同用 640×360、战斗期商店退场、HUD 八区域布局定稿——详见 `render_design.md`（待定项"UI 布局草图"销账） |
+| 2026-08-20 | 数据 Schema | 字段终版+同名词表+加载即校验定稿；units 补 `cost`、waves 并入 scenes、Boss 数值烘焙、heroes.json 延后——详见 `data_schema_design.md` |
 | 2026-08-20 | 战斗主循环 | **H 语义**（立即结算 + 延迟死亡清扫，互秒成立）+ **CombatEvent 事件流**——见 `battle_design.md` |
 | 2026-08-20 | 受击回能 | **被直伤命中 +5**（攻击者命中 +10；DOT/落空/溢出不回） |
 | 2026-08-20 | 索敌节奏 | **每 2 秒全局重评估** + 目标死亡立即重选（放弃粘滞案） |
