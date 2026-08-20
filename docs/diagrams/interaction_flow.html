@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>余烬军团 · 游戏交互流程图 V0.2</title>
+<style>
+  body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; background: #f6f8fa; color: #1f2328; margin: 0; padding: 24px; }
+  .wrap { max-width: 1280px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .meta { color: #57606a; font-size: 13px; margin-bottom: 12px; }
+  .legend { background: #fff; border: 1px solid #d0d7de; border-radius: 8px; padding: 10px 16px; font-size: 13px; line-height: 1.9; }
+  .legend b { display: inline-block; min-width: 64px; }
+  #diagram { background: #fff; border: 1px solid #d0d7de; border-radius: 8px; padding: 16px; margin-top: 16px; overflow: auto; }
+  #err { color: #9a6700; background: #fff8c5; border: 1px solid #d4a72c; border-radius: 8px; padding: 12px 16px; margin-top: 16px; display: none; white-space: pre-wrap; font-size: 13px; }
+  footer { color: #57606a; font-size: 12px; margin-top: 16px; line-height: 1.8; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>余烬军团 · 游戏交互流程图（V0.2，待定项已全部裁决）</h1>
+  <div class="meta">启动 → 局外选择 → 局内循环（备战 / 战斗 / 结算）→ 远征结束。源码见 interaction_flow.md；裁决依据见 GDD V0.6 决策日志与 architecture_design.md。</div>
+  <div class="legend">
+    <div><b>【命令】</b>局内命令：入命令队列、tick 消费、可回放</div>
+    <div><b>【档案】</b>档案域操作：持久化、无回放</div>
+    <div><b>【UI】</b>纯界面交互：不产生命令</div>
+    <div><b>【系统】</b>确定性自动反应：非命令</div>
+  </div>
+  <div id="err"></div>
+  <div id="diagram">正在加载渲染引擎（需要联网获取 mermaid.js CDN）……</div>
+  <footer>
+    已裁决：Surrender / AbandonRun 保留 · 每轮开始商店免费刷新 · MVP 无装备合成 · 允许零棋子开战 · 存档点仅备战阶段
+  </footer>
+</div>
+<script type="module">
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+
+const src = `flowchart TD
+    BOOT(["游戏启动"]) --> MENU["主菜单"]
+    MENU -->|"点击·退出【UI】"| EXIT(["退出游戏"])
+
+    subgraph META["局外 · 档案域"]
+        SETTINGS["设置：音量/键位/加速默认值<br/>【UI · 复用Dialog组件】"]
+        CODEX["图鉴 / 战绩 / 解锁总览<br/>【UI · 只读】"]
+        HEROSEL["英雄选择界面<br/>点卡片＝高亮＋被动预览【UI】"]
+        SCENESEL["场景选择界面<br/>点卡片＝敌情预览【UI】"]
+        STARTRUN["StartRun (heroId, sceneId, seed)<br/>解锁校验【档案】<br/>＝回放流第 0 条记录"]
+        LOAD["继续远征：读取快照<br/>重建 RunState【档案】"]
+        MENU -->|"点击·设置"| SETTINGS
+        SETTINGS -->|"返回【UI】"| MENU
+        MENU -->|"点击·图鉴"| CODEX
+        CODEX -->|"返回【UI】"| MENU
+        MENU -->|"点击·新远征"| HEROSEL
+        HEROSEL -->|"点击·下一步【UI】"| SCENESEL
+        SCENESEL -->|"点击·开始远征"| STARTRUN
+        MENU -->|"点击·继续（存在挂起存档）"| LOAD
+    end
+
+    STARTRUN --> ROUNDSTART
+    LOAD -->|"存档点＝仅备战阶段（已定）"| SHOPPING
+
+    subgraph RUNX["局内 · 模拟域（一次远征）"]
+        ROUNDSTART["轮次开始【系统】<br/>轮次＋1 · 生成敌阵（本轮重试不重掷）· 商店免费刷新"]
+        SHOPPING(("备战阶段<br/>SHOPPING"))
+        BATTLE(("战斗阶段<br/>BATTLE"))
+        RESULT(("结算阶段<br/>RESULT"))
+        PAUSE["暂停菜单【UI】<br/>（暂停时逻辑 accumulator 停摆）"]
+        RUNEND["远征结束【系统】<br/>通关＝击败最终Boss / 放弃"]
+        SETTLE["局外结算【档案】<br/>熟练度经验 · 场景解锁 · 点亮星辰"]
+
+        ROUNDSTART --> SHOPPING
+
+        SHOPPING -->|"侦察敌阵 / 棋子Tooltip【UI·只读】"| SHOPPING
+        SHOPPING -->|"BuyUnit【命令】→ 自动3合1【系统】"| SHOPPING
+        SHOPPING -->|"SellUnit【命令】"| SHOPPING
+        SHOPPING -->|"RefreshShop【命令】（轮首免费那次为系统行为）"| SHOPPING
+        SHOPPING -->|"BuyExp【命令】→ 人口升级【系统】"| SHOPPING
+        SHOPPING -->|"MoveUnit【命令】·上场/下场/走位/交换"| SHOPPING
+        SHOPPING -->|"EquipItem / UnequipItem【命令】"| SHOPPING
+        SHOPPING -->|"StartBattle【命令】·零棋子亦可开战（已定）<br/>→ 派生BattleUnit＋羁绊快照【系统】"| BATTLE
+
+        BATTLE -->|"观战 · 加速×1/×2 · 暂停画面【UI】"| BATTLE
+        BATTLE -->|"战斗tick推进 · 超时60s判负【系统】"| BATTLE
+        BATTLE -->|"Surrender【命令】· 投降立即判负（已定）"| SHOPPING
+        BATTLE -->|"判负【系统】：全灭/超时/投降<br/>同轮重试 · 敌阵不变 · 怜悯金币"| SHOPPING
+        BATTLE -->|"判胜【系统】→ 宝箱内容roll【系统】"| RESULT
+
+        RESULT -->|"浏览三选一【UI·只读】"| RESULT
+        RESULT -->|"PickChest【命令】→ 应用奖励【系统】"| NEXT{"最终Boss轮？"}
+        NEXT -->|"否"| ROUNDSTART
+        NEXT -->|"是"| RUNEND
+
+        SHOPPING -->|"Esc / 按钮【UI】"| PAUSE
+        BATTLE -->|"Esc / 按钮【UI】"| PAUSE
+        PAUSE -->|"返回【UI】"| SHOPPING
+        PAUSE -->|"返回【UI】（原阶段）"| BATTLE
+        PAUSE -->|"放弃远征 → AbandonRun【命令】（已定）"| RUNEND
+        RUNEND --> SETTLE
+    end
+
+    SETTLE -->|"自动写入档案存档【档案】"| MENU`;
+
+mermaid.initialize({ startOnLoad: false, theme: 'default' });
+try {
+  const { svg } = await mermaid.render('mmdInteractionFlow', src);
+  document.getElementById('diagram').innerHTML = svg;
+} catch (e) {
+  const err = document.getElementById('err');
+  err.style.display = 'block';
+  err.textContent = '渲染失败：' + (e && e.message ? e.message : e);
+}
+</script>
+</body>
+</html>

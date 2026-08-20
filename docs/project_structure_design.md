@@ -1,7 +1,7 @@
 # 🏗️ 项目目录结构设计与评审文档
 
-> **版本**：V1.0  
-> **依据**：GDD V0.5（`gdd_idea_0.0.0.1.md`）、输入控制架构（`user_input_design.md`）、背景设定（`game_lore_design.md`）  
+> **版本**：V1.1（评审整改：Phase 3 出生表补 `BattleUnit`）  
+> **依据**：GDD V0.6（`gdd_idea_0.0.0.1.md`）、运行时架构（`architecture_design.md`）、输入控制架构（`user_input_design.md` 1.1）、背景设定（`game_lore_design.md`）  
 > **评审对象**：libGDX Liftoff 生成的多模块骨架 + 上述设计文档的目录需求
 
 ---
@@ -53,7 +53,9 @@ ember-legion/（仓库 kz_auto_chess_n）
 ├── core/src/
 │   ├── main/java/com/voidvvv/kz_auto_chess_n/
 │   │   ├── Main.java                # Phase 4 改为 extends Game（Screen 管理）
-│   │   ├── screens/                 # 【装配层】Screen 生命周期 + InputMultiplexer 组装
+│   │   ├── screens/                 # 【装配层】六 Screen（Loading/MainMenu/RunSetup/
+│   │   │                             #   Codex/Battle/RunResult）+ InputMultiplexer 组装；
+│   │   │                             #   设置=复用 Dialog，非 Screen（详见 architecture_design.md §七）
 │   │   │                             #   职责对应输入文档 §7.3"Screen 只做点火器"
 │   │   ├── input/                   # 【翻译层】BoardInputProcessor / GlobalKeyProcessor
 │   │   │                             #   坐标→命令；死区/多触点/模态阻断（输入文档 §2-3）
@@ -108,7 +110,7 @@ screens/  ──组装──▶  input/ ──翻译──▶ command/ ──修
 |-------|---------------|
 | 1 | `data/`、`config/`（JsonLoader、GameBalance）、`entities/Player`、`utils/` + 镜像测试 |
 | 2 | `systems/WaveGenerator`、`assets/data/scenes.json`、控制台模拟入口 |
-| 3 | `systems/BattleSystem` + `SynergySystem`、`entities/Unit` + `BattleState`（测试大户） |
+| 3 | `systems/BattleSystem` + `SynergySystem`、`entities/Unit` + `BattleUnit` + `BattleState`（测试大户） |
 | 4 | `Main→Game`、`screens/`、`input/`、`command/`、`render/`（棋盘+棋子）、`assets/units/`、窗口 1280×720 |
 | 5 | `render/` UI 补全、`systems/ShopSystem`、`equipments.json` |
 | 6 | `save/`、`heroes.json` |

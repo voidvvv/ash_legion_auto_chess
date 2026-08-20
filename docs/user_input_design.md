@@ -1,7 +1,7 @@
 # 自走棋游戏 - 输入控制与命令系统架构设计文档
 
 > **适用引擎**：LibGDX  
-> **核心目标**：实现高内聚、低耦合的玩家输入处理，确保逻辑确定性（帧同步友好），并规避多点触控、模态框穿透等常见陷阱。
+> **核心目标**：实现高内聚、低耦合的玩家输入处理，确保逻辑确定性（单机录像回放 / 存档 / 单元测试友好；本项目纯单机，无帧同步联机需求），并规避多点触控、模态框穿透等常见陷阱。
 
 ---
 
@@ -80,6 +80,8 @@ public class MoveUnitCommand implements GameCommand {
 }
 ```
 
+**tick 配对（V1.1 新增）**：命令入队时由 `CommandManager` 盖 tick 戳，历史以 `(tick, command)` 二元组保存——这是“命令可序列化、支持录像回放”承诺的落点，回放按 tick 顺序重演命令流（tick 由管理器记录，不污染命令的纯数据）。
+
 ### 4.2 执行策略：使用“查表法（策略模式）”
 - **不要**为每个 Command 配独立的 `CommandAction` 类（过度设计）。
 - **推荐**：在 `CommandManager` 中维护 `Map<Class, CommandHandler>`，在逻辑 Tick 中根据命令类型分发执行。
@@ -91,12 +93,16 @@ handlers.put(MoveUnitCommand.class, (cmd, ctx) -> {
 });
 ```
 
+### 4.3 阶段门控（自走棋特有约束，V1.1 新增）
+
+命令并非全程合法：**购买 / 布阵 / 装备仅备战（SHOPPING）阶段可执行**；战斗（BATTLE）阶段玩家仅可 `Surrender`（投降）；结算（RESULT）阶段仅 `PickChest`；`AbandonRun`（放弃远征）在备战与战斗阶段均合法。`CommandHandler` 执行前先查当前逻辑阶段，不合法命令**静默忽略并记日志**。完整的 11 命令清单与门控矩阵见 `architecture_design.md` §四 / §五。
+
 ---
 
 ## 5. 命令管理器（CommandManager）设计
 
 ### 5.1 核心职责
-- **存放命令**：维护线程安全的命令队列（`ConcurrentLinkedQueue`）。
+- **存放命令**：维护线程安全的命令队列（`ConcurrentLinkedQueue`）。注：libGDX 单渲染线程下输入与消费同线程，并发队列并非必需；保留属防御性选择（为未来异步来源留余地），成本近零。
 - **保留历史**：在命令入队时同步备份至 `history` 列表，用于录像回放（队列消费后即删除，但历史永久保留）。
 - **分发执行**：提供 `executeAll(BattleContext context)` 方法，在固定逻辑 Tick 中被 Screen 调用，轮询队列并执行所有命令。
 
@@ -153,15 +159,16 @@ public void render(float delta) {
 ### 6.1 必须包含的内容
 | 组件 | 类型 | 职责 |
 | :--- | :--- | :--- |
-| `PlayerManager` | 数据管理 | 金币、经验、等级、血量 |
-| `BoardManager` | 数据管理 | 棋盘格子占位、备战席管理 |
+| `PlayerManager` | 数据管理 | 金币、经验、等级（玩家**无血量字段**：随 1C-R 废除，决策 2026-08-19） |
 | `ShopManager` | 数据管理 | 商店候选棋子列表 |
-| `UnitManager` | 数据管理 | 全场棋子实例（纯数据类，不含 Actor） |
-| `RandomGenerator` | 工具类 | 确定性随机数种子（联机帧同步基石） |
+| `UnitRegistry` | 数据解析 | 全场实体（棋子 / 装备 / 战斗实例）id → 对象解析，无业务逻辑 |
+
+> 职责终裁（`architecture_design.md` §2.3）：**棋盘格子占位归战斗状态（BattleState），备战席归 Player——无独立 BoardManager**（V1.2 修正：原表“BoardManager：棋盘格子占位、备战席管理”与终裁冲突，已删；原 `UnitManager` 更名 `UnitRegistry` 对齐架构文档）。
+| `RandomGenerator` | 工具类 | 确定性随机数（单机录像回放 / 测试 / 存档一致性的基石；消耗点清单见 `architecture_design.md` §六） |
 
 ### 6.2 绝对禁止放入的内容
 - **严禁**放入 `Stage`、`Actor`、`SpriteBatch`、`Texture` 等任何渲染相关对象。
-- **原因**：命令执行发生在逻辑线程，若操作渲染对象会导致并发修改异常（`ConcurrentModificationException`）。
+- **原因**：逻辑与渲染解耦——`BattleContext` 保持纯 Java 可测（无需启动 LibGDX 后端），并杜绝逻辑代码绕过视图直接操纵画面。（注：本项目为单渲染线程，此为架构边界约束而非线程安全问题）
 
 ### 6.3 命令执行示例（购买棋子）
 ```java
@@ -179,12 +186,12 @@ handlers.put(BuyUnitCommand.class, (cmd, ctx) -> {
 
 ## 7. 硬性规则与约束（务必遵守）
 
-1. **AI 行为不走命令队列**：电脑对手的攻击、移动等自动行为**绝不**通过 `addCommand` 入队，应直接调用 `BattleManager` 内部方法。否则队列会被海量 AI 指令撑爆。
+1. **AI 行为不走命令队列**：电脑对手的攻击、移动等自动行为**绝不**通过 `addCommand` 入队，应直接调用 `BattleManager` 内部方法。否则队列会被海量 AI 指令撑爆。更根本的原因：AI 行为是游戏状态的确定性函数，若入队，回放时将无法区分“玩家命令”与“系统行为”，命令流模型即失效。
 2. **命令只承载“外部输入”**：仅玩家操作（点击、键盘、网络消息）走命令队列。
 3. **Screen 只做“点火器”**：`BattleScreen` 仅负责初始化 `InputMultiplexer` 和在 `render` 中调用 `executeAll`，不编写具体的业务逻辑判断。
 4. **单元测试友好**：由于 `Command` 是纯数据，`BattleContext` 是纯 Java 对象，你可以完全不启动 LibGDX 后端，在 JUnit 中直接测试命令执行逻辑。
 
 ---
 
-*文档版本：1.0*  
+*文档版本：1.2（2026-08-20 评审整改：6.1 删玩家血量与 BoardManager 行、UnitManager 更名 UnitRegistry；1.1：新增 4.1 tick 配对与 4.3 阶段门控；确定性定位修订为单机）*  
 *适用阶段：自走棋项目输入与控制层架构设计*
