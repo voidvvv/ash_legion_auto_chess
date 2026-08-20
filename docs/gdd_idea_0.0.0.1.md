@@ -408,7 +408,7 @@ core/src/main/java/com/voidvvv/kz_auto_chess_n/
 └── utils/
 ```
 
-> **架构对齐说明**：`user_input_design.md` 中 `BattleContext` 的确定性设计保留，价值定位为 **录像回放 / 单元测试 / 存档**（本项目为纯单机）。
+> **架构对齐说明**：`user_input_design.md` 中 `RunContext`（V1.3 前原名 `BattleContext`）的确定性设计保留，价值定位为 **录像回放 / 单元测试 / 存档**（本项目为纯单机）。
 
 ### 10.2 核心类定义
 
