@@ -1,6 +1,6 @@
 # 🧭 运行时架构设计文档
 
-> **版本**：V1.4（输入归属裁决入册：棋盘域/UI 域两分，拖拽不跨域；RunState 补阶段归属；RunContext 更名同步）  
+> **版本**：V1.5（渲染架构文档入册：UI 虚拟坐标与 HUD 布局定稿决策；此前：输入归属、RunContext 更名、RunState 补阶段归属）  
 > **定位**：实体管理 / 命令系统 / 阶段状态机 / Screen 架构 / 持久化模型的运行时设计  
 > **依据**：GDD V0.6、`user_input_design.md` 1.1、`project_structure_design.md` V1.0、`game_lore_design.md`  
 > **配图**：`docs/diagrams/interaction_flow.md`（全交互地图，V0.2）
@@ -193,7 +193,8 @@ SHOPPING ──StartBattle──▶ BATTLE ──判胜──▶ RESULT ──Pi
 | 2026-08-20 | 战斗主循环 | **H 语义 + CombatEvent 事件流**；弹道/回能/索敌等实现级裁决见 `battle_design.md` |
 | 2026-08-20 | 上下文更名 | 输入文档 `BattleContext` 更名 **`RunContext`** 并补全工具箱；**当前逻辑阶段归 RunState**（命令门控查询入口） |
 | 2026-08-20 | 输入归属 | **棋盘域（棋盘/备战席/出售区）归 boardProcessor，UI 域归 uiStage**；拖拽永不跨域、跨域交互全部点击化；装备穿脱两段式点击（输入文档 2.4/2.5） |
+| 2026-08-20 | 渲染架构 | **UI 与世界同用 640×360 虚拟坐标**；HUD 八区域布局定稿（`render_design.md` §九 + 配图 V1.0） |
 
 ## 十、文档关系
 
-- **GDD**＝游戏规则与内容；**输入文档**＝LibGDX 输入层机制；**结构文档**＝目录/构建/分层；**背景文档**＝叙事；**战斗文档**（`battle_design.md`）＝战斗实现级设计；**本文档**＝运行时架构（实体/命令/状态机/Screen/持久化）。冲突时以本文档为准并回写其余文档。
+- **GDD**＝游戏规则与内容；**输入文档**＝LibGDX 输入层机制；**结构文档**＝目录/构建/分层；**背景文档**＝叙事；**战斗文档**（`battle_design.md`）＝战斗实现级设计；**渲染文档**（`render_design.md`）＝渲染实现级设计；**本文档**＝运行时架构（实体/命令/状态机/Screen/持久化）。冲突时以本文档为准并回写其余文档。

@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>余烬军团 · 战斗界面布局定稿 V1.0</title>
+<style>
+  body { font-family:"Segoe UI","Microsoft YaHei",sans-serif; background:#1a1d21; color:#e6edf3; margin:0; padding:24px 20px 60px; }
+  .wrap { max-width:1360px; margin:0 auto; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  .meta { color:#9aa4b2; font-size:13px; margin-bottom:6px; }
+  .note { color:#d4a72c; font-size:13px; margin-bottom:20px; background:#2a2410; border:1px solid #5a4a1a; border-radius:8px; padding:8px 14px; }
+
+  .state { margin-bottom:36px; }
+  .state h2 { font-size:15px; color:#fff; margin:0 0 8px; }
+  .state h2 small { color:#9aa4b2; font-weight:400; }
+
+  /* 画布：逻辑 640×360，按 2 倍(1280×720)呈现 */
+  .canvas { width:1280px; height:720px; position:relative; background:#2d3319; border:3px solid #0a0c05; border-radius:4px; image-rendering:pixelated; }
+  .r { position:absolute; box-sizing:border-box; border:2px solid; font-size:13px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; line-height:1.5; }
+
+  .tag { position:absolute; width:30px; height:30px; border-radius:50%; background:#f0b429; color:#1a1d21; font-weight:700; font-size:15px; display:flex; align-items:center; justify-content:center; border:2px solid #1a1d21; z-index:9; }
+
+  /* —— 通用区域 —— */
+  .topbar  { left:0; top:0; width:1280px; height:56px; background:#211f33; border-color:#4a4666; flex-direction:row; gap:24px; padding:0 20px; }
+  .shopbar { left:0; top:592px; width:1280px; height:128px; background:#241d2b; border-color:#5a4466; flex-direction:row; gap:10px; padding:0 16px; }
+  .battlebar { left:0; top:592px; width:1280px; height:128px; background:#1d2430; border-color:#3f5466; flex-direction:row; gap:16px; align-items:center; padding:0 24px; }
+
+  .card { width:200px; height:104px; background:#33283f; border:2px solid #6b5480; display:flex; flex-direction:row; align-items:center; gap:10px; padding:6px; }
+  .face { width:56px; height:80px; background:#4a3a5c; border:2px solid #8a6fa3; display:flex; align-items:center; justify-content:center; font-size:22px; }
+  .cinfo { font-size:12px; text-align:left; line-height:1.6; }
+  .coin { color:#f0b429; }
+
+  .btn { background:#3a3320; border:2px solid #8a7a30; height:104px; width:84px; font-size:13px; display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1.6; }
+
+  /* —— 棋盘域 —— */
+  .board { left:448px; top:100px; width:384px; height:448px; background:#23301c; border-color:#4a6636; padding:0; }
+  .brow { display:flex; }
+  .cell { width:60px; height:60px; border:1px solid #3d5230; box-sizing:border-box; position:relative; }
+  .enemy .cell { background:#2c3038; border-color:#454c58; }
+  .buffer .cell { background:#31322c; border-color:#4c4d44; }
+  .mine .cell { background:#3a3320; border-color:#5c5130; }
+  .unit { position:absolute; inset:6px; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:18px; }
+  .u-e { background:#7a8ba3; border:2px solid #aebfd8; }   /* 敌方：冷灰蓝 */
+  .u-m { background:#c77b3a; border:2px solid #f0b46a; }   /* 我方：军旗暖橙 */
+  .ghost { opacity:0.45; border-style:dashed; }
+  .zonelabel { position:absolute; left:-8px; transform:translateX(-100%); writing-mode:vertical-rl; font-size:12px; color:#9aa4b2; display:flex; align-items:center; }
+
+  /* —— 左栏 —— */
+  .panel { background:#20242b; border-color:#3f4652; }
+  .bench { left:40px; top:96px; width:216px; }
+  .bag   { left:40px; top:280px; width:216px; }
+  .ptitle { font-size:12px; color:#9aa4b2; margin:4px 0; }
+  .grid { display:grid; gap:4px; padding:6px; }
+  .slot { width:64px; height:64px; background:#2b3038; border:2px dashed #4a5260; }
+
+  /* —— 右栏 —— */
+  .syn { left:1016px; top:96px; width:224px; height:288px; padding:8px; align-items:stretch; justify-content:flex-start; }
+  .synrow { display:flex; align-items:center; gap:8px; font-size:13px; margin:6px 4px; }
+  .syndot { width:12px; height:12px; border-radius:3px; background:#3f4652; }
+  .syndot.on { background:#f0b429; }
+  .synbar { flex:1; height:8px; background:#2b3038; border-radius:4px; overflow:hidden; }
+  .synbar i { display:block; height:100%; background:#f0b429; }
+
+  .startbtn { left:1016px; top:400px; width:224px; height:80px; background:#7a4a1a; border-color:#f0b46a; font-size:18px; font-weight:700; color:#fff; }
+  .sellzone { left:1128px; top:492px; width:112px; height:92px; background:#3a2020; border-color:#8a4040; font-size:12px; }
+  .speed { background:#20303a; border-color:#3f6a80; width:110px; height:84px; font-size:14px; }
+  .timer { flex:1; height:28px; background:#2b3038; border-radius:14px; border:2px solid #3f4652; overflow:hidden; }
+  .timer i { display:block; height:100%; width:62%; background:#4a9ab8; }
+  .surrender { width:130px; height:84px; background:#3a2a20; border-color:#8a6040; font-size:13px; }
+
+  /* 图例 */
+  .legend { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:14px; }
+  .lg { font-size:12.5px; color:#c9d1d9; background:#20242b; border:1px solid #3f4652; border-radius:8px; padding:8px 10px; }
+  .lg b { color:#f0b429; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🖼️ 余烬军团 · 战斗界面布局（V1.0 定稿）</h1>
+  <div class="meta">逻辑分辨率 640×360，本图按 2 倍呈现（每格 32px → 64px）· 配套：render_design.md §九 坐标表 · 定稿日 2026-08-20</div>
+  <div class="note">配色即美术方向预演：<b style="color:#f0b46a">暖橙＝我方军旗</b>（左/下区域），<b style="color:#aebfd8">冷灰蓝＝敌方灰烬</b>——军团走到哪里，暖色就到哪里。</div>
+
+  <!-- 状态A：备战 -->
+  <div class="state">
+    <h2>状态 A · 备战阶段 SHOPPING <small>—— 侦察（敌阵就在棋盘上半区）· 购物 · 布阵 · 装备</small></h2>
+    <div class="canvas">
+      <div class="tag" style="left:620px; top:8px;">①</div>
+      <div class="r topbar">
+        <span>🧙 头像 Lv.3 ▮▮▮▯</span><span class="coin">🪙 12</span><span>第 7/25 轮</span><span style="color:#e5534b">⚠ BOSS 轮</span><span style="flex:1"></span><span>⚙ 暂停</span>
+      </div>
+
+      <div class="tag" style="left:140px; top:110px;">②</div>
+      <div class="r panel bench">
+        <div class="ptitle">备战席（3×3，9 格）</div>
+        <div class="grid" style="grid-template-columns:repeat(3,64px)">
+          <div class="slot"><div class="unit u-m ghost">🗡️</div></div><div class="slot"></div><div class="slot"><div class="unit u-m">🏹</div></div>
+          <div class="slot"></div><div class="slot"><div class="unit u-m">🪄</div></div><div class="slot"></div>
+          <div class="slot"></div><div class="slot"></div><div class="slot"></div>
+        </div>
+      </div>
+
+      <div class="tag" style="left:140px; top:292px;">③</div>
+      <div class="r panel bag">
+        <div class="ptitle">装备背包（3×2，两段式点击穿戴）</div>
+        <div class="grid" style="grid-template-columns:repeat(3,64px)">
+          <div class="slot">⚔️</div><div class="slot">🛡️</div><div class="slot"></div>
+          <div class="slot"></div><div class="slot">📿</div><div class="slot"></div>
+        </div>
+      </div>
+
+      <div class="tag" style="left:620px; top:120px;">④</div>
+      <div class="r board">
+        <div class="brow enemy">
+          <div class="cell"><div class="unit u-e">👹</div></div><div class="cell"></div><div class="cell"><div class="unit u-e">🐺</div></div><div class="cell"></div><div class="cell"><div class="unit u-e">👹</div></div><div class="cell"></div>
+        </div>
+        <div class="brow enemy">
+          <div class="cell"></div><div class="cell"><div class="unit u-e">🧟</div></div><div class="cell"></div><div class="cell"><div class="unit u-e">🐺</div></div><div class="cell"></div><div class="cell"></div>
+        </div>
+        <div class="brow enemy">
+          <div class="cell"></div><div class="cell"></div><div class="cell"><div class="unit u-e">🧟</div></div><div class="cell"></div><div class="cell"><div class="unit u-e">🧙‍♂️</div></div><div class="cell"></div>
+        </div>
+        <div class="brow buffer"><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div></div>
+        <div class="brow mine">
+          <div class="cell"><div class="unit u-m">🛡️</div></div><div class="cell"><div class="unit u-m">🛡️</div></div><div class="cell"><div class="unit u-m">🛡️</div></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+        </div>
+        <div class="brow mine">
+          <div class="cell"><div class="unit u-m">🗡️</div></div><div class="cell"></div><div class="cell"><div class="unit u-m">🗡️</div></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+        </div>
+        <div class="brow mine">
+          <div class="cell"></div><div class="cell"><div class="unit u-m">🏹</div></div><div class="cell"></div><div class="cell"><div class="unit u-m">🪄</div></div><div class="cell"></div><div class="cell"></div>
+        </div>
+        <div class="zonelabel" style="top:8px;">敌区 0~2 行 · 侦察即视</div>
+        <div class="zonelabel" style="top:196px;">缓冲 第3行</div>
+        <div class="zonelabel" style="top:340px;">我区 4~6 行</div>
+      </div>
+
+      <div class="tag" style="left:1180px; top:110px;">⑤</div>
+      <div class="r syn panel">
+        <div class="ptitle">羁绊面板</div>
+        <div class="synrow"><span class="syndot on"></span><span class="syndot on"></span><span class="syndot"></span><span class="syndot"></span> 兽人 2/4</div>
+        <div class="synrow"><div class="synbar"><i style="width:50%"></i></div></div>
+        <div class="synrow"><span class="syndot on"></span><span class="syndot on"></span><span class="syndot on"></span><span class="syndot on"></span> 战士 4 ✓</div>
+        <div class="synrow"><div class="synbar"><i style="width:100%"></i></div></div>
+        <div class="synrow"><span class="syndot on"></span><span class="syndot"></span><span class="syndot"></span><span class="syndot"></span> 游侠 1/2</div>
+        <div class="synrow"><div class="synbar"><i style="width:25%"></i></div></div>
+      </div>
+
+      <div class="tag" style="left:1180px; top:416px;">⑥</div>
+      <div class="r startbtn">▶ 开 战</div>
+
+      <div class="tag" style="left:1180px; top:500px;">⑦</div>
+      <div class="r sellzone">🗑️<br>出售区<br>拖拽到此卖出</div>
+
+      <div class="tag" style="left:620px; top:600px;">⑧</div>
+      <div class="r shopbar">
+        <div class="card"><div class="face">🗡️</div><div class="cinfo">兽人战士<br><span class="coin">1 金</span> · 兽人/战士</div></div>
+        <div class="card"><div class="face">🪄</div><div class="cinfo">荆语法师<br><span class="coin">2 金</span> · 精灵/法师</div></div>
+        <div class="card"><div class="face">🗡️</div><div class="cinfo">暗夜刺客<br><span class="coin">3 金</span> · 暗夜/刺客</div></div>
+        <div class="card"><div class="face">🛡️</div><div class="cinfo">盾卫<br><span class="coin">1 金</span> · 兽人/战士</div></div>
+        <div class="card"><div class="face">🐺</div><div class="cinfo">林狼<br><span class="coin">1 金</span> · 野兽</div></div>
+        <div class="btn">🔄<br>刷新<br><span class="coin">2金</span></div>
+        <div class="btn">📗<br>买经验<br><span class="coin">4金</span></div>
+      </div>
+    </div>
+    <div class="legend">
+      <div class="lg"><b>① 顶栏</b>：头像/等级经验、金币、轮次、Boss 提示、暂停入口</div>
+      <div class="lg"><b>② 备战席</b>：3×3，棋盘域自绘（boardProcessor 辖）</div>
+      <div class="lg"><b>③ 装备背包</b>：UI 域（Stage），两段式点击穿戴</div>
+      <div class="lg"><b>④ 共享棋盘</b>：上三行敌区=侦察（无需独立敌情面板）、中行缓冲、下三行布阵区</div>
+      <div class="lg"><b>⑤ 羁绊面板</b>：激活羁绊与 2/4/6 进度（UI 域）</div>
+      <div class="lg"><b>⑥ 开战按钮</b>：仅 SHOPPING 显示</div>
+      <div class="lg"><b>⑦ 出售区</b>：拖拽卖出（棋盘域拖拽终点）</div>
+      <div class="lg"><b>⑧ 商店栏</b>：5 卡 + 刷新 + 买经验；点击即买</div>
+    </div>
+  </div>
+
+  <!-- 状态B：战斗 -->
+  <div class="state">
+    <h2>状态 B · 战斗阶段 BATTLE <small>—— 商店栏整体退场，替换为战斗 HUD（聚焦观战）</small></h2>
+    <div class="canvas">
+      <div class="r topbar">
+        <span>🧙 头像 Lv.3</span><span class="coin">🪙 12</span><span>第 7/25 轮</span><span style="color:#e5534b">⚠ BOSS 战</span><span style="flex:1"></span><span>⚙ 暂停</span>
+      </div>
+
+      <div class="r panel bench" style="opacity:.35">
+        <div class="ptitle">备战席（战斗期置灰）</div>
+        <div class="grid" style="grid-template-columns:repeat(3,64px)"><div class="slot"></div><div class="slot"></div><div class="slot"></div><div class="slot"></div><div class="slot"></div><div class="slot"></div><div class="slot"></div><div class="slot"></div><div class="slot"></div></div>
+      </div>
+      <div class="r panel bag" style="opacity:.35">
+        <div class="ptitle">背包（置灰）</div>
+        <div class="grid" style="grid-template-columns:repeat(3,64px)"><div class="slot"></div><div class="slot"></div><div class="slot"></div><div class="slot"></div><div class="slot"></div><div class="slot"></div></div>
+      </div>
+
+      <div class="r board">
+        <div class="brow enemy">
+          <div class="cell"><div class="unit u-e">👹</div></div><div class="cell"></div><div class="cell"><div class="unit u-e">🐺</div></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+        </div>
+        <div class="brow enemy"><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div></div>
+        <div class="brow enemy"><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div></div>
+        <div class="brow buffer">
+          <div class="cell"><div class="unit u-e">🧟</div></div><div class="cell"><div class="unit u-e">🐺</div></div><div class="cell"></div><div class="cell"><div class="unit u-m">🛡️</div></div><div class="cell"><div class="unit u-m">🛡️</div></div><div class="cell"></div>
+        </div>
+        <div class="brow mine">
+          <div class="cell"><div class="unit u-m">🗡️</div></div><div class="cell"><div class="unit u-m">🛡️</div></div><div class="cell"></div><div class="cell"></div><div class="cell"><div class="unit u-m">🗡️</div></div><div class="cell"></div>
+        </div>
+        <div class="brow mine"><div class="cell"></div><div class="cell"><div class="unit u-m">🏹</div></div><div class="cell"><div class="unit u-m">🪄</div></div><div class="cell"></div><div class="cell"></div><div class="cell"></div></div>
+        <div class="brow mine"><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div></div>
+      </div>
+
+      <div class="r syn panel">
+        <div class="ptitle">羁绊面板（战斗期显示实际生效档）</div>
+        <div class="synrow"><span class="syndot on"></span><span class="syndot on"></span><span class="syndot"></span><span class="syndot"></span> 兽人 2 ✓</div>
+        <div class="synrow"><div class="synbar"><i style="width:50%"></i></div></div>
+        <div class="synrow"><span class="syndot on"></span><span class="syndot on"></span><span class="syndot on"></span><span class="syndot on"></span> 战士 4 ✓</div>
+        <div class="synrow"><div class="synbar"><i style="width:100%"></i></div></div>
+      </div>
+
+      <div class="r battlebar">
+        <div class="speed" style="width:110px">⏩ ×1</div>
+        <div class="timer"><i></i></div>
+        <span style="font-size:13px">37 / 60 s</span>
+        <div class="r surrender">🏳️<br>投降</div>
+      </div>
+    </div>
+    <div class="legend">
+      <div class="lg"><b>战斗期变化</b>：商店栏退场 → 战斗 HUD（变速 / 60s 计时条 / 投降）</div>
+      <div class="lg"><b>左栏置灰</b>：备战席/背包保留可见但禁用（输入层阶段门控兜底）</div>
+      <div class="lg"><b>羁绊面板</b>：切换为"实际生效档"展示（开战快照）</div>
+      <div class="lg"><b>开战/出售区</b>：隐藏（无拖拽场景）</div>
+    </div>
+  </div>
+
+  <div class="note" style="margin-top:0">布局分域与输入归属一致：<b>②④⑦ 棋盘域</b>（boardProcessor 自绘）｜<b>①③⑤⑥⑧ 战斗HUD UI 域</b>（uiStage）——拖拽永不跨域，跨域交互全部为点击。</div>
+</div>
+</body>
+</html>
