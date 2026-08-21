@@ -84,6 +84,20 @@ public class Player {
         bench.add(unit);
     }
 
+    /**
+     * 插席：移入指定槽位（GDD §4.1 备战席 9 格位置语义，口径 #8）——索引钳制 [0, size]
+     * （负数归 0、超 size 落末位），后续单位后移；满 9 格抛 IllegalStateException（同 addToBench）。
+     * 槽位 = bench List 索引（入席序即展示序）；换位语义（先 remove 后 insert）归命令层。
+     */
+    public void insertToBench(Unit unit, int slotIndex) {
+        Objects.requireNonNull(unit, "unit 不能为 null");
+        if (bench.size() >= GameBalance.BENCH_SIZE) {
+            throw new IllegalStateException("备战席已满（" + GameBalance.BENCH_SIZE + " 格），无法入席: " + unit.getId());
+        }
+        int index = Math.max(0, Math.min(bench.size(), slotIndex));
+        bench.add(index, unit);
+    }
+
     /** 出席：不在席抛 IllegalArgumentException */
     public void removeFromBench(Unit unit) {
         if (!bench.remove(unit)) {

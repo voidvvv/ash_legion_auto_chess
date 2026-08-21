@@ -128,6 +128,49 @@ class PlayerTest {
     }
 
     @Test
+    @DisplayName("insertToBench 插入指定槽位，后续单位后移（入席序即展示序，口径 #8）")
+    void insertToBenchShiftsLaterUnits() {
+        Player player = new Player(10);
+        Unit a = unit(1);
+        Unit b = unit(2);
+        Unit c = unit(3);
+        player.addToBench(a);
+        player.addToBench(b);
+        player.addToBench(c);
+        Unit d = unit(4);
+        player.insertToBench(d, 1);
+        assertThat(player.getBench()).containsExactly(a, d, b, c);
+    }
+
+    @Test
+    @DisplayName("insertToBench 索引钳制 [0,size]：负数归 0、超 size 落末位")
+    void insertToBenchClampsIndex() {
+        Player player = new Player(10);
+        Unit a = unit(1);
+        Unit b = unit(2);
+        player.addToBench(a);
+        player.addToBench(b);
+        Unit c = unit(3);
+        player.insertToBench(c, -5); // 钳到 0
+        assertThat(player.getBench()).containsExactly(c, a, b);
+        Unit d = unit(4);
+        player.insertToBench(d, 99); // 钳到 size（末位）
+        assertThat(player.getBench()).containsExactly(c, a, b, d);
+    }
+
+    @Test
+    @DisplayName("insertToBench 满 9 格抛 IllegalStateException（同 addToBench 兜底）")
+    void insertToBenchThrowsWhenFull() {
+        Player player = new Player(10);
+        for (int i = 1; i <= 9; i++) {
+            player.addToBench(unit(i));
+        }
+        assertThatThrownBy(() -> player.insertToBench(unit(10), 4))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("9");
+    }
+
+    @Test
     @DisplayName("removeFromBench 移除指定单位；不在席抛 IllegalArgumentException")
     void removeFromBenchValidatesMembership() {
         Player player = new Player(10);
