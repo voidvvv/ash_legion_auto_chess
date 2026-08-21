@@ -1,6 +1,6 @@
 # 🖼️ 渲染架构设计文档
 
-> **版本**：V1.2（新增 §5.4 技能特效方案定稿与 §5.5 事件通知面板；HUD 增第 9 区）  
+> **版本**：V1.3（新增 §7.6 资源访问服务：注入式 Assets 门面定稿，音频口径补全）  
 > **定位**：视口与坐标系 / 双通路渲染模型 / 帧循环与插值 / 事件驱动表现 / 视图类结构 / 图集规范 / 像素规则 / HUD 布局定稿（Phase 4 渲染层开工依据）  
 > **依据**：GDD V0.9 §九（美术规格）、`architecture_design.md` V1.5（双实体 / Screen / 输入归属）、`battle_design.md` V1.1（主循环 / 跳格插值 / CombatEvent）、`user_input_design.md` V1.4 §2.5（输入归属）/§3（坐标陷阱）  
 > **配图**：`docs/diagrams/battle_screen_layout.html`（V1.0 定稿）  
@@ -23,6 +23,7 @@
 | 9 | 占位资源流水线 | **运行时生成占位图集 + 逐 key 兜底加载**（§7.5）：零素材文件跑通全部界面，真素材按命名约定渐进替换、永不阻塞功能 |
 | 10 | 技能特效 | **四锚点 × 双命名空间**（§5.4）：一次性特效归 skillId、持续特效归状态类型；缺资源走通用兜底 |
 | 11 | 事件通知面板 | **左下常驻小窗 + L 键大窗回看**（§5.5）：CombatEvent 第三消费者 + 命令执行监听，双流合并的战斗/经营日志 |
+| 12 | 资源访问 | **注入式 `Assets` 门面**（§7.6）：region 逐 key 兜底 + 统一字体/皮肤/音效出口；**否决静态持有**（Android 生命周期失同步 / 隐式依赖不可测 / 与 RunContext 词义冲突） |
 
 ---
 
@@ -130,7 +131,7 @@ public void render(float delta) {
 ### 5.3 弹道与特效
 - `ProjectileView`：按弹道速度连续飞行；HOMING 追踪目标当前格；LINE 允许**旋转绘制**（像素规则的唯一特例，小贴图破碎感可接受）
 - 命中粒子（FxLayer）：MVP 手绘闪光帧，ParticleEffect 备选（Phase 7）
-- 音效挂钩：事件 → `AudioManager`（MVP 直接 `Gdx.sound.play`，Phase 7 池化限声道）
+- 音效挂钩：事件 → `Assets.sound(id)` 门面（§7.6；MVP 经 AssetManager 直取，Phase 7 升级 AudioManager 池化限声道，调用方零改动）
 
 ### 5.4 技能特效（四锚点 × 双命名空间，2026-08-21 定稿）
 
@@ -189,6 +190,7 @@ public void render(float delta) {
 
 ```
 render/
+├── Assets.java                 # 资源访问门面（§7.6）：region 逐 key 兜底 / font / skin / sound
 ├── board/                      # 棋盘域自绘族（boardProcessor 辖区）
 │   ├── BattleRenderer.java     #   总绘制：格子/高亮/备战席/出售区，持有下列视图集合
 │   ├── UnitView.java           #   单位视图：动画FSM/插值/血条/能量条/星级底光（id 索引）
@@ -209,6 +211,7 @@ render/
 1. 视图**只读**实体（`UnitView` 持有 `BattleUnit` 引用仅用于读取；自身表现状态——动画态/插值坐标——归视图私有）
 2. `entities/ data/ systems/` 反向 import `render/` 一律禁止
 3. `UnitView` 等战斗视图生命周期 = `BattleState`；`render/ui/` 的 Actor 生命周期 = `BattleScreen`
+4. `Assets`（§7.6）只属于表现层：**注入式门面，禁止静态持有**；`entities/ data/ systems/ command/` 永不 import
 
 ---
 
@@ -263,6 +266,38 @@ public TextureRegion region(String key) {
 - **不能验证**：调色板观感、32px 辨识度、动画最终手感——只能靠真素材（Phase 6~7）
 - 观感下限参照：`docs/diagrams/battle_screen_layout.html` 布局图本身就是色块风格
 - **字体不占位**：Fusion Pixel Font 为 **OFL 开源**，第一天即可下载集成（Hiero 生成 BitmapFont）——全部文字从首个可玩版本起即像素风格正确，只有图形需要占位
+
+### 7.6 资源访问服务（Assets 门面，2026-08-21 定稿）
+
+**决策**：**注入式 `Assets` 门面**，不做静态持有（static 字段方案被否决，三条理由：① 与 Android Activity 重建的 GL 上下文失同步——static 引用指向已销毁的 native 句柄；② 隐式依赖 + 时序耦合，view 类不可测、加载顺序错误只能在运行期爆；③ 与 `RunContext` 的 "Context" 词义冲突）。
+
+```java
+/** 资源访问门面：真图集缺哪个 key 哪个落占位（§7.5）；统一字体/皮肤/音效出口 */
+public final class Assets {
+    private final AssetManager manager;         // LoadingScreen 全量加载（已定）
+    private final PlaceholderArt placeholder;   // 运行时占位工厂（§7.5）
+
+    public TextureRegion region(String key) {   // units/ui/fx 三图集依次查 → 占位兜底，永不 null
+        ...
+    }
+    public BitmapFont font() { ... }            // Fusion Pixel（§7.5）
+    public Skin skin() { ... }                  // UI 域
+    public Sound sound(String id) {             // 音频统一出口
+        return manager.get("audio/sfx/" + id + ".wav", Sound.class);
+    }
+}
+```
+
+**装配链**（"screens 是唯一装配点"规则的直接应用，对象图仅 2~3 层、传参成本可忽略）：
+
+```
+Main.create → LoadingScreen（全量加载）→ new Assets(manager, placeholder)
+    → 注入 BattleScreen 构造器 → 注入 BattleRenderer / uiStage Actor / UnitView …
+```
+
+**音频口径**：`Assets.sound(id)` 为唯一出口——MVP 经 AssetManager 直取；Phase 7 升级 `AudioManager`（池化、限声道、按 skillId 细分）时**只改门面内部，调用方零改动**。
+
+**纪律**：`Assets` 只允许出现在 `render/` 与 `screens/`（结构文档约束 1 自动涵盖）；`region(key)` 的 key 一律来自命名约定（§7.1），禁字面量魔法。若未来注入传参成为真实痛点，允许降级为"单例实例 + `get()/clear()` 成对"的 service locator 形态——实例语义不变，仅加访问器。
 
 ---
 
@@ -332,3 +367,4 @@ public TextureRegion region(String key) {
 | 2026-08-21 | 占位资源 | **运行时占位图集 + 逐 key 兜底加载**（§7.5）——零素材跑通全部界面，真素材渐进替换；正式素材分源策略与接入节奏（§7.4） |
 | 2026-08-21 | 技能特效 | **四锚点 × 双命名空间**（§5.4）：一次性归 `fx_{skillId}`、持续归 `fx_status_{type}`（轮询差分驱动）；通用兜底永不阻塞美术 |
 | 2026-08-21 | 通知面板 | **左下常驻小窗 + L 键大窗回看**（§5.5）：CombatEvent 第三消费者 + `CommandManager.onExecuted` 经营监听，双流合并；HUD 增第 9 区 |
+| 2026-08-21 | 资源访问 | **注入式 `Assets` 门面**定稿（§7.6）：否决静态 GameContext 方案（Android 生命周期失同步 / 隐式依赖不可测 / Context 词义冲突）；音频统一 `Assets.sound()` 出口（Phase 7 平滑升级 AudioManager）；分层铁律入册 |
