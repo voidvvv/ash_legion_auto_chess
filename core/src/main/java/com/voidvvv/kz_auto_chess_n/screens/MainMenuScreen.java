@@ -18,7 +18,7 @@ import com.voidvvv.kz_auto_chess_n.render.board.BoardGeometry;
 
 /**
  * 极简主菜单（Q2 范围）：标题 + START 按钮。按钮为自绘 Actor（无 Skin 资产，Q4）——
- * 白 region tint + 内置字体；点击进战斗屏（BattleScreen 随提交 7 接入，本期占位不动作）。
+ * 白 region tint + 内置字体；点击进战斗屏。
  */
 public final class MainMenuScreen implements Screen {
     private final Game game;
@@ -77,7 +77,7 @@ public final class MainMenuScreen implements Screen {
             addListener(new ClickListener() {
                 @Override
                 public void clicked(InputEvent event, float x, float y) {
-                    // BattleScreen 随提交 7 接入：game.setScreen(new BattleScreen(game, assets, data));
+                    game.setScreen(new BattleScreen(game, assets, data));
                 }
             });
         }
