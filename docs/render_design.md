@@ -1,6 +1,6 @@
 # 🖼️ 渲染架构设计文档
 
-> **版本**：V1.0  
+> **版本**：V1.2（新增 §5.4 技能特效方案定稿与 §5.5 事件通知面板；HUD 增第 9 区）  
 > **定位**：视口与坐标系 / 双通路渲染模型 / 帧循环与插值 / 事件驱动表现 / 视图类结构 / 图集规范 / 像素规则 / HUD 布局定稿（Phase 4 渲染层开工依据）  
 > **依据**：GDD V0.9 §九（美术规格）、`architecture_design.md` V1.5（双实体 / Screen / 输入归属）、`battle_design.md` V1.1（主循环 / 跳格插值 / CombatEvent）、`user_input_design.md` V1.4 §2.5（输入归属）/§3（坐标陷阱）  
 > **配图**：`docs/diagrams/battle_screen_layout.html`（V1.0 定稿）  
@@ -20,6 +20,9 @@
 | 6 | 一次性表现 | **CombatEvent 事件驱动**（动画 / 飘字 / 音效）——事件流的第二用途（第一是单元测试） |
 | 7 | 像素规则 | Nearest 过滤 / 整数像素吸附 / 禁旋转（死亡缩放与弹道为表现例外） |
 | 8 | 资源策略 | LoadingScreen 全量加载、永不卸载；左右朝向用 flip 参数，不画两套 |
+| 9 | 占位资源流水线 | **运行时生成占位图集 + 逐 key 兜底加载**（§7.5）：零素材文件跑通全部界面，真素材按命名约定渐进替换、永不阻塞功能 |
+| 10 | 技能特效 | **四锚点 × 双命名空间**（§5.4）：一次性特效归 skillId、持续特效归状态类型；缺资源走通用兜底 |
+| 11 | 事件通知面板 | **左下常驻小窗 + L 键大窗回看**（§5.5）：CombatEvent 第三消费者 + 命令执行监听，双流合并的战斗/经营日志 |
 
 ---
 
@@ -129,6 +132,57 @@ public void render(float delta) {
 - 命中粒子（FxLayer）：MVP 手绘闪光帧，ParticleEffect 备选（Phase 7）
 - 音效挂钩：事件 → `AudioManager`（MVP 直接 `Gdx.sound.play`，Phase 7 池化限声道）
 
+### 5.4 技能特效（四锚点 × 双命名空间，2026-08-21 定稿）
+
+特效挂载在技能三步执行（battle_design §六）的各阶段，事件流驱动：
+
+| 执行阶段 | 驱动事件 | 特效 | 锚点 |
+|---|---|---|---|
+| 起手 | `Cast {skillId, sourceId, targetId}` | 起手光效（叠加于 cast 动画） | 单位 |
+| 载体飞行 | `AttackLaunched` | 弹道本体+尾迹 | 弹道 |
+| 效果落地 | `Hit / Healed / Shielded` | 落点爆炸/光柱/扩散 | 区域 |
+| 状态持续 | **UnitView 轮询差分**（不发事件） | 循环特效+头顶状态图标 | 单位 |
+
+**四锚点的生命周期规则**：
+
+| 锚点 | 跟随 | 生命周期 |
+|---|---|---|
+| 单位锚点 | UnitView 插值坐标（含格间滑动） | 一次性播完即止；循环型随状态存续，**单位死亡提前结束** |
+| 区域锚点 | 固定落点格坐标 | 播完即止（≤0.5s） |
+| 弹道锚点 | 弹道连续坐标 | 命中/落空即止 |
+| 全屏锚点 | 覆盖层 | 短时（Boss `ALL_ENEMIES` 白闪、震屏 0.2s） |
+
+**双命名空间**（关键分家）：
+- `fx_{skillId}_*` —— **一次性特效归技能**（起手 `fx_{skillId}` / 落点 `fx_{skillId}_burst` / 技能弹 `fx_projectile_{skillId}`）
+- `fx_status_{type}_*` —— **持续特效归状态类型**：POISON 可能来自三个不同技能，状态的表现归状态，来源技能只决定"怎么得上"
+- `Cast` 事件含**主目标 targetId**（MELEE_INSTANT 载体的 AOE 无弹道，区域特效中心从主目标格取）
+
+**规格与纪律**：一次性 4~6 帧（0.06~0.1s/帧，总长 ≤0.5s）、状态循环 2 帧往返；尺寸 单位 32 / 区域 64 / 全屏 640×360；透明度 ≤80%（**特效永不盖过棋子本体**）；特效中性色（≤32 色调色板内），阵营可读性由飘字分色承担。**兜底**：缺 `fx_{skillId}_*` → `fx_cast_default` / `fx_hit_default`；缺 `fx_status_{type}_*` → 6×6 纯色圆点——永不 null 崩溃，美术不阻塞功能。表现层自由项：震屏、暴击飘字 ×1.2 尺寸。
+
+### 5.5 事件通知面板（NotificationPanel，2026-08-21 定稿）
+
+**双数据源**：
+- 战斗事件：渲染段 drain `CombatEvent` 后分发——通知面板是**第三消费者**（特效/飘字之外）
+- 经营事件：`CommandManager.onExecuted(cmd, success)` 监听（命令执行成功即产出一条；系统行为如怜悯金币、轮首免费刷新由所属 system 直接发）
+
+**双窗形态**：
+- **常驻小窗**（HUD 第 9 区，坐标见 §九）：半透明深底，最近 4 行，新行底部推入；**每帧最多追加 2 行**（战斗爆发期防刷屏）；备战/战斗两阶段均可见；点击或 `L` 键展开大窗
+- **大窗（回看模式）**：半透明覆盖棋盘右半（可透视，不暂停游戏），最近 200 行 + 滚轮回看，过滤标签页 `全部 / 战斗 / 经营 / 仅关键（技能·死亡·控制）`；`L` 或关闭按钮收起
+
+**分色与文案模板**（与飘字分色同源）：
+
+| 类别 | 颜色 | 示例 |
+|---|---|---|
+| 购买 | 金 | `兽人战士★1 → 备战席（-1金）` |
+| 放置/卖出 | 灰白 | `卖出 丛林游侠（+2金）` |
+| 攻击/受伤 | 红白 | `游侠 击中 荆棘之母 -14（暴击!）` |
+| 技能 | 紫 | `荆语法师 施放【火球】→ 3 目标` |
+| 治疗 | 绿 | `圣光 +38 → 兽人战士★2` |
+| 控制/死亡 | 琥珀/深红 | `震地 眩晕 2 单位`、`兽人战士★2 阵亡` |
+| 系统 | 蓝 | `第 7 轮 · BOSS（商店免费刷新）`、`怜悯金币 +1（连败3）` |
+
+**性能纪律**：行 Label 池化（4 + 200）、StringBuilder 复用、每帧一次批量提交——渲染段零分配不破。
+
 ---
 
 ## 六、视图类结构（`render/` 包）
@@ -147,6 +201,7 @@ render/
     ├── SynergyPanel.java       #   羁绊面板
     ├── InventoryPanel.java     #   背包（两段式点击穿戴的入口）
     ├── TopBar.java             #   顶栏（金币/等级经验/轮次/暂停）
+    ├── NotificationPanel.java  #   事件通知小窗 + L 键大窗回看（§5.5）
     └── UnitDetailDialog.java   #   棋子详情（卸装备入口）
 ```
 
@@ -163,12 +218,51 @@ render/
 |------|------|-------------|
 | `units.atlas` | 全部棋子精灵 | `{unitId}_{anim}_{frame}`，如 `unit_warrior_01_idle_0`、`..._attack_2` |
 | `ui.atlas` | UI 九宫格 / 图标 / 面板底板 | `ui_{name}`，如 `ui_panel_9slice`、`ui_icon_gold` |
-| `fx.atlas` | 特效闪光 / 弹道贴图 / 数字字模 | `fx_{name}`，如 `fx_projectile_arrow`、`fx_digit_7` |
+| `fx.atlas` | 特效闪光 / 弹道贴图 / 数字字模 | 一次性技能特效 `fx_{skillId}`（起手）/ `fx_{skillId}_burst`（落点）；状态循环 `fx_status_{type}`（§5.4 双命名空间）；通用兜底 `fx_cast_default` / `fx_hit_default`；弹道 `fx_projectile_{name}`；数字字模 `fx_digit_{n}` |
 
 - **朝向**：单套贴图 + 绘制时 `flipX`（敌我相对而立，敌方水平翻转）——不画两套
 - 动画帧时长（`Animation` 构造，待调）：idle 0.4s/帧、walk 0.2s/帧、attack 0.1s/帧、death 0.15s/帧
 - 帧数标准沿用 GDD §9.3（idle 2 / walk 2 / attack 3 / cast 2 / death 3）
 - 像素字体：Zpix 或 Fusion Pixel（GDD §9.4）；伤害数字用 `fx_digit_*` 字模贴图
+
+### 7.4 素材获取途径（正式美术的分源策略）
+
+| 层 | 途径 | 许可注意 |
+|---|---|---|
+| 棋子 / Boss 精灵 | 自绘（Aseprite，32px 入门可行）/ itch.io · OpenGameArt 免费与付费像素包 / 约稿 | 免费素材**只取 CC0 或 CC-BY**（BY 需署名）；**严禁扒商业游戏素材** |
+| 技能特效 | 同上（特效包覆盖率高，帧一致性要求低，可 1~2 帧 + 程序缩放凑帧） | 同上 |
+| UI 九宫格 / 图标 | Kenney（全 CC0）、itch UI 包 | 风格风险最低的层，可长期使用免费素材 |
+| 场景背景 / Boss 演出 | AI 生成做底 + 手工像素化精修 | AI 帧一致性差，**仅适合静态层**，不适合逐帧动画 |
+| 英雄立绘 / 关键视觉 | 约稿或自绘（最后做） | 决定卖相的少数资产，值得投入 |
+
+**接入节奏（与 Phase 对齐）**：Phase 1~3 纯占位 → Phase 4 接入 CC0 UI 包 + OFL 像素字体（验证真素材管线）→ Phase 5 用 itch 免费小人替换部分棋子（验证精灵动画流水线）→ Phase 6~7 正式美术按 §七命名约定逐批替换。
+
+### 7.5 占位资源流水线（当前阶段：零素材跑通全部界面）
+
+**原理**：region 命名约定（§7.1）是"换皮不动代码"的钥匙——启动期工厂按正式命名**运行时生成**全部占位资源（Pixmap → Texture，零素材文件），加载链**逐 key 兜底**：真图集缺哪个 key，哪个落占位——**渐进替换、美术永不阻塞功能**。
+
+```java
+/** 占位图集工厂：读 data_schema 的 JSON，为每个模板生成符合命名约定的色块资源 */
+public class PlaceholderArt {
+    // 遍历 units.json  → {unitId}_{anim}_{frame}：
+    //    32×32 色块：种族→调色板内 hash 取色（确定性）、深色描边、职业首字母居中；
+    //    帧差异使动画可见：idle 亮度 ±5% / walk 上下 1px 抖动 / attack 前移 2px / death 透明度递减
+    // 遍历 skills.json → fx_{skillId}（起手闪光）、fx_{skillId}_burst（落点爆圈）
+    // 遍历 StatusType  → fx_status_{type}（循环小气泡，命名规范见 §5.4）
+    // 通用件：ui_panel_9slice / ui_button / fx_hit_default / fx_cast_default / fx_digit_*
+}
+
+/** 逐 key 兜底加载链 */
+public TextureRegion region(String key) {
+    TextureRegion r = realAtlas != null ? realAtlas.findRegion(key) : null;
+    return r != null ? r : placeholder.get(key);   // 真图集缺哪个，哪个落占位
+}
+```
+
+- **能验证**：布局比例、操作流程、战斗节奏、特效触发时机、移动手感、可读性反馈——除"美"以外的一切
+- **不能验证**：调色板观感、32px 辨识度、动画最终手感——只能靠真素材（Phase 6~7）
+- 观感下限参照：`docs/diagrams/battle_screen_layout.html` 布局图本身就是色块风格
+- **字体不占位**：Fusion Pixel Font 为 **OFL 开源**，第一天即可下载集成（Hiero 生成 BitmapFont）——全部文字从首个可玩版本起即像素风格正确，只有图形需要占位
 
 ---
 
@@ -198,6 +292,7 @@ render/
 | ⑦ | 出售区 | (564, 246, 56, 46) | **棋盘域** | 仅 SHOPPING（拖拽终点） |
 | ⑧ | 商店栏 | (0, 296, 640, 64) | UI | 仅 SHOPPING |
 | — | 战斗 HUD | (0, 296, 640, 64) | UI | 仅 BATTLE（替换 ⑧：变速 ×1/×2、60s 计时条、投降） |
+| ⑨ | 事件通知小窗 | (20, 230, 128, 60) | UI | 全程（点击 / `L` 键展开大窗回看，见 §5.5） |
 
 - RESULT 阶段：宝箱三选一弹窗（`dialogStage` 最上层），背景压暗
 - 弹窗层级与输入优先级一致（input §2.2 multiplexer：dialogStage > uiStage > boardProcessor > keyProcessor）
@@ -234,3 +329,6 @@ render/
 | 2026-08-20 | 战斗期商店栏 | **退场换战斗 HUD**（变速/计时/投降） |
 | 2026-08-20 | 插值与事件 | 60Hz 逻辑 + UnitView 格间 lerp；一次性表现由 CombatEvent 驱动 |
 | 2026-08-20 | 像素规则 | Nearest / 整数吸附 / 禁旋转（死亡与弹道为例外） |
+| 2026-08-21 | 占位资源 | **运行时占位图集 + 逐 key 兜底加载**（§7.5）——零素材跑通全部界面，真素材渐进替换；正式素材分源策略与接入节奏（§7.4） |
+| 2026-08-21 | 技能特效 | **四锚点 × 双命名空间**（§5.4）：一次性归 `fx_{skillId}`、持续归 `fx_status_{type}`（轮询差分驱动）；通用兜底永不阻塞美术 |
+| 2026-08-21 | 通知面板 | **左下常驻小窗 + L 键大窗回看**（§5.5）：CombatEvent 第三消费者 + `CommandManager.onExecuted` 经营监听，双流合并；HUD 增第 9 区 |

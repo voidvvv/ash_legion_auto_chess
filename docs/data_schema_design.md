@@ -1,6 +1,6 @@
 # 🗃️ 数据层 Schema 设计文档
 
-> **版本**：V1.1（技能抽取为独立模块：新增 skills.json，技能升级为"具名+组合式"定义）  
+> **版本**：V1.2（词表增补：POISON / AOE_2；DOT value 语义定稿；毒雾弹示例入种子）  
 > **定位**：静态数据 JSON 的字段终版、同名词表、校验规则——Phase 1 数据层（`data/` + `config/JsonLoader`）的开工依据  
 > **依据**：GDD V0.11 §6.5、`battle_design.md` V1.2（组合执行模型）、`architecture_design.md` V1.6、`render_design.md` V1.0（图集命名约定）  
 > **改版日**：2026-08-21
@@ -34,12 +34,12 @@
 
 | 词表 | 合法值 |
 |------|--------|
-| **SkillShape**（技能目标形状，V1.1） | `SINGLE_TARGET` `SELF` `LOWEST_ALLY` `ALL_ALLIES` `AOE_1` `ALL_ENEMIES` |
+| **SkillShape**（技能目标形状，V1.2 增 `AOE_2`） | `SINGLE_TARGET` `SELF` `LOWEST_ALLY` `ALL_ALLIES` `AOE_1` `AOE_2` `ALL_ENEMIES` |
 | **SkillEffectType**（技能效果类型，V1.1） | `DAMAGE` `HEAL` `SHIELD` `APPLY_STATUS` |
 | **statKey**（可修改属性白名单） | `hp` `attack` `armor` `attackSpeed` `moveSpeed` `range` `lifesteal` `energyGainRate` |
 | **TargetPriority**（索敌） | `NEAREST` `BACKLINE` `LOWEST_HP` `HIGHEST_ATK` |
 | **Delivery**（弹道载体） | `MELEE_INSTANT` `HOMING` `LINE` |
-| **StatusType**（状态，MVP 集） | `STUN` `BLEED` `SLOW` `ATK_UP` `ATK_DOWN` `ASPD_UP` `SHIELD` `REGEN`（扩展需登记 battle_design §七） |
+| **StatusType**（状态，MVP 集） | `STUN` `BLEED` `POISON` `SLOW` `ATK_UP` `ATK_DOWN` `ASPD_UP` `SHIELD` `REGEN`（扩展需登记 battle_design §七） |
 | **EffectOp**（羁绊/装备效果运算） | `ADD` `PCT` |
 | **EffectTarget** | `ALLIES`（MVP 仅此一档；预留 `TRAITS`） |
 | **EquipSlot** | `WEAPON` `ARMOR` `ACCESSORY` |
@@ -143,6 +143,7 @@ Boss 模板的 `baseStats` 直接写**乘好倍率的最终值**（普通 Boss �
 | `LOWEST_ALLY` | HP% 最低友军（含自己）；全满 → 延后施放（保留能量） |
 | `ALL_ALLIES` | 全体存活友军（含自己） |
 | `AOE_1` | 落点（载体命中点 / 当前目标格）及其 4 邻格中的**所有敌人** |
+| `AOE_2` | 落点周围 2 格（13 格菱形）中的所有敌人——"毒雾弹"类大范围 |
 | `ALL_ENEMIES` | 全体存活敌人（Boss 演出常用；普通单位慎用，加载期软告警） |
 
 ### 5.4 effect.value 单位与星级缩放
@@ -152,9 +153,9 @@ Boss 模板的 `baseStats` 直接写**乘好倍率的最终值**（普通 Boss �
 | `DAMAGE` | 攻击力倍率（3.5 = 350%），走护甲公式 | ✓ 缩放 |
 | `HEAL` | maxHp 比例（0.25 = 25%） | ✓ 缩放 |
 | `SHIELD` | maxHp 比例 | ✓ 缩放 |
-| `APPLY_STATUS` | 状态强度（ATK_UP 30 = +30%；STUN 无 value，用 duration） | ✗ 不缩放（时长与强度固定） |
+| `APPLY_STATUS` | 状态强度：ATK_UP 30 = +30%；STUN 无 value（时长用 duration）；**DOT 类（POISON/BLEED）value = 每跳伤害倍率，每跳 = 施放者攻击力快照 × value** | ✗ 不缩放（时长与强度固定） |
 
-### 5.5 完整示例（Phase 1 种子内容，8 条）
+### 5.5 完整示例（Phase 1 种子内容，9 条）
 
 ```json
 [
@@ -191,7 +192,11 @@ Boss 模板的 `baseStats` 直接写**乘好倍率的最终值**（普通 Boss �
 
   { "id": "skill_starfall", "name": "星陨", "desc": "坠落星辰的碎片轰击全场（最终Boss）",
     "shape": "ALL_ENEMIES", "delivery": "MELEE_INSTANT",
-    "effects": [ { "effect": "DAMAGE", "value": 1.8 } ] }
+    "effects": [ { "effect": "DAMAGE", "value": 1.8 } ] },
+
+  { "id": "skill_poison_cloud", "name": "毒雾弹", "desc": "毒雾在落点弥散，区域内敌人持续中毒",
+    "shape": "AOE_2", "delivery": "HOMING",
+    "effects": [ { "effect": "APPLY_STATUS", "status": "POISON", "value": 0.1, "duration": 6 } ] }
 ]
 ```
 
@@ -314,3 +319,4 @@ Boss 模板的 `baseStats` 直接写**乘好倍率的最终值**（普通 Boss �
 | 2026-08-21 | **技能抽取为独立模块** | 新增 skills.json：具名+组合式（shape × effects[] × delivery）；units 改 `skillId` 引用；效果词汇与羁绊/装备同源 |
 | 2026-08-21 | **组合式优于纯抽取** | 六模板退役为组合特例；暴走/群体治疗等超出旧模板的需求由形状+多效果表达 |
 | 2026-08-21 | MVP 词表边界 | Shape 6 种 / 效果类型 4 种 / 每技能效果 ≤3 条；`ALL_ENEMIES` 供 Boss 演出，非 boss 引用软告警 |
+| 2026-08-21 | 词表增补（V1.2） | **`POISON` 入 StatusType、`AOE_2`（13 格菱形）入 SkillShape；DOT value 语义定稿**：每跳 = 施放者攻击力快照 × value；新增示例「毒雾弹」（种子 9 条） |

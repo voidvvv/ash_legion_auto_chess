@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>余烬军团 · 战斗界面布局定稿 V1.0</title>
+<title>余烬军团 · 战斗界面布局定稿 V1.1</title>
 <style>
   body { font-family:"Segoe UI","Microsoft YaHei",sans-serif; background:#1a1d21; color:#e6edf3; margin:0; padding:24px 20px 60px; }
   .wrap { max-width:1360px; margin:0 auto; }
@@ -64,6 +64,9 @@
 
   .startbtn { left:1016px; top:400px; width:224px; height:80px; background:#7a4a1a; border-color:#f0b46a; font-size:18px; font-weight:700; color:#fff; }
   .sellzone { left:1128px; top:492px; width:112px; height:92px; background:#3a2020; border-color:#8a4040; font-size:12px; }
+  .notif { left:40px; top:460px; width:256px; background:rgba(10,12,16,.85); border:2px solid #3f4652; align-items:flex-start; justify-content:flex-start; text-align:left; font-size:11px; line-height:1.65; padding:5px 9px; }
+  .notif .row { display:block; width:100%; }
+  .c-sys{color:#6cb6ff;} .c-buy{color:#f0b429;} .c-fight{color:#ff7b72;} .c-skill{color:#d2a8ff;} .c-heal{color:#7ee787;}
   .speed { background:#20303a; border-color:#3f6a80; width:110px; height:84px; font-size:14px; }
   .timer { flex:1; height:28px; background:#2b3038; border-radius:14px; border:2px solid #3f4652; overflow:hidden; }
   .timer i { display:block; height:100%; width:62%; background:#4a9ab8; }
@@ -77,8 +80,8 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>🖼️ 余烬军团 · 战斗界面布局（V1.0 定稿）</h1>
-  <div class="meta">逻辑分辨率 640×360，本图按 2 倍呈现（每格 32px → 64px）· 配套：render_design.md §九 坐标表 · 定稿日 2026-08-20</div>
+  <h1>🖼️ 余烬军团 · 战斗界面布局（V1.1 定稿：增 ⑨ 事件通知区）</h1>
+  <div class="meta">逻辑分辨率 640×360，本图按 2 倍呈现（每格 32px → 64px）· 配套：render_design.md §5.5 + §九 坐标表 · V1.1 更新日 2026-08-21</div>
   <div class="note">配色即美术方向预演：<b style="color:#f0b46a">暖橙＝我方军旗</b>（左/下区域），<b style="color:#aebfd8">冷灰蓝＝敌方灰烬</b>——军团走到哪里，暖色就到哪里。</div>
 
   <!-- 状态A：备战 -->
@@ -107,6 +110,15 @@
           <div class="slot">⚔️</div><div class="slot">🛡️</div><div class="slot"></div>
           <div class="slot"></div><div class="slot">📿</div><div class="slot"></div>
         </div>
+      </div>
+
+      <div class="tag" style="left:312px; top:466px;">⑨</div>
+      <div class="r notif">
+        <div class="row"><span class="c-sys">[系统] 第7轮·BOSS 商店免费刷新</span></div>
+        <div class="row"><span class="c-buy">[经营] 兽人战士★1 → 备战席（-1金）</span></div>
+        <div class="row"><span class="c-fight">[战斗] 游侠 击中 荆棘之母 -14（暴击!）</span></div>
+        <div class="row"><span class="c-skill">[战斗] 荆语法师 施放【火球】→ 3 目标</span></div>
+        <div class="row" style="opacity:.55">… 点击 / L 键展开大窗回看（200 行 + 过滤）</div>
       </div>
 
       <div class="tag" style="left:620px; top:120px;">④</div>
@@ -172,6 +184,7 @@
       <div class="lg"><b>⑥ 开战按钮</b>：仅 SHOPPING 显示</div>
       <div class="lg"><b>⑦ 出售区</b>：拖拽卖出（棋盘域拖拽终点）</div>
       <div class="lg"><b>⑧ 商店栏</b>：5 卡 + 刷新 + 买经验；点击即买</div>
+      <div class="lg"><b>⑨ 事件通知小窗</b>：最近 4 行滚动（购买/放置/出售/攻击/技能/治疗/控制/系统），L 键展开大窗回看——前期调试与战况回顾</div>
     </div>
   </div>
 
@@ -190,6 +203,14 @@
       <div class="r panel bag" style="opacity:.35">
         <div class="ptitle">背包（置灰）</div>
         <div class="grid" style="grid-template-columns:repeat(3,64px)"><div class="slot"></div><div class="slot"></div><div class="slot"></div><div class="slot"></div><div class="slot"></div><div class="slot"></div></div>
+      </div>
+
+      <div class="r notif">
+        <div class="row"><span class="c-fight">[战斗] 守陵巨像 震地 → 眩晕 2 单位</span></div>
+        <div class="row"><span class="c-skill">[战斗] 荆语法师 施放【火球】→ -47</span></div>
+        <div class="row"><span class="c-heal">[战斗] 圣光 +38 → 兽人战士★2</span></div>
+        <div class="row"><span class="c-fight">[战斗] 林狼 阵亡</span></div>
+        <div class="row" style="opacity:.55">… 战斗期照常滚动（每帧最多追加 2 行防刷屏）</div>
       </div>
 
       <div class="r board">
@@ -228,10 +249,11 @@
       <div class="lg"><b>左栏置灰</b>：备战席/背包保留可见但禁用（输入层阶段门控兜底）</div>
       <div class="lg"><b>羁绊面板</b>：切换为"实际生效档"展示（开战快照）</div>
       <div class="lg"><b>开战/出售区</b>：隐藏（无拖拽场景）</div>
+      <div class="lg"><b>⑨ 通知小窗</b>：战斗期照常滚动战斗事件（不置灰）</div>
     </div>
   </div>
 
-  <div class="note" style="margin-top:0">布局分域与输入归属一致：<b>②④⑦ 棋盘域</b>（boardProcessor 自绘）｜<b>①③⑤⑥⑧ 战斗HUD UI 域</b>（uiStage）——拖拽永不跨域，跨域交互全部为点击。</div>
+  <div class="note" style="margin-top:0">布局分域与输入归属一致：<b>②④⑦ 棋盘域</b>（boardProcessor 自绘）｜<b>①③⑤⑥⑧⑨ UI 域</b>（uiStage）——拖拽永不跨域，跨域交互全部为点击。</div>
 </div>
 </body>
 </html>

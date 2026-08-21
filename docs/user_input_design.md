@@ -21,7 +21,7 @@
 ### 2.1 核心组件
 - **UI 输入**：由 LibGDX 的 `Stage`（Scene2D.UI）自动处理。按钮点击通过 `ClickListener` 生成命令。
 - **棋盘输入**：自定义 `BoardInputProcessor` 类实现 `InputProcessor` 接口，统辖**棋盘 / 备战席 / 出售区**等自绘网格族的点击与拖拽（归属裁决见 2.5）。
-- **键盘输入**：独立的 `GlobalKeyProcessor` 监听快捷键（如 `D` 键刷新、`Space` 暂停）。快捷键经**绑定表**（`KeyBinding`，档案域持久化）解析，`GlobalKeyProcessor` 查表分发而非硬编码；MVP 内置默认表，重绑定 UI 列入待定。
+- **键盘输入**：独立的 `GlobalKeyProcessor` 监听快捷键（如 `D` 键刷新、`Space` 暂停、`L` 键通知日志大窗开关）。快捷键经**绑定表**（`KeyBinding`，档案域持久化）解析，`GlobalKeyProcessor` 查表分发而非硬编码；MVP 内置默认表，重绑定 UI 列入待定。
 - **Android 返回键（BACK）**：走 `keyDown`（需启用 catchBackKey）；语义**上下文敏感**——弹窗开 → 关闭顶层弹窗；备战 / 战斗中 → 打开暂停菜单；主菜单 → 退出确认。与 `Escape` 同源同规则（见 §3 模态穿透行的例外条款）。
 
 ### 2.2 多路复用器（InputMultiplexer）配置
@@ -152,6 +152,7 @@ handlers.put(MoveUnitCommand.class, (cmd, ctx) -> {
 - **存放命令**：维护线程安全的命令队列（`ConcurrentLinkedQueue`）。注：libGDX 单渲染线程下输入与消费同线程，并发队列并非必需；保留属防御性选择（为未来异步来源留余地），成本近零。
 - **保留历史**：在命令入队时同步备份至 `history` 列表，用于录像回放（队列消费后即删除，但历史永久保留）。
 - **分发执行**：提供 `executeAll(RunContext context)` 方法，在固定逻辑 Tick 中被 Screen 调用，轮询队列并执行所有命令。
+- **执行结果监听**：`onExecuted(cmd, success)` 回调——命令执行**成功**即通知订阅方（**通知面板的经营事件数据源**，见 `render_design.md` §5.5）；失败静默不通知（与 4.3 双层校验口径一致）。
 
 ### 5.2 类结构骨架
 
@@ -260,5 +261,5 @@ handlers.put(BuyUnitCommand.class, (cmd, ctx) -> {
 
 ---
 
-*文档版本：1.4（2026-08-20：落定 2.4 交互语义映射——11 命令 × 手势（PC/触屏统一），ghost 保留 / 非法回弹 / 装备两段式点击 / AbandonRun 二次确认；落定 2.5 输入归属——棋盘域（棋盘/备战席/出售区）归 boardProcessor、UI 域归 uiStage，拖拽永不跨域、跨域交互全部点击化；陷阱表扩为六项。1.3：RunContext 更名与工具箱补全、示例重写对齐终裁、BACK 键与双层校验等）*  
+*文档版本：1.5（2026-08-21：快捷键示例增 `L`（通知日志大窗）；§5.1 增 `onExecuted` 执行结果监听（通知面板经营事件数据源）。1.4：落定 2.4 交互语义映射与 2.5 输入归属；陷阱表扩为六项。1.3：RunContext 更名与工具箱补全等）*  
 *适用阶段：自走棋项目输入与控制层架构设计*
