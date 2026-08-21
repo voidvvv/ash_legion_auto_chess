@@ -1,6 +1,6 @@
 # 🗃️ 数据层 Schema 设计文档
 
-> **版本**：V1.2（词表增补：POISON / AOE_2；DOT value 语义定稿；毒雾弹示例入种子）  
+> **版本**：V1.3（synergies 种子补全为 6 羁绊全档位；statKey 增 skillPower；替换制与风味种族语义明文）  
 > **定位**：静态数据 JSON 的字段终版、同名词表、校验规则——Phase 1 数据层（`data/` + `config/JsonLoader`）的开工依据  
 > **依据**：GDD V0.11 §6.5、`battle_design.md` V1.2（组合执行模型）、`architecture_design.md` V1.6、`render_design.md` V1.0（图集命名约定）  
 > **改版日**：2026-08-21
@@ -36,7 +36,7 @@
 |------|--------|
 | **SkillShape**（技能目标形状，V1.2 增 `AOE_2`） | `SINGLE_TARGET` `SELF` `LOWEST_ALLY` `ALL_ALLIES` `AOE_1` `AOE_2` `ALL_ENEMIES` |
 | **SkillEffectType**（技能效果类型，V1.1） | `DAMAGE` `HEAL` `SHIELD` `APPLY_STATUS` |
-| **statKey**（可修改属性白名单） | `hp` `attack` `armor` `attackSpeed` `moveSpeed` `range` `lifesteal` `energyGainRate` |
+| **statKey**（可修改属性白名单，V1.3 增 `skillPower`） | `hp` `attack` `armor` `attackSpeed` `moveSpeed` `range` `lifesteal` `energyGainRate` `skillPower`（技能数值幅度 %，作用于 DAMAGE/HEAL/SHIELD 的 value，与星级缩放叠乘） |
 | **TargetPriority**（索敌） | `NEAREST` `BACKLINE` `LOWEST_HP` `HIGHEST_ATK` |
 | **Delivery**（弹道载体） | `MELEE_INSTANT` `HOMING` `LINE` |
 | **StatusType**（状态，MVP 集） | `STUN` `BLEED` `POISON` `SLOW` `ATK_UP` `ATK_DOWN` `ASPD_UP` `SHIELD` `REGEN`（扩展需登记 battle_design §七） |
@@ -216,19 +216,65 @@ Boss 模板的 `baseStats` 直接写**乘好倍率的最终值**（普通 Boss �
 | `effects[].value` | float | ✓ | — |
 | `effects[].target` | EffectTarget | ✗ | 缺省 `ALLIES` |
 
+**语义补充（V1.3 明文）**：
+- **档位替换制**：达到更高 count 时生效该档**全量**效果（数值已含低档等价物），**不与低档叠加**；
+- **风味种族**：暗夜 / 精灵 / 植物 等未登记羁绊的种族仅为风味标签，**不产生计数**——单位只经种族或职业中**已登记羁绊**的 key 进入计数；
+- 吸血以 `stat: lifesteal`（ADD，百分点）表达，不使用 effect 通道。
+
 ```json
 [
-  {
-    "id": "syn_warrior", "name": "战士", "source": "CLASS", "key": "战士",
+  { "id": "syn_orc", "name": "兽人", "source": "RACE", "key": "兽人",
+    "thresholds": [
+      { "count": 2, "effects": [ { "stat": "hp", "op": "ADD", "value": 150 } ] },
+      { "count": 4, "effects": [ { "stat": "hp", "op": "ADD", "value": 400 },
+                                  { "stat": "attack", "op": "PCT", "value": 20 } ] },
+      { "count": 6, "effects": [ { "effect": "SHIELD", "value": 0.3 },
+                                  { "stat": "lifesteal", "op": "ADD", "value": 20 } ] }
+    ] },
+  { "id": "syn_warrior", "name": "战士", "source": "CLASS", "key": "战士",
     "thresholds": [
       { "count": 2, "effects": [ { "stat": "armor", "op": "ADD", "value": 20 } ] },
       { "count": 4, "effects": [ { "stat": "armor", "op": "ADD", "value": 50 },
                                   { "stat": "attack", "op": "PCT", "value": 15 } ] },
       { "count": 6, "effects": [ { "stat": "armor", "op": "ADD", "value": 100 },
                                   { "stat": "attack", "op": "PCT", "value": 30 },
-                                  { "effect": "SHIELD", "value": 0.3 } ] }
-    ]
-  }
+                                  { "stat": "lifesteal", "op": "ADD", "value": 20 } ] }
+    ] },
+  { "id": "syn_mage", "name": "法师", "source": "CLASS", "key": "法师",
+    "thresholds": [
+      { "count": 2, "effects": [ { "stat": "skillPower", "op": "ADD", "value": 15 } ] },
+      { "count": 4, "effects": [ { "stat": "skillPower", "op": "ADD", "value": 30 },
+                                  { "stat": "energyGainRate", "op": "ADD", "value": 15 } ] },
+      { "count": 6, "effects": [ { "stat": "skillPower", "op": "ADD", "value": 50 },
+                                  { "stat": "energyGainRate", "op": "ADD", "value": 30 } ] }
+    ] },
+  { "id": "syn_assassin", "name": "刺客", "source": "CLASS", "key": "刺客",
+    "thresholds": [
+      { "count": 2, "effects": [ { "stat": "attack", "op": "PCT", "value": 20 } ] },
+      { "count": 4, "effects": [ { "stat": "attack", "op": "PCT", "value": 35 },
+                                  { "stat": "moveSpeed", "op": "ADD", "value": 1.0 } ] },
+      { "count": 6, "effects": [ { "stat": "attack", "op": "PCT", "value": 50 },
+                                  { "stat": "attackSpeed", "op": "PCT", "value": 30 },
+                                  { "stat": "moveSpeed", "op": "ADD", "value": 2.0 } ] }
+    ] },
+  { "id": "syn_beast", "name": "野兽", "source": "RACE", "key": "野兽",
+    "thresholds": [
+      { "count": 2, "effects": [ { "stat": "attackSpeed", "op": "PCT", "value": 15 } ] },
+      { "count": 4, "effects": [ { "stat": "attackSpeed", "op": "PCT", "value": 25 },
+                                  { "stat": "moveSpeed", "op": "ADD", "value": 1.0 } ] },
+      { "count": 6, "effects": [ { "stat": "attackSpeed", "op": "PCT", "value": 40 },
+                                  { "stat": "moveSpeed", "op": "ADD", "value": 2.0 },
+                                  { "stat": "attack", "op": "PCT", "value": 15 } ] }
+    ] },
+  { "id": "syn_ranger", "name": "游侠", "source": "CLASS", "key": "游侠",
+    "thresholds": [
+      { "count": 2, "effects": [ { "stat": "range", "op": "ADD", "value": 1 } ] },
+      { "count": 4, "effects": [ { "stat": "range", "op": "ADD", "value": 2 },
+                                  { "stat": "attack", "op": "PCT", "value": 20 } ] },
+      { "count": 6, "effects": [ { "stat": "range", "op": "ADD", "value": 2 },
+                                  { "stat": "attack", "op": "PCT", "value": 35 },
+                                  { "stat": "attackSpeed", "op": "PCT", "value": 15 } ] }
+    ] }
 ]
 ```
 
@@ -320,3 +366,4 @@ Boss 模板的 `baseStats` 直接写**乘好倍率的最终值**（普通 Boss �
 | 2026-08-21 | **组合式优于纯抽取** | 六模板退役为组合特例；暴走/群体治疗等超出旧模板的需求由形状+多效果表达 |
 | 2026-08-21 | MVP 词表边界 | Shape 6 种 / 效果类型 4 种 / 每技能效果 ≤3 条；`ALL_ENEMIES` 供 Boss 演出，非 boss 引用软告警 |
 | 2026-08-21 | 词表增补（V1.2） | **`POISON` 入 StatusType、`AOE_2`（13 格菱形）入 SkillShape；DOT value 语义定稿**：每跳 = 施放者攻击力快照 × value；新增示例「毒雾弹」（种子 9 条） |
+| 2026-08-21 | 羁绊种子补全（V1.3） | synergies 种子 1 → **6 条全档位**（兽人/战士/法师/刺客/野兽/游侠，工作值待调）；**`skillPower` 入 statKey**（第 9 键，法师羁绊依赖）；**档位替换制**与**风味种族**语义明文；吸血统一 `stat: lifesteal`（effect 通道废弃） |

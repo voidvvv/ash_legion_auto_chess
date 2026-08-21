@@ -1,6 +1,6 @@
 # 📄 游戏设计文档（GDD）—— 自走棋肉鸽冒险
 
-> **版本**：V0.12（补备战席满购买规则；statKey 口径统一见 data_schema/battle）  
+> **版本**：V0.13（首发 6 羁绊完整档位定稿；skillPower 入词表；替换制/风味种族语义明文）  
 > **技术栈**：Java + LibGDX  
 > **目标平台**：单机 PC / Android（横屏）  
 > **美术风格**：像素风（32px 格子 / 640×360 虚拟分辨率）  
@@ -151,16 +151,20 @@ private BattleUnit[][] boardGrid = new BattleUnit[6][7]; // null 代表空格
 
 **门槛终态**：现有内容统一采用 **2/4/6**；`thresholds` 数组天然支持 3/5/7，个别羁绊可按设计需要在配置中自选。
 
-**MVP 首发羁绊 6 个**：兽人 / 战士 / 法师 / 刺客 / 野兽 / 游侠；**亡灵、巨人随场景解锁开放**（与背景文档阵营设定一致）。首发羁绊 (2) 档数值草案（待调）：
+**MVP 首发羁绊 6 个**：兽人 / 战士 / 法师 / 刺客 / 野兽 / 游侠；**亡灵、巨人随场景解锁开放**（与背景文档阵营设定一致）。完整档位（工作值，待调；JSON 终版见 `data_schema_design.md` §六）：
 
-| 羁绊 | (2) 档效果 |
-|------|------------|
-| 兽人 | 全体友军生命值 +150 |
-| 战士 | 全体友军护甲 +20 |
-| 法师 | 全体友军技能倍率 +15% |
-| 刺客 | 全体友军攻击力 +20% |
-| 野兽 | 全体友军攻击速度 +15% |
-| 游侠 | 全体友军攻击距离 +1 |
+| 羁绊 | (2) | (4) | (6) |
+|------|-----|-----|-----|
+| 兽人 RACE·肉盾 | hp +150 | hp +400，attack +20% | 开局 SHIELD 30% maxHp，lifesteal +20 |
+| 战士 CLASS·护甲 | armor +20 | armor +50，attack +15% | armor +100，attack +30%，lifesteal +20 |
+| 法师 CLASS·技能 | skillPower +15% | skillPower +30%，energyGainRate +15% | skillPower +50%，energyGainRate +30% |
+| 刺客 CLASS·爆发 | attack +20% | attack +35%，moveSpeed +1.0 | attack +50%，attackSpeed +30%，moveSpeed +2.0 |
+| 野兽 RACE·速度 | attackSpeed +15% | attackSpeed +25%，moveSpeed +1.0 | attackSpeed +40%，moveSpeed +2.0，attack +15% |
+| 游侠 CLASS·射程 | range +1 | range +2，attack +20% | range +2，attack +35%，attackSpeed +15% |
+
+- **档位替换制**：达到更高门槛时生效该档**全量**效果（数值已含低档等价物），不叠加
+- **风味种族**：暗夜 / 精灵 / 植物等未登记羁绊的种族仅为风味标签，不产生计数
+- `skillPower` = 技能数值幅度百分比加成（作用于 DAMAGE/HEAL/SHIELD，与星级缩放叠乘）——statKey 第 9 键
 
 | 门槛 | 效果示例（以“兽人”为例） |
 |------|---------------------------|
@@ -540,7 +544,7 @@ public class WaveGenerator {
         "effects": [
           { "stat": "armor", "op": "ADD", "value": 100, "target": "ALLIES" },
           { "stat": "attack", "op": "PCT", "value": 30, "target": "ALLIES" },
-          { "effect": "LIFESTEAL", "value": 20, "target": "ALLIES" }
+          { "stat": "lifesteal", "op": "ADD", "value": 20 }
         ]
       }
     ]
@@ -556,7 +560,7 @@ public class WaveGenerator {
 以下内容已在框架中预留，具体数值和实现细节待后续补充：
 
 - [ ] 24 个棋子的逐个数值表（池规模已定 §4.2）
-- [ ] 6 个首发羁绊的完整档位数值（(2) 档草案已定 §5.1）
+- [ ] 羁绊数值平衡（完整档位已定 §5.1，工作值待调）
 - [ ] 完整装备列表与数值平衡（最小集与掉落权重骨架见 §5.2）
 - [ ] 宝箱奖励池微调（权重骨架与金币曲线已定 §3.2 / §5.2）
 - [ ] 怜悯金币数值微调（规则边界已定 §3.2：每轮封顶 +3、零棋子战败不计）
@@ -632,6 +636,7 @@ public class WaveGenerator {
 | 2026-08-20 | 远程弹道 | **逻辑弹道两类**：锁定弹（不可挡、追踪）/ 非锁定弹（直线、被首个敌方单位挡下）；暴击发射时冻结 |
 | 2026-08-21 | 技能模块化 | **抽取为独立 skills.json 具名技能**：组合式（形状 6 × 效果 ≤3 × 载体 3），六模板退役为预设——详见 `data_schema_design.md` §五 / `battle_design.md` §六 |
 | 2026-08-21 | 备战席满购买规则 | **满 9 禁买**（灰置 + 提示）；**例外**：购买即完成 3 合 1 时允许（合成净释放 2 格） |
+| 2026-08-21 | 羁绊完整档位 | 首发 6 羁绊 2/4/6 全档位定稿（工作值）；`skillPower` 入 statKey；**档位替换制**与**风味种族**明文——种子见 data_schema §六 |
 
 ---
 
