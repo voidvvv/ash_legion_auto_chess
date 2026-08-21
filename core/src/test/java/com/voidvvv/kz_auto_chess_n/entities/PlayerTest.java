@@ -1,15 +1,33 @@
 package com.voidvvv.kz_auto_chess_n.entities;
 
+import com.voidvvv.kz_auto_chess_n.data.BaseStats;
+import com.voidvvv.kz_auto_chess_n.data.TargetPriority;
+import com.voidvvv.kz_auto_chess_n.data.UnitData;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Player（Phase 1 版：金币/经验/等级）测试——GDD §3.5 经验表驱动升级。
  * 名单（备战席/上场部署）随 Unit 实体在 Phase 3 增补（project_structure §六出生时间表）。
  */
 class PlayerTest {
+
+    // —— 名单夹具：最小模板 + 1 星单位 ——
+
+    private static UnitData tpl(String id) {
+        return new UnitData(id, "夹具" + id, "兽人", "战士", 1,
+                new BaseStats(100, 10, 5, 1f, 1, 1f, 0, 100, 0), 1.8f,
+                TargetPriority.NEAREST, null, "skill_warcry", false);
+    }
+
+    private static Unit unit(int id) {
+        return new Unit(id, tpl("u" + id), 1);
+    }
 
     @Test
     @DisplayName("初始状态：起始金币10、1级、0经验、人口上限3")
@@ -72,5 +90,131 @@ class PlayerTest {
         Player player = new Player(4);
         assertThat(player.canAfford(4)).isTrue();
         assertThat(player.canAfford(5)).isFalse();
+    }
+
+    // —— Phase 3 名单增补：bench 9 格 + 部署表 18 格 ——
+
+    @Test
+    @DisplayName("备战席初始为空，getBench 返回不可变视图")
+    void benchStartsEmptyWithUnmodifiableView() {
+        Player player = new Player(10);
+        assertThat(player.getBench()).isEmpty();
+        assertThatThrownBy(() -> player.getBench().add(unit(1)))
+                .isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
+    @DisplayName("addToBench 入席并计入 rosterSize")
+    void addToBenchCountsIntoRosterSize() {
+        Player player = new Player(10);
+        Unit a = unit(1);
+        Unit b = unit(2);
+        player.addToBench(a);
+        player.addToBench(b);
+        assertThat(player.getBench()).containsExactly(a, b);
+        assertThat(player.getRosterSize()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("备战席满 9 格再入席抛 IllegalStateException（防御兜底）")
+    void benchFullThrows() {
+        Player player = new Player(10);
+        for (int i = 1; i <= 9; i++) {
+            player.addToBench(unit(i));
+        }
+        assertThatThrownBy(() -> player.addToBench(unit(10)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("9");
+    }
+
+    @Test
+    @DisplayName("removeFromBench 移除指定单位；不在席抛 IllegalArgumentException")
+    void removeFromBenchValidatesMembership() {
+        Player player = new Player(10);
+        Unit a = unit(1);
+        player.addToBench(a);
+        player.removeFromBench(a);
+        assertThat(player.getBench()).isEmpty();
+
+        assertThatThrownBy(() -> player.removeFromBench(a))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("deploy 自动从备战席摘除并落格，deployedAt 可查")
+    void deployRemovesFromBenchAndOccupiesCell() {
+        Player player = new Player(10);
+        Unit a = unit(1);
+        player.addToBench(a);
+        player.deploy(a, 2, 5);
+        assertThat(player.getBench()).isEmpty();
+        assertThat(player.deployedAt(2, 5)).isSameAs(a);
+        assertThat(player.getRosterSize()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("deploy 越界抛错：缓冲行 y=3、界外 y=7、界外 x=6 均拒绝")
+    void deployRejectsOutOfPlayerZone() {
+        Player player = new Player(10);
+        player.addToBench(unit(1));
+        player.addToBench(unit(2));
+        player.addToBench(unit(3));
+        assertThatThrownBy(() -> player.deploy(unit(1), 0, 3)) // 缓冲行不可部署
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> player.deploy(unit(2), 0, 7))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> player.deploy(unit(3), 6, 4))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("deploy 目标格已占用抛 IllegalStateException")
+    void deployRejectsOccupiedCell() {
+        Player player = new Player(10);
+        player.addToBench(unit(1));
+        player.addToBench(unit(2));
+        player.deploy(unit(1), 2, 4);
+        assertThatThrownBy(() -> player.deploy(unit(2), 2, 4))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    @DisplayName("deploy 要求单位在备战席（名单一致性：非席内单位拒绝）")
+    void deployRequiresBenchMembership() {
+        Player player = new Player(10);
+        assertThatThrownBy(() -> player.deploy(unit(9), 0, 4))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("undeploy 清格并回备战席；空格 undeploy 抛错")
+    void undeployReturnsUnitToBench() {
+        Player player = new Player(10);
+        Unit a = unit(1);
+        player.addToBench(a);
+        player.deploy(a, 3, 6);
+        player.undeploy(3, 6);
+        assertThat(player.deployedAt(3, 6)).isNull();
+        assertThat(player.getBench()).containsExactly(a);
+
+        assertThatThrownBy(() -> player.undeploy(3, 6))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    @DisplayName("getDeployedUnits 扫描序 y↑x↑（确定性序 = 开战发号序，口径 #16）")
+    void deployedUnitsScanInRowMajorOrder() {
+        Player player = new Player(10);
+        Unit u5 = unit(5);   // (1,5)
+        Unit u4 = unit(4);   // (4,4)
+        Unit u6 = unit(6);   // (4,6)
+        player.addToBench(u4);
+        player.addToBench(u5);
+        player.addToBench(u6);
+        player.deploy(u5, 1, 5);
+        player.deploy(u4, 4, 4);
+        player.deploy(u6, 4, 6);
+        List<Unit> deployed = player.getDeployedUnits();
+        assertThat(deployed).containsExactly(u4, u5, u6); // (4,4) → (1,5) → (4,6)
     }
 }
