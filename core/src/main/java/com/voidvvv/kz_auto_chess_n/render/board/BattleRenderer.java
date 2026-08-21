@@ -11,6 +11,7 @@ import com.voidvvv.kz_auto_chess_n.entities.GamePhase;
 import com.voidvvv.kz_auto_chess_n.entities.Player;
 import com.voidvvv.kz_auto_chess_n.entities.Unit;
 import com.voidvvv.kz_auto_chess_n.entities.WaveSpec;
+import com.voidvvv.kz_auto_chess_n.input.BoardInputProcessor;
 import com.voidvvv.kz_auto_chess_n.render.Assets;
 import com.voidvvv.kz_auto_chess_n.render.EventInbox;
 import com.voidvvv.kz_auto_chess_n.render.FloatTextFormat;
@@ -39,6 +40,10 @@ public final class BattleRenderer {
             new com.badlogic.gdx.graphics.Color(0.13f, 0.20f, 0.14f, 1f); // 玩家区暗绿
     private static final com.badlogic.gdx.graphics.Color GRID_LINE_TINT =
             new com.badlogic.gdx.graphics.Color(0f, 0f, 0f, 0.35f);
+    private static final com.badlogic.gdx.graphics.Color DROP_OK_TINT =
+            new com.badlogic.gdx.graphics.Color(0.3f, 1f, 0.4f, 0.35f);  // 合法落点绿
+    private static final com.badlogic.gdx.graphics.Color DROP_BAD_TINT =
+            new com.badlogic.gdx.graphics.Color(1f, 0.3f, 0.3f, 0.3f);   // 非法落点红
 
     private final Assets assets;
     /** 当前附着的战斗实例（null = 备战期/无战斗；变化即 rebuild/clear） */
@@ -71,14 +76,17 @@ public final class BattleRenderer {
      * @param alpha       逻辑步间插值系数（弹道外推）
      * @param renderClock 渲染帧时钟（秒）
      * @param dt          本帧时长（动画推进）
+     * @param input       棋盘域输入（ghost 与落点高亮只读暴露；可为 null）
      */
-    public void draw(SpriteBatch batch, RunContext ctx, float alpha, float renderClock, float dt) {
+    public void draw(SpriteBatch batch, RunContext ctx, float alpha, float renderClock, float dt,
+                     BoardInputProcessor input) {
         syncBattleScope(ctx);
         batch.begin();
         drawGrid(batch);
         floatSlot = 0;
         if (ctx.getRunState().getPhase() == GamePhase.SHOPPING || ctx.getBattleState() == null) {
             drawShopping(batch, ctx);
+            drawDropOverlay(batch, ctx, input);
         } else {
             drawBattle(batch, ctx, alpha, renderClock, dt);
         }
@@ -278,5 +286,63 @@ public final class BattleRenderer {
         if (region.isFlipX() != wasFlip) {
             region.flip(true, false); // 还原
         }
+    }
+
+    // —— 拖拽 ghost 与落点高亮（input §4.3 表现层预校验；handler 层门控独立） ——
+
+    private void drawDropOverlay(SpriteBatch batch, RunContext ctx, BoardInputProcessor input) {
+        if (input == null || !input.isDragging()) {
+            return;
+        }
+        TextureRegion white = assets.region(PlaceholderKeys.WHITE);
+        com.voidvvv.kz_auto_chess_n.command.PlacementTarget preview = input.getDropPreview();
+        if (preview instanceof com.voidvvv.kz_auto_chess_n.command.PlacementTarget.Cell) {
+            com.voidvvv.kz_auto_chess_n.command.PlacementTarget.Cell cell =
+                    (com.voidvvv.kz_auto_chess_n.command.PlacementTarget.Cell) preview;
+            batch.setColor(DROP_OK_TINT);
+            batch.draw(white, BoardGeometry.BOARD_X + cell.gridX * BoardGeometry.CELL,
+                    BoardGeometry.BOARD_Y + BoardGeometry.BOARD_H - (cell.gridY + 1) * BoardGeometry.CELL,
+                    BoardGeometry.CELL, BoardGeometry.CELL);
+        } else if (preview instanceof com.voidvvv.kz_auto_chess_n.command.PlacementTarget.Bench) {
+            int slot = ((com.voidvvv.kz_auto_chess_n.command.PlacementTarget.Bench) preview).slotIndex;
+            int[] center = BoardGeometry.benchSlotCenter(slot);
+            batch.setColor(DROP_OK_TINT);
+            batch.draw(white, center[0] - BoardGeometry.BENCH_SLOT_W / 2f,
+                    center[1] - BoardGeometry.BENCH_SLOT_H / 2f,
+                    BoardGeometry.BENCH_SLOT_W, BoardGeometry.BENCH_SLOT_H);
+        } else {
+            int[] cell = BoardGeometry.pixelToCell((int) input.getDragVirtualX(), (int) input.getDragVirtualY());
+            if (cell != null) { // 悬停棋盘但非法行（敌区/缓冲带）：红高亮
+                batch.setColor(DROP_BAD_TINT);
+                batch.draw(white, BoardGeometry.BOARD_X + cell[0] * BoardGeometry.CELL,
+                        BoardGeometry.BOARD_Y + BoardGeometry.BOARD_H - (cell[1] + 1) * BoardGeometry.CELL,
+                        BoardGeometry.CELL, BoardGeometry.CELL);
+            }
+        }
+        batch.setColor(com.badlogic.gdx.graphics.Color.WHITE);
+        String templateId = findTemplateId(ctx.getPlayer(), input.getDragUnitId());
+        if (templateId != null) { // ghost：拖拽单位半透明跟随
+            batch.setColor(1f, 1f, 1f, 0.65f);
+            batch.draw(assets.region(PlaceholderKeys.unitFrame(templateId, PlaceholderKeys.ANIM_IDLE, 0)),
+                    input.getDragVirtualX() - BoardGeometry.CELL / 2f,
+                    input.getDragVirtualY() - BoardGeometry.CELL / 2f,
+                    BoardGeometry.CELL, BoardGeometry.CELL);
+            batch.setColor(com.badlogic.gdx.graphics.Color.WHITE);
+        }
+    }
+
+    /** 名单查模板 id（bench + 部署表；名单小线性可） */
+    private static String findTemplateId(Player player, int unitId) {
+        for (Unit unit : player.getBench()) {
+            if (unit.getId() == unitId) {
+                return unit.getTemplate().getId();
+            }
+        }
+        for (Unit unit : player.getDeployedUnits()) {
+            if (unit.getId() == unitId) {
+                return unit.getTemplate().getId();
+            }
+        }
+        return null;
     }
 }
