@@ -98,7 +98,7 @@ public final class BattleScreen implements Screen {
         float alpha = paused ? 0f : accumulator / GameBalance.LOGIC_STEP;
         worldViewport.apply();
         batch.setProjectionMatrix(worldCamera.combined);
-        battleRenderer.draw(batch, runContext, alpha, renderClock);
+        battleRenderer.draw(batch, runContext, alpha, renderClock, paused ? 0f : delta);
         topBar.refresh(runContext);
         shoppingHud.setVisible(runContext.getRunState().getPhase() == GamePhase.SHOPPING);
         uiStage.act(delta);
