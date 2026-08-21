@@ -7,6 +7,8 @@ dependencies {
 
   testImplementation "org.junit.jupiter:junit-jupiter:5.11.4"
   testImplementation "org.assertj:assertj-core:3.27.3"
+  // Gradle 9 要求测试运行时显式提供 JUnit Platform launcher（否则 Test Executor 启动失败）
+  testRuntimeOnly "org.junit.platform:junit-platform-launcher:1.11.4"
 
   if(enableGraalNative == 'true') {
     implementation "io.github.berstanio:gdx-svmhelper-annotations:$graalHelperVersion"

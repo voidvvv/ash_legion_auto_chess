@@ -1,0 +1,54 @@
+[
+  { "id": "syn_orc", "name": "兽人", "source": "RACE", "key": "兽人",
+    "thresholds": [
+      { "count": 2, "effects": [ { "stat": "hp", "op": "ADD", "value": 150 } ] },
+      { "count": 4, "effects": [ { "stat": "hp", "op": "ADD", "value": 400 },
+                                  { "stat": "attack", "op": "PCT", "value": 20 } ] },
+      { "count": 6, "effects": [ { "effect": "SHIELD", "value": 0.3 },
+                                  { "stat": "lifesteal", "op": "ADD", "value": 20 } ] }
+    ] },
+  { "id": "syn_warrior", "name": "战士", "source": "CLASS", "key": "战士",
+    "thresholds": [
+      { "count": 2, "effects": [ { "stat": "armor", "op": "ADD", "value": 20 } ] },
+      { "count": 4, "effects": [ { "stat": "armor", "op": "ADD", "value": 50 },
+                                  { "stat": "attack", "op": "PCT", "value": 15 } ] },
+      { "count": 6, "effects": [ { "stat": "armor", "op": "ADD", "value": 100 },
+                                  { "stat": "attack", "op": "PCT", "value": 30 },
+                                  { "stat": "lifesteal", "op": "ADD", "value": 20 } ] }
+    ] },
+  { "id": "syn_mage", "name": "法师", "source": "CLASS", "key": "法师",
+    "thresholds": [
+      { "count": 2, "effects": [ { "stat": "skillPower", "op": "ADD", "value": 15 } ] },
+      { "count": 4, "effects": [ { "stat": "skillPower", "op": "ADD", "value": 30 },
+                                  { "stat": "energyGainRate", "op": "ADD", "value": 15 } ] },
+      { "count": 6, "effects": [ { "stat": "skillPower", "op": "ADD", "value": 50 },
+                                  { "stat": "energyGainRate", "op": "ADD", "value": 30 } ] }
+    ] },
+  { "id": "syn_assassin", "name": "刺客", "source": "CLASS", "key": "刺客",
+    "thresholds": [
+      { "count": 2, "effects": [ { "stat": "attack", "op": "PCT", "value": 20 } ] },
+      { "count": 4, "effects": [ { "stat": "attack", "op": "PCT", "value": 35 },
+                                  { "stat": "moveSpeed", "op": "ADD", "value": 1.0 } ] },
+      { "count": 6, "effects": [ { "stat": "attack", "op": "PCT", "value": 50 },
+                                  { "stat": "attackSpeed", "op": "PCT", "value": 30 },
+                                  { "stat": "moveSpeed", "op": "ADD", "value": 2.0 } ] }
+    ] },
+  { "id": "syn_beast", "name": "野兽", "source": "RACE", "key": "野兽",
+    "thresholds": [
+      { "count": 2, "effects": [ { "stat": "attackSpeed", "op": "PCT", "value": 15 } ] },
+      { "count": 4, "effects": [ { "stat": "attackSpeed", "op": "PCT", "value": 25 },
+                                  { "stat": "moveSpeed", "op": "ADD", "value": 1.0 } ] },
+      { "count": 6, "effects": [ { "stat": "attackSpeed", "op": "PCT", "value": 40 },
+                                  { "stat": "moveSpeed", "op": "ADD", "value": 2.0 },
+                                  { "stat": "attack", "op": "PCT", "value": 15 } ] }
+    ] },
+  { "id": "syn_ranger", "name": "游侠", "source": "CLASS", "key": "游侠",
+    "thresholds": [
+      { "count": 2, "effects": [ { "stat": "range", "op": "ADD", "value": 1 } ] },
+      { "count": 4, "effects": [ { "stat": "range", "op": "ADD", "value": 2 },
+                                  { "stat": "attack", "op": "PCT", "value": 20 } ] },
+      { "count": 6, "effects": [ { "stat": "range", "op": "ADD", "value": 2 },
+                                  { "stat": "attack", "op": "PCT", "value": 35 },
+                                  { "stat": "attackSpeed", "op": "PCT", "value": 15 } ] }
+    ] }
+]

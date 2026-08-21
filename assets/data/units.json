@@ -1,0 +1,29 @@
+[
+  {
+    "id": "unit_warrior_01", "name": "兽人战士", "race": "兽人", "class": "战士", "cost": 1,
+    "baseStats": { "hp": 100, "attack": 15, "armor": 10, "attackSpeed": 1.0, "range": 1, "moveSpeed": 1.0 },
+    "upgradeMultiplier": 1.8,
+    "defaultPriority": "NEAREST", "specialPriority": null,
+    "skillId": "skill_warcry"
+  },
+  {
+    "id": "unit_assassin_01", "name": "暗夜刺客", "race": "暗夜", "class": "刺客", "cost": 3,
+    "baseStats": { "hp": 80, "attack": 25, "armor": 5, "attackSpeed": 1.5, "range": 1, "moveSpeed": 1.8 },
+    "upgradeMultiplier": 1.8,
+    "defaultPriority": "NEAREST", "specialPriority": "BACKLINE",
+    "skillId": "skill_execute"
+  },
+  {
+    "id": "unit_ranger_01", "name": "丛林游侠", "race": "精灵", "class": "游侠", "cost": 2,
+    "baseStats": { "hp": 70, "attack": 18, "armor": 3, "attackSpeed": 1.2, "range": 3, "moveSpeed": 0.8 },
+    "upgradeMultiplier": 1.8,
+    "skillId": "skill_pierce"
+  },
+  {
+    "id": "boss_thorn_mother", "name": "荆棘之母", "race": "植物", "class": "Boss", "cost": 0,
+    "baseStats": { "hp": 1250, "attack": 42, "armor": 20, "attackSpeed": 0.8, "range": 1, "moveSpeed": 0.6 },
+    "upgradeMultiplier": 1.0,
+    "skillId": "skill_thorn_vine",
+    "boss": true
+  }
+]

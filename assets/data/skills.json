@@ -1,0 +1,40 @@
+[
+  { "id": "skill_warcry", "name": "战吼", "desc": "号令全军，攻击提升",
+    "shape": "ALL_ALLIES", "delivery": "MELEE_INSTANT",
+    "effects": [ { "effect": "APPLY_STATUS", "status": "ATK_UP", "value": 15, "duration": 5 } ] },
+
+  { "id": "skill_execute", "name": "处决", "desc": "对目标发起致命一击",
+    "shape": "SINGLE_TARGET", "delivery": "HOMING",
+    "effects": [ { "effect": "DAMAGE", "value": 2.5 } ] },
+
+  { "id": "skill_pierce", "name": "贯穿箭", "desc": "射出穿透性一箭",
+    "shape": "SINGLE_TARGET", "delivery": "HOMING",
+    "effects": [ { "effect": "DAMAGE", "value": 2.0 } ] },
+
+  { "id": "skill_thorn_vine", "name": "荆棘藤蔓", "desc": "藤蔓自地底爆发",
+    "shape": "AOE_1", "delivery": "HOMING",
+    "effects": [ { "effect": "DAMAGE", "value": 1.5 } ] },
+
+  { "id": "skill_rampage", "name": "暴走", "desc": "战意失控：自身攻击与攻速大幅提升",
+    "shape": "SELF", "delivery": "MELEE_INSTANT",
+    "effects": [
+      { "effect": "APPLY_STATUS", "status": "ATK_UP",  "value": 30, "duration": 8 },
+      { "effect": "APPLY_STATUS", "status": "ASPD_UP", "value": 30, "duration": 8 }
+    ] },
+
+  { "id": "skill_mass_heal", "name": "群体治疗", "desc": "圣光洒向全军",
+    "shape": "ALL_ALLIES", "delivery": "MELEE_INSTANT",
+    "effects": [ { "effect": "HEAL", "value": 0.25 } ] },
+
+  { "id": "skill_long_snipe", "name": "超远程狙击", "desc": "锁定要害的致命远击",
+    "shape": "SINGLE_TARGET", "delivery": "HOMING",
+    "effects": [ { "effect": "DAMAGE", "value": 3.5 } ] },
+
+  { "id": "skill_starfall", "name": "星陨", "desc": "坠落星辰的碎片轰击全场（最终Boss）",
+    "shape": "ALL_ENEMIES", "delivery": "MELEE_INSTANT",
+    "effects": [ { "effect": "DAMAGE", "value": 1.8 } ] },
+
+  { "id": "skill_poison_cloud", "name": "毒雾弹", "desc": "毒雾在落点弥散，区域内敌人持续中毒",
+    "shape": "AOE_2", "delivery": "HOMING",
+    "effects": [ { "effect": "APPLY_STATUS", "status": "POISON", "value": 0.1, "duration": 6 } ] }
+]
