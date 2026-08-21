@@ -1,6 +1,6 @@
 # 🧭 运行时架构设计文档
 
-> **版本**：V1.5（渲染架构文档入册：UI 虚拟坐标与 HUD 布局定稿决策；此前：输入归属、RunContext 更名、RunState 补阶段归属）  
+> **版本**：V1.6（技能抽取为独立具名模块，决策入册；此前：渲染架构、输入归属、RunContext 更名、RunState 补阶段归属）  
 > **定位**：实体管理 / 命令系统 / 阶段状态机 / Screen 架构 / 持久化模型的运行时设计  
 > **依据**：GDD V0.6、`user_input_design.md` 1.1、`project_structure_design.md` V1.0、`game_lore_design.md`  
 > **配图**：`docs/diagrams/interaction_flow.md`（全交互地图，V0.2）
@@ -194,6 +194,7 @@ SHOPPING ──StartBattle──▶ BATTLE ──判胜──▶ RESULT ──Pi
 | 2026-08-20 | 上下文更名 | 输入文档 `BattleContext` 更名 **`RunContext`** 并补全工具箱；**当前逻辑阶段归 RunState**（命令门控查询入口） |
 | 2026-08-20 | 输入归属 | **棋盘域（棋盘/备战席/出售区）归 boardProcessor，UI 域归 uiStage**；拖拽永不跨域、跨域交互全部点击化；装备穿脱两段式点击（输入文档 2.4/2.5） |
 | 2026-08-20 | 渲染架构 | **UI 与世界同用 640×360 虚拟坐标**；HUD 八区域布局定稿（`render_design.md` §九 + 配图 V1.0） |
+| 2026-08-21 | 技能模块化 | **skills.json 独立具名技能**（组合式：shape × effects ≤ 3 × delivery），units 改 `skillId` 引用；效果词汇与羁绊/装备同源（`data_schema_design.md` §五） |
 
 ## 十、文档关系
 

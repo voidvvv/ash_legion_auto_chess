@@ -253,15 +253,15 @@
 
   <!-- ④ 技能 -->
   <section>
-    <h2><span class="num">④</span>技能施放 —— 六模板速览</h2>
-    <p class="lead">能量过百就地施放：无施法时间、无公共 CD、不清攻击计时；动画只是播报。倍率随星级 ×(1 + 0.5×(星−1))。</p>
+    <h2><span class="num">④</span>技能施放 —— 具名技能（形状 × 效果 × 载体）</h2>
+    <p class="lead">能量过百就地施放：无施法时间、无公共 CD、不清攻击计时。技能是 skills.json 中的<b>具名资产</b>（暴走 / 群体治疗 / 超远程狙击…）；数值幅度随星级 ×(1 + 0.5×(星−1))，状态时长不缩放。旧六模板退役为组合预设。</p>
     <div class="skills">
-      <div class="skill"><b>NUKED 单体爆发</b><span class="c"> · HOMING</span><div class="d">对目标：攻击 × power，走护甲公式</div></div>
-      <div class="skill"><b>AOE 范围</b><span class="c"> · HOMING</span><div class="d">命中点爆炸：目标及其 4 邻格全体敌人</div></div>
-      <div class="skill"><b>HEAL 治疗</b><span class="c"> · 即时</span><div class="d">HP% 最低友军（含自己）回 maxHp × power；全满则保留能量延后</div></div>
-      <div class="skill"><b>SHIELD 护盾</b><span class="c"> · 即时</span><div class="d">HP% 最低友军获得 maxHp × power 吸收盾</div></div>
-      <div class="skill"><b>BUFF 增益</b><span class="c"> · 即时</span><div class="d">全体友军攻击 +power%，5 秒（以 ATK_UP 状态挂载）</div></div>
-      <div class="skill"><b>STUN 眩晕</b><span class="c"> · LINE</span><div class="d">直线飞行，命中者及其 4 邻格敌人眩晕 power 秒（本 tick 已声明行动不受影响）</div></div>
+      <div class="skill"><b>三步执行</b><div class="d">① 形状解析目标集合 → ② 载体投送 → ③ 逐效果走既有管线（伤害/治疗/状态）</div></div>
+      <div class="skill"><b>形状 Shape × 6</b><div class="d">SINGLE_TARGET / SELF / LOWEST_ALLY / ALL_ALLIES / AOE_1 / ALL_ENEMIES（Boss 演出）</div></div>
+      <div class="skill"><b>效果 Effect × 4</b><div class="d">DAMAGE / HEAL / SHIELD / APPLY_STATUS——每技能 ≤ 3 条，可自由组合</div></div>
+      <div class="skill"><b>载体 Delivery × 3</b><span class="c"> · 见 ③</span><div class="d">MELEE_INSTANT 即时 / HOMING 追踪不可挡 / LINE 直线可被敌挡</div></div>
+      <div class="skill"><b>例「暴走」</b><span class="c"> · 狂战士</span><div class="d">SELF + [ATK_UP 30% ＋ ASPD_UP 30%]（8s）——单技能双状态</div></div>
+      <div class="skill"><b>例「群体治疗」/「星陨」</b><div class="d">ALL_ALLIES + HEAL 25% ／ ALL_ENEMIES + DAMAGE 1.8（最终 Boss）</div></div>
     </div>
   </section>
 
