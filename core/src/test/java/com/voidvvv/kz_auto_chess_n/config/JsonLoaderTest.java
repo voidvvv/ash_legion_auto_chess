@@ -31,11 +31,12 @@ class JsonLoaderTest {
     }
 
     @Test
-    @DisplayName("种子规模：4 棋子 / 9 技能 / 6 羁绊")
+    @DisplayName("种子规模：6 棋子 / 11 技能 / 6 羁绊 / 1 场景")
     void seedCounts() {
-        assertThat(data.getUnits()).hasSize(4);
-        assertThat(data.getSkills()).hasSize(9);
+        assertThat(data.getUnits()).hasSize(6);
+        assertThat(data.getSkills()).hasSize(11);
         assertThat(data.getSynergies()).hasSize(6);
+        assertThat(data.getScenes()).hasSize(1);
     }
 
     @Test

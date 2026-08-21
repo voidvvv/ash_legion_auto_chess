@@ -36,5 +36,13 @@
 
   { "id": "skill_poison_cloud", "name": "毒雾弹", "desc": "毒雾在落点弥散，区域内敌人持续中毒",
     "shape": "AOE_2", "delivery": "HOMING",
-    "effects": [ { "effect": "APPLY_STATUS", "status": "POISON", "value": 0.1, "duration": 6 } ] }
+    "effects": [ { "effect": "APPLY_STATUS", "status": "POISON", "value": 0.1, "duration": 6 } ] },
+
+  { "id": "skill_pierce_sky", "name": "穿云箭", "desc": "贯穿苍穹的致命一击",
+    "shape": "SINGLE_TARGET", "delivery": "HOMING",
+    "effects": [ { "effect": "DAMAGE", "value": 3.0 } ] },
+
+  { "id": "skill_thorn_sea", "name": "荆棘海", "desc": "荆棘自四面八方涌起，吞没全场（最终Boss）",
+    "shape": "ALL_ENEMIES", "delivery": "MELEE_INSTANT",
+    "effects": [ { "effect": "DAMAGE", "value": 1.5 } ] }
 ]

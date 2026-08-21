@@ -18,23 +18,28 @@ public final class GameData {
     private final Map<String, UnitData> units;
     private final Map<String, SkillData> skills;
     private final Map<String, SynergyData> synergies;
+    private final Map<String, SceneData> scenes;
     private final List<String> warnings;
 
     public GameData(Map<String, UnitData> units, Map<String, SkillData> skills,
-                    Map<String, SynergyData> synergies, List<String> warnings) {
+                    Map<String, SynergyData> synergies, Map<String, SceneData> scenes,
+                    List<String> warnings) {
         this.units = Collections.unmodifiableMap(new LinkedHashMap<String, UnitData>(units));
         this.skills = Collections.unmodifiableMap(new LinkedHashMap<String, SkillData>(skills));
         this.synergies = Collections.unmodifiableMap(new LinkedHashMap<String, SynergyData>(synergies));
+        this.scenes = Collections.unmodifiableMap(new LinkedHashMap<String, SceneData>(scenes));
         this.warnings = Collections.unmodifiableList(warnings);
     }
 
     public UnitData getUnit(String id) { return units.get(id); }
     public SkillData getSkill(String id) { return skills.get(id); }
     public SynergyData getSynergy(String id) { return synergies.get(id); }
+    public SceneData getScene(String id) { return scenes.get(id); }
 
     public Map<String, UnitData> getUnits() { return units; }
     public Map<String, SkillData> getSkills() { return skills; }
     public Map<String, SynergyData> getSynergies() { return synergies; }
+    public Map<String, SceneData> getScenes() { return scenes; }
 
     /** 加载期软告警（可能为空，永不为 null） */
     public List<String> getWarnings() { return warnings; }
