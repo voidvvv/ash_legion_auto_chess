@@ -1,6 +1,6 @@
 # ⚔️ 战斗系统技术设计
 
-> **版本**：V1.5（statKey 增 skillPower 第 9 键）  
+> **版本**：V1.6（百分比类 stat 缺省值与百分点刻度换算入册）  
 > **定位**：战斗主循环 / AI / 移动 / 攻击与弹道 / 技能 / 异常状态 / 属性管线 / 事件流的实现级设计（Phase 3 战斗引擎的开工依据）  
 > **依据**：GDD V0.8 §六、`architecture_design.md` V1.2（双实体 / 确定性 / RNG 消耗点）  
 > **讨论定稿日**：2026-08-20
@@ -267,6 +267,7 @@ UnitData.baseStats × 星级倍率(1.8 / 3.24)
 ```
 
 - 状态集合变化打脏标记，下一 tick 重算缓存（30 单位 × 6 属性为纳秒级）
+- **百分比刻度换算**：`lifesteal / skillPower / energyGainRate` 以百分点整数存储（基准 0 / 0 / 100），结算处统一 ÷100（如 energyGainRate 115 → ×1.15 回能、lifesteal 20 → 20% 吸血）
 - maxHp 被战斗期降低时 currentHp 同步钳制
 - **可修改属性键白名单（9 键，与 data_schema §三 statKey 完全一致）**：`hp / attack / armor / attackSpeed / moveSpeed / range / lifesteal / energyGainRate / skillPower`——hp 的修正作用于 maxHp（currentHp 按上方钳制规则同步）；`skillPower` 在施放结算时作用于 DAMAGE/HEAL/SHIELD 幅度（与星级缩放叠乘）；JSON 的 stat 名、状态 type、代码枚举三处共用一套同名词表，杜绝字符串魔法
 
@@ -303,3 +304,4 @@ UnitData.baseStats × 星级倍率(1.8 / 3.24)
 | 2026-08-21 | 事件流扩展（V1.3） | `Cast` 补主目标 targetId（区域特效中心）；消费者增**通知面板**（第三表现端） |
 | 2026-08-21 | statKey 口径统一（V1.4） | 白名单 7 → **8 键含 hp**（对齐 data_schema §三）：装备龙心 `stat: hp`、兽人羁绊生命值均依赖 hp 可修改；hp 修正作用于 maxHp，currentHp 钳制由既有规则覆盖 |
 | 2026-08-21 | statKey 增补（V1.5） | **`skillPower` 第 9 键**：技能数值幅度 %，施放结算作用于 DAMAGE/HEAL/SHIELD（与星级缩放叠乘）——法师羁绊（§六参照 data_schema §六种子）依赖 |
+| 2026-08-21 | 百分比刻度（V1.6） | `lifesteal=0 / skillPower=0 / energyGainRate=100` 缺省；**百分点整数存储、结算 ÷100**——ADD/PCT 语义 9 键统一（对齐 data_schema §三约定） |

@@ -1,6 +1,6 @@
 # 🗃️ 数据层 Schema 设计文档
 
-> **版本**：V1.3（synergies 种子补全为 6 羁绊全档位；statKey 增 skillPower；替换制与风味种族语义明文）  
+> **版本**：V1.4（风味种族校验口径定稿：软告警对称双向；百分比类 stat 缺省值与百分点刻度约定）  
 > **定位**：静态数据 JSON 的字段终版、同名词表、校验规则——Phase 1 数据层（`data/` + `config/JsonLoader`）的开工依据  
 > **依据**：GDD V0.11 §6.5、`battle_design.md` V1.2（组合执行模型）、`architecture_design.md` V1.6、`render_design.md` V1.0（图集命名约定）  
 > **改版日**：2026-08-21
@@ -47,6 +47,8 @@
 | **SynergySource** | `RACE` `CLASS` |
 
 > **词表即代码的铁律**：新增 Shape / 效果类型 / StatusType / statKey 都是引擎代码改动——先在此登记，再进 JSON。
+>
+> **百分比刻度约定（V1.4）**：百分比类 stat（`lifesteal` / `skillPower` / `energyGainRate`）以**百分点整数刻度**存储（基准 0 / 0 / 100），结算处统一 ÷100 换算——保证 ADD/PCT 运算语义跨全部 9 键一致、管线零特例、JSON 不出现易错小数（如 energyGainRate 115 → ×1.15）。
 
 ## 四、units.json（字段终版）
 
@@ -56,7 +58,7 @@
 |------|------|------|------|------|
 | `id` | string | ✓ | 全文件唯一 | 模板 id，同时是图集 key 前缀（render §七） |
 | `name` | string | ✓ | — | 显示名 |
-| `race` | string | ✓ | 需存在于某 synergy 或登记为无羁绊 | 种族 |
+| `race` | string | ✓ | 任意字符串；未匹配任何 synergy key 的值按**风味**处理（不计羁绊），加载期末**聚合软告警**一次（防拼写错误，见 §九） | 种族 |
 | `class` | string | ✓ | 同上 | 职业 |
 | `cost` | int | ✓ | ∈ {1, 2, 3}；boss 为 0 | 费阶——商店查价的事实源（input §6.3） |
 | `baseStats.hp` | int | ✓ | > 0 | 基础生命 |
@@ -65,6 +67,9 @@
 | `baseStats.attackSpeed` | float | ✓ | > 0 | 次/秒 |
 | `baseStats.range` | int | ✓ | ≥ 1 | 格（曼哈顿距离） |
 | `baseStats.moveSpeed` | float | ✓ | > 0 | 格/秒（跳格冷却 = 1/moveSpeed） |
+| `baseStats.lifesteal` | int | ✗ | 缺省 **0**（百分点） | 吸血 %，结算 ÷100 |
+| `baseStats.skillPower` | int | ✗ | 缺省 **0**（百分点） | 技能幅度加成 %，结算 ÷100 |
+| `baseStats.energyGainRate` | int | ✗ | 缺省 **100**（百分点，100 = ×1.0） | 回能速率，结算 ÷100 作乘数（115 → ×1.15） |
 | `upgradeMultiplier` | float | ✓ | 缺省 1.8 | 星级倍率：属性 = 基础 × m^(星−1) |
 | `defaultPriority` | enum | ✗ | 缺省 `NEAREST` | 索敌 |
 | `specialPriority` | enum | ✗ | nullable | 索敌覆盖（刺客 `BACKLINE` 等） |
@@ -330,7 +335,8 @@ Boss 模板的 `baseStats` 直接写**乘好倍率的最终值**（普通 Boss �
 4. **引用完整性**：
    - units 的 `skillId` 必 ∈ skills.json（悬空即死）；
    - skills 被 0 个单位引用 → 孤儿技能**告警**（不阻断）；
-   - scenes 的 `unitId`/`bosses` 必 ∈ units；synergies 的 `key` 与种族/职业值匹配（孤儿羁绊告警）
+   - scenes 的 `unitId`/`bosses` 必 ∈ units；synergies 的 `key` 与种族/职业值匹配（孤儿羁绊告警）；
+   - units 的 race/class 未匹配任何 synergy key → **风味值聚合软告警**（去重值一行列出，如"精灵、暗夜、植物——按风味处理"；防拼写错误，与孤儿羁绊告警**双向对称**）
 5. 效果字段配平：`DAMAGE/HEAL/SHIELD` 必有 `value>0`；`APPLY_STATUS` 必有合法 `status` 与 `duration>0`
 6. `boss:true` 模板 `cost` 必须 = 0 且不出现在 `enemyPool` 普通权重位；`ALL_ENEMIES` 形状被非 boss 单位引用 → 软告警
 7. 校验失败 → 抛错信息含 `文件 / 条目id / 字段路径`，启动即死
@@ -367,3 +373,5 @@ Boss 模板的 `baseStats` 直接写**乘好倍率的最终值**（普通 Boss �
 | 2026-08-21 | MVP 词表边界 | Shape 6 种 / 效果类型 4 种 / 每技能效果 ≤3 条；`ALL_ENEMIES` 供 Boss 演出，非 boss 引用软告警 |
 | 2026-08-21 | 词表增补（V1.2） | **`POISON` 入 StatusType、`AOE_2`（13 格菱形）入 SkillShape；DOT value 语义定稿**：每跳 = 施放者攻击力快照 × value；新增示例「毒雾弹」（种子 9 条） |
 | 2026-08-21 | 羁绊种子补全（V1.3） | synergies 种子 1 → **6 条全档位**（兽人/战士/法师/刺客/野兽/游侠，工作值待调）；**`skillPower` 入 statKey**（第 9 键，法师羁绊依赖）；**档位替换制**与**风味种族**语义明文；吸血统一 `stat: lifesteal`（effect 通道废弃） |
+| 2026-08-21 | 风味校验口径（V1.4） | **未匹配 synergy 的 race/class 不报错**（运行时自然不计羁绊）；加载期末**去重聚合软告警**（防拼写，与孤儿羁绊告警对称）——消灭"登记为无羁绊"悬空条款 |
+| 2026-08-21 | 百分比刻度约定（V1.4） | `lifesteal=0 / skillPower=0 / energyGainRate=100` 缺省定稿；**百分点整数刻度 + 结算 ÷100**——ADD/PCT 语义 9 键统一，管线零特例，JSON 无小数 |
