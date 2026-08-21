@@ -165,3 +165,5 @@ Thumbs.db
 
 ## OMC (oh-my-claudecode) local state:
 .omc/
+
+.report/
