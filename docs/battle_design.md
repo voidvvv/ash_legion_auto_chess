@@ -1,6 +1,6 @@
 # ⚔️ 战斗系统技术设计
 
-> **版本**：V1.3（Cast 事件补主目标；事件消费者增通知面板）  
+> **版本**：V1.4（statKey 白名单统一为 8 键含 hp，对齐 data_schema §三）  
 > **定位**：战斗主循环 / AI / 移动 / 攻击与弹道 / 技能 / 异常状态 / 属性管线 / 事件流的实现级设计（Phase 3 战斗引擎的开工依据）  
 > **依据**：GDD V0.8 §六、`architecture_design.md` V1.2（双实体 / 确定性 / RNG 消耗点）  
 > **讨论定稿日**：2026-08-20
@@ -268,7 +268,7 @@ UnitData.baseStats × 星级倍率(1.8 / 3.24)
 
 - 状态集合变化打脏标记，下一 tick 重算缓存（30 单位 × 6 属性为纳秒级）
 - maxHp 被战斗期降低时 currentHp 同步钳制
-- **可修改属性键白名单**：`attack / armor / attackSpeed / moveSpeed / range / lifesteal / energyGainRate`——JSON 的 stat 名、状态 type、代码枚举三处共用一套同名词表，杜绝字符串魔法
+- **可修改属性键白名单（8 键，与 data_schema §三 statKey 完全一致）**：`hp / attack / armor / attackSpeed / moveSpeed / range / lifesteal / energyGainRate`——hp 的修正作用于 maxHp（currentHp 按上方钳制规则同步）；JSON 的 stat 名、状态 type、代码枚举三处共用一套同名词表，杜绝字符串魔法
 
 ### 8.3 全局常量（`GameBalance`，不做每棋子配置）
 
@@ -301,3 +301,4 @@ UnitData.baseStats × 星级倍率(1.8 / 3.24)
 | 2026-08-20 | FSM 取舍 | **逻辑层不用 FSM**（失同步风险 / 可推导冗余 / 可测性）；状态效果按"可组合事实"建模为列表（互斥持续→状态机、可组合事实→列表的结构性判据）；长动作走链顶档、Boss 走行为树 |
 | 2026-08-21 | 技能模块（V1.2） | **skills.json 独立具名技能**：组合式（shape × effects ≤ 3 × delivery）取代六模板分支；效果词汇与羁绊/装备同源，零新机制 |
 | 2026-08-21 | 事件流扩展（V1.3） | `Cast` 补主目标 targetId（区域特效中心）；消费者增**通知面板**（第三表现端） |
+| 2026-08-21 | statKey 口径统一（V1.4） | 白名单 7 → **8 键含 hp**（对齐 data_schema §三）：装备龙心 `stat: hp`、兽人羁绊生命值均依赖 hp 可修改；hp 修正作用于 maxHp，currentHp 钳制由既有规则覆盖 |

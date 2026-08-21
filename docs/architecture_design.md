@@ -1,6 +1,6 @@
 # 🧭 运行时架构设计文档
 
-> **版本**：V1.7（通知面板决策入册：事件流第三消费者 + 命令执行监听）  
+> **版本**：V1.8（BuyUnit 校验补全：备战席满规则；statKey 口径统一入册）  
 > **定位**：实体管理 / 命令系统 / 阶段状态机 / Screen 架构 / 持久化模型的运行时设计  
 > **依据**：GDD V0.6、`user_input_design.md` 1.1、`project_structure_design.md` V1.0、`game_lore_design.md`  
 > **配图**：`docs/diagrams/interaction_flow.md`（全交互地图，V0.2）
@@ -129,6 +129,8 @@ SHOPPING ──StartBattle──▶ BATTLE ──判胜──▶ RESULT ──Pi
 | PickChest | | | ✓ |
 | AbandonRun | ✓ | ✓ | |
 
+> **校验要点（BuyUnit，2026-08-21 补全）**：金币 ≥ 槽位价格（查价不信任载荷，input §6.3）；**备战席 < 9，或本次购买立即完成 3 合 1**（名单已有同名同星 ×2，合成净释放 2 格，例外允许）。UI 预校验灰置卡片 + "备战席已满"提示（input §4.3 双层校验）。
+
 ### 5.3 轮开始事件（系统行为清单）
 轮次 +1 → 按 GDD §7.3 半随机池生成敌阵（本轮重试不重掷）→ 商店免费自动刷新 → 侦察数据就绪 → 进入 SHOPPING。
 
@@ -195,6 +197,7 @@ SHOPPING ──StartBattle──▶ BATTLE ──判胜──▶ RESULT ──Pi
 | 2026-08-20 | 输入归属 | **棋盘域（棋盘/备战席/出售区）归 boardProcessor，UI 域归 uiStage**；拖拽永不跨域、跨域交互全部点击化；装备穿脱两段式点击（输入文档 2.4/2.5） |
 | 2026-08-20 | 渲染架构 | **UI 与世界同用 640×360 虚拟坐标**；HUD 八区域布局定稿（`render_design.md` §九 + 配图 V1.0） |
 | 2026-08-21 | 通知面板 | CombatEvent **第三消费者** + `CommandManager.onExecuted` 经营事件监听；HUD 增第 9 区（左下常驻小窗 + `L` 键大窗回看，render §5.5） |
+| 2026-08-21 | BuyUnit 校验补全 | **备战席满 9 禁买**（灰置 + 提示）；**例外**：购买即完成 3 合 1 时允许（合成净释放 2 格）——GDD §3.4 / §5.2 矩阵注记 |
 | 2026-08-21 | 技能模块化 | **skills.json 独立具名技能**（组合式：shape × effects ≤ 3 × delivery），units 改 `skillId` 引用；效果词汇与羁绊/装备同源（`data_schema_design.md` §五） |
 
 ## 十、文档关系
