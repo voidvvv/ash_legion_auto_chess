@@ -1,0 +1,16 @@
+package com.voidvvv.kz_auto_chess_n.entities;
+
+/**
+ * 顺序发号默认实现：从 1 起严格递增（测试与控制台用）。
+ *
+ * <p>非线程安全——战斗逻辑在单线程固定步内推进（architecture §六）。
+ * 发号零 RNG 消耗（口径 #16：固定序确定性的最后一道保险）。
+ */
+public final class SequentialIdIssuer implements IdIssuer {
+    private int next = 1;
+
+    @Override
+    public int nextId() {
+        return next++;
+    }
+}

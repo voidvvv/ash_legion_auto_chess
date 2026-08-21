@@ -31,6 +31,8 @@ public final class GameBalance {
 
     // —— 技能 ——
     public static final int MAX_EFFECTS_PER_SKILL = 3;
+    /** 就地施放重入深度上限（口径 #19）：能量跨百回调的嵌套施放链防御性保险，超限推迟到下一行动 tick */
+    public static final int MAX_INLINE_CAST_DEPTH = 16;
 
     // —— 经济 ——
     public static final int START_GOLD = 10;
