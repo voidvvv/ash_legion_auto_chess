@@ -1,0 +1,13 @@
+[
+  {
+    "id": "scene_forest",
+    "name": "翡翠林地",
+    "unlockAfter": null,
+    "enemyPool": [
+      { "unitId": "unit_warrior_01",  "weight": 3, "minRound": 1 },
+      { "unitId": "unit_ranger_01",   "weight": 2, "minRound": 2 },
+      { "unitId": "unit_assassin_01", "weight": 2, "minRound": 5 }
+    ],
+    "bosses": { "7": "boss_thorn_mother", "15": "boss_one_eye", "25": "boss_thorn_true" }
+  }
+]

@@ -12,6 +12,7 @@ import com.voidvvv.kz_auto_chess_n.data.GameData;
 import com.voidvvv.kz_auto_chess_n.data.SkillData;
 import com.voidvvv.kz_auto_chess_n.data.SkillEffect;
 import com.voidvvv.kz_auto_chess_n.data.SkillEffectType;
+import com.voidvvv.kz_auto_chess_n.data.SceneData;
 import com.voidvvv.kz_auto_chess_n.data.SkillShape;
 import com.voidvvv.kz_auto_chess_n.data.StatKey;
 import com.voidvvv.kz_auto_chess_n.data.StatusType;
@@ -48,18 +49,21 @@ public final class JsonLoader {
     private JsonLoader() {
     }
 
-    /** 从目录按标准文件名加载：units.json / skills.json / synergies.json */
+    /** 从目录按标准文件名加载：units.json / skills.json / synergies.json / scenes.json */
     public static GameData loadFromDirectory(FileHandle dataDir) {
-        return load(dataDir.child("units.json"), dataDir.child("skills.json"), dataDir.child("synergies.json"));
+        return load(dataDir.child("units.json"), dataDir.child("skills.json"),
+                dataDir.child("synergies.json"), dataDir.child("scenes.json"));
     }
 
-    public static GameData load(FileHandle unitsFile, FileHandle skillsFile, FileHandle synergiesFile) {
+    public static GameData load(FileHandle unitsFile, FileHandle skillsFile,
+                                FileHandle synergiesFile, FileHandle scenesFile) {
         Map<String, UnitData> units = parseUnits(unitsFile);
         Map<String, SkillData> skills = parseSkills(skillsFile);
         Map<String, SynergyData> synergies = parseSynergies(synergiesFile);
+        Map<String, SceneData> scenes = parseScenes(scenesFile);
         List<String> warnings = new ArrayList<String>();
-        crossValidate(units, skills, synergies, warnings);
-        return new GameData(units, skills, synergies, warnings);
+        crossValidate(units, skills, synergies, scenes, warnings);
+        return new GameData(units, skills, synergies, scenes, warnings);
     }
 
     // ==================================================================
@@ -305,11 +309,103 @@ public final class JsonLoader {
     }
 
     // ==================================================================
-    // 交叉校验（data_schema §九.4 / §九.6）
+    // scenes.json（data_schema §七 结构锁定版；S5/S6 解析期校验）
+    // ==================================================================
+
+    private static Map<String, SceneData> parseScenes(FileHandle file) {
+        Map<String, SceneData> result = new LinkedHashMap<String, SceneData>();
+        Set<String> ids = new HashSet<String>();
+        for (JsonValue e = parseArray(file).child; e != null; e = e.next) {
+            requireObject(e, file.name());
+            String id = requireString(e, "id", file.name() + "#?");
+            String w = file.name() + "#" + id + "/";
+            if (!ids.add(id)) {
+                fail(w, "id 全文件唯一，重复声明");
+            }
+            checkUnknownKeys(e, w, "id", "name", "unlockAfter", "enemyPool", "bosses");
+
+            String name = requireString(e, "name", w);
+            String unlockAfter = optionalString(e, "unlockAfter", w);
+            List<SceneData.EnemyPoolEntry> enemyPool = parseEnemyPool(require(e, "enemyPool", w), w);
+            Map<Integer, String> bosses = parseBosses(require(e, "bosses", w), w);
+
+            result.put(id, new SceneData(id, name, unlockAfter, enemyPool, bosses));
+        }
+        return result;
+    }
+
+    private static List<SceneData.EnemyPoolEntry> parseEnemyPool(JsonValue node, String w) {
+        if (!node.isArray() || node.size < 1) {
+            fail(w + "enemyPool", "必须为非空数组");
+        }
+        List<SceneData.EnemyPoolEntry> pool = new ArrayList<SceneData.EnemyPoolEntry>(node.size);
+        boolean anyFromRoundOne = false; // S5：至少一条 minRound ≤ 1，否则第 1 轮可用池为空
+        int index = 0;
+        for (JsonValue p = node.child; p != null; p = p.next, index++) {
+            String pw = w + "enemyPool[" + index + "]/";
+            requireObject(p, pw);
+            checkUnknownKeys(p, pw, "unitId", "weight", "minRound");
+            String unitId = requireString(p, "unitId", pw);
+            int weight = requireInt(p, "weight", pw);
+            if (weight < 1) { // S6
+                fail(pw + "weight", "必须为正整数（≥ 1），实际=" + weight);
+            }
+            int minRound = requireInt(p, "minRound", pw);
+            if (minRound < 1 || minRound > GameBalance.TOTAL_ROUNDS) { // S6
+                fail(pw + "minRound", "必须在 1~" + GameBalance.TOTAL_ROUNDS + "，实际=" + minRound);
+            }
+            if (minRound <= 1) {
+                anyFromRoundOne = true;
+            }
+            pool.add(new SceneData.EnemyPoolEntry(unitId, weight, minRound));
+        }
+        if (!anyFromRoundOne) {
+            fail(w + "enemyPool", "至少一条 minRound ≤ 1（否则第 1 轮可用池为空，无兵可抽）");
+        }
+        return pool;
+    }
+
+    private static Map<Integer, String> parseBosses(JsonValue node, String w) {
+        if (!node.isObject()) {
+            fail(w + "bosses", "必须为对象（轮次 → Boss 模板 id）");
+        }
+        Map<Integer, String> bosses = new LinkedHashMap<Integer, String>();
+        for (JsonValue b = node.child; b != null; b = b.next) {
+            String key = b.name();
+            int round;
+            try {
+                round = Integer.parseInt(key);
+            } catch (NumberFormatException ex) {
+                fail(w + "bosses", "键必须为整数轮次，实际=\"" + key + "\"");
+                return null; // 不可达
+            }
+            boolean isBossRound = false;
+            for (int bossRound : GameBalance.BOSS_ROUNDS) {
+                if (bossRound == round) {
+                    isBossRound = true;
+                    break;
+                }
+            }
+            if (!isBossRound) {
+                fail(w + "bosses", "键必须 ∈ {7, 15, 25}，实际=" + round);
+            }
+            bosses.put(round, requireString(node, key, w + "bosses/"));
+        }
+        for (int bossRound : GameBalance.BOSS_ROUNDS) { // 实现层口径 #5：三键必须齐全
+            if (!bosses.containsKey(bossRound)) {
+                fail(w + "bosses", "三键 {7, 15, 25} 必须齐全，缺 \"" + bossRound + "\"");
+            }
+        }
+        return bosses;
+    }
+
+    // ==================================================================
+    // 交叉校验（data_schema §九.4 / §九.6 + scenes 组 S1~S4）
     // ==================================================================
 
     private static void crossValidate(Map<String, UnitData> units, Map<String, SkillData> skills,
-                                      Map<String, SynergyData> synergies, List<String> warnings) {
+                                      Map<String, SynergyData> synergies, Map<String, SceneData> scenes,
+                                      List<String> warnings) {
         // 1. units 的 skillId 必 ∈ skills（悬空即死）
         Set<String> referencedSkills = new HashSet<String>();
         for (UnitData unit : units.values()) {
@@ -365,6 +461,50 @@ public final class JsonLoader {
                 warnings.add("技能形状 ALL_ENEMIES 被非 Boss 单位引用: " + unit.getId() + " → " + skill.getId());
             }
         }
+        // 6. S1/S2：enemyPool unitId 必 ∈ units（悬空即死，§九.4）且 Boss 模板不得占权重位（§九.6）
+        for (SceneData scene : scenes.values()) {
+            String sw = "scenes.json#" + scene.getId() + "/";
+            for (SceneData.EnemyPoolEntry entry : scene.getEnemyPool()) {
+                UnitData unit = units.get(entry.getUnitId());
+                if (unit == null) {
+                    fail(sw + "enemyPool", "引用了不存在的单位: " + entry.getUnitId());
+                }
+                if (unit != null && unit.isBoss()) {
+                    fail(sw + "enemyPool", "Boss 模板不得出现在 enemyPool 权重位: " + entry.getUnitId());
+                }
+            }
+            // 7. S3：bosses 值必 ∈ units（悬空即死，§九.4）且被引用模板必须 isBoss（§九.6 对称防御）
+            for (Map.Entry<Integer, String> boss : scene.getBosses().entrySet()) {
+                UnitData unit = units.get(boss.getValue());
+                if (unit == null) {
+                    fail(sw + "bosses/" + boss.getKey(), "Boss 位引用了不存在的单位: " + boss.getValue());
+                }
+                if (unit != null && !unit.isBoss()) {
+                    fail(sw + "bosses/" + boss.getKey(), "Boss 位引用了非 Boss 模板: " + boss.getValue());
+                }
+            }
+            // 8. S4a/S4b：unlockAfter 必 ∈ 场景 id 集、禁自指（实现层口径 #8）
+            String unlockAfter = scene.getUnlockAfter();
+            if (unlockAfter != null) {
+                if (!scenes.containsKey(unlockAfter)) {
+                    fail(sw + "unlockAfter", "引用了不存在的场景: " + unlockAfter);
+                }
+                if (unlockAfter.equals(scene.getId())) {
+                    fail(sw + "unlockAfter", "禁自指");
+                }
+            }
+        }
+        // 9. S4c：多场景前置链成环报错（引用存在性与自指已在上一轮全量校验）
+        for (SceneData scene : scenes.values()) {
+            Set<String> visited = new HashSet<String>();
+            String cursor = scene.getId();
+            while (cursor != null && scenes.containsKey(cursor)) {
+                if (!visited.add(cursor)) {
+                    fail("scenes.json#" + scene.getId() + "/unlockAfter", "前置链成环（回边到: " + cursor + "）");
+                }
+                cursor = scenes.get(cursor).getUnlockAfter();
+            }
+        }
     }
 
     // ==================================================================
@@ -402,6 +542,18 @@ public final class JsonLoader {
 
     private static String requireString(JsonValue obj, String field, String where) {
         JsonValue child = require(obj, field, where);
+        if (!child.isString() || child.asString().trim().isEmpty()) {
+            fail(where + field, "必须为非空字符串");
+        }
+        return child.asString();
+    }
+
+    /** 可选字符串：缺省或显式 null 放行返回 null；出现则必须为非空字符串 */
+    private static String optionalString(JsonValue obj, String field, String where) {
+        JsonValue child = obj.get(field);
+        if (child == null || child.isNull()) {
+            return null;
+        }
         if (!child.isString() || child.asString().trim().isEmpty()) {
             fail(where + field, "必须为非空字符串");
         }

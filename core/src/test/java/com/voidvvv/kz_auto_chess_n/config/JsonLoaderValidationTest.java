@@ -43,13 +43,44 @@ class JsonLoaderValidationTest {
             + "{ \"id\": \"syn2\", \"name\": \"战士\", \"source\": \"CLASS\", \"key\": \"战士\","
             + " \"thresholds\": [ { \"count\": 2, \"effects\": [ { \"stat\": \"armor\", \"op\": \"ADD\", \"value\": 10 } ] } ] }]";
 
-    /** 用给定三份内容加载（null = 用合法缺省），返回 GameData 或抛 DataValidationException */
-    private GameData load(String units, String skills, String synergies) throws IOException {
+    // —— scenes 最小合法集（Phase 2 起 loadFromDirectory 增读 scenes.json）——
+    // 合法场景必须引用 Boss 模板（S3），故默认 units 含 u1/u2 杂兵 + b1/b2/b3 Boss
+
+    private static String bossUnitObj(String id) {
+        return "{ \"id\": \"" + id + "\", \"name\": \"试作Boss" + id + "\", \"race\": \"兽人\", \"class\": \"战士\", \"cost\": 0,"
+                + " \"baseStats\": { \"hp\": 200, \"attack\": 20, \"armor\": 5, \"attackSpeed\": 1.0,"
+                + " \"range\": 1, \"moveSpeed\": 1.0 },"
+                + " \"skillId\": \"sk1\", \"boss\": true }";
+    }
+
+    private static final String UNIT_U2_OBJ =
+            "{ \"id\": \"u2\", \"name\": \"试作兵2\", \"race\": \"兽人\", \"class\": \"战士\", \"cost\": 1,"
+            + " \"baseStats\": { \"hp\": 100, \"attack\": 10, \"armor\": 5, \"attackSpeed\": 1.0,"
+            + " \"range\": 3, \"moveSpeed\": 1.0 },"
+            + " \"skillId\": \"sk1\" }";
+
+    private static final String VALID_UNITS = "[" + UNIT_OBJ + ", " + UNIT_U2_OBJ + ", "
+            + bossUnitObj("b1") + ", " + bossUnitObj("b2") + ", " + bossUnitObj("b3") + "]";
+
+    private static final String VALID_SCENES =
+            "[{ \"id\": \"sc1\", \"name\": \"试作场景\", \"unlockAfter\": null,"
+            + " \"enemyPool\": ["
+            + " { \"unitId\": \"u1\", \"weight\": 3, \"minRound\": 1 },"
+            + " { \"unitId\": \"u2\", \"weight\": 2, \"minRound\": 2 } ],"
+            + " \"bosses\": { \"7\": \"b1\", \"15\": \"b2\", \"25\": \"b3\" } }]";
+
+    /** 用给定四份内容加载（null = 用合法缺省），返回 GameData 或抛 DataValidationException */
+    private GameData load(String units, String skills, String synergies, String scenes) throws IOException {
         Path dir = Files.createDirectories(tempDir.resolve("data"));
-        write(dir, "units.json", units == null ? VALID_UNIT : units);
+        write(dir, "units.json", units == null ? VALID_UNITS : units);
         write(dir, "skills.json", skills == null ? VALID_SKILL : skills);
         write(dir, "synergies.json", synergies == null ? VALID_SYNERGY : synergies);
+        write(dir, "scenes.json", scenes == null ? VALID_SCENES : scenes);
         return JsonLoader.loadFromDirectory(new FileHandle(dir.toString()));
+    }
+
+    private GameData load(String units, String skills, String synergies) throws IOException {
+        return load(units, skills, synergies, null);
     }
 
     private static void write(Path dir, String name, String content) throws IOException {
@@ -68,9 +99,10 @@ class JsonLoaderValidationTest {
     @DisplayName("最小合法集：零告警加载通过")
     void minimalValidSetLoadsCleanly() throws IOException {
         GameData data = load(null, null, null);
-        assertThat(data.getUnits()).hasSize(1);
+        assertThat(data.getUnits()).hasSize(5);
         assertThat(data.getSkills()).hasSize(1);
         assertThat(data.getSynergies()).hasSize(2);
+        assertThat(data.getScenes()).hasSize(1);
         assertThat(data.getWarnings()).isEmpty();
     }
 
@@ -78,11 +110,12 @@ class JsonLoaderValidationTest {
     @DisplayName("BOM 容错：带 BOM 的文件可正常解析")
     void toleratesUtf8Bom() throws IOException {
         Path dir = Files.createDirectories(tempDir.resolve("data"));
-        write(dir, "units.json", "﻿" + VALID_UNIT);
+        write(dir, "units.json", "﻿" + VALID_UNITS);
         write(dir, "skills.json", VALID_SKILL);
         write(dir, "synergies.json", VALID_SYNERGY);
+        write(dir, "scenes.json", VALID_SCENES);
         GameData data = JsonLoader.loadFromDirectory(new FileHandle(dir.toString()));
-        assertThat(data.getUnits()).hasSize(1);
+        assertThat(data.getUnits()).hasSize(5);
     }
 
     // —— §九.1 必填字段与枚举 ——
@@ -238,8 +271,8 @@ class JsonLoaderValidationTest {
     @Test
     @DisplayName("风味种族/职业只聚合告警，不报错（Q2 口径）")
     void flavorRaceAggregatedWarning() throws IOException {
-        String withFlavor = withExtraElement(VALID_UNIT,
-                "{ \"id\": \"u2\", \"name\": \"精灵\", \"race\": \"精灵\", \"class\": \"游侠\", \"cost\": 1,"
+        String withFlavor = withExtraElement(VALID_UNITS,
+                "{ \"id\": \"u3\", \"name\": \"精灵\", \"race\": \"精灵\", \"class\": \"游侠\", \"cost\": 1,"
                 + " \"baseStats\": { \"hp\": 1, \"attack\": 1, \"armor\": 0, \"attackSpeed\": 1, \"range\": 3, \"moveSpeed\": 1 },"
                 + " \"skillId\": \"sk1\" }");
         GameData data = load(withFlavor, null, null);
@@ -350,7 +383,8 @@ class JsonLoaderValidationTest {
         assertThatThrownBy(() -> JsonLoader.load(
                         new FileHandle(tempDir.resolve("nope/units.json").toString()),
                         new FileHandle(tempDir.resolve("nope/skills.json").toString()),
-                        new FileHandle(tempDir.resolve("nope/synergies.json").toString())))
+                        new FileHandle(tempDir.resolve("nope/synergies.json").toString()),
+                        new FileHandle(tempDir.resolve("nope/scenes.json").toString())))
                 .isInstanceOf(DataValidationException.class)
                 .hasMessageContaining("文件不存在");
     }
@@ -362,6 +396,7 @@ class JsonLoaderValidationTest {
         write(dir, "units.json", "{\"id\": \"u1\"}");
         write(dir, "skills.json", VALID_SKILL);
         write(dir, "synergies.json", VALID_SYNERGY);
+        write(dir, "scenes.json", VALID_SCENES);
         assertThatThrownBy(() -> JsonLoader.loadFromDirectory(new FileHandle(dir.toString())))
                 .isInstanceOf(DataValidationException.class)
                 .hasMessageContaining("根节点必须是数组");

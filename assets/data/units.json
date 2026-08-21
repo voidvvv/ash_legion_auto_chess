@@ -25,5 +25,23 @@
     "upgradeMultiplier": 1.0,
     "skillId": "skill_thorn_vine",
     "boss": true
+  },
+
+  {
+    "id": "boss_one_eye", "name": "独眼猎神", "race": "独眼", "class": "Boss", "cost": 0,
+    "baseStats": { "hp": 1250, "attack": 42, "armor": 12, "attackSpeed": 1.1, "range": 3, "moveSpeed": 0.8 },
+    "upgradeMultiplier": 1.0,
+    "defaultPriority": "NEAREST", "specialPriority": null,
+    "skillId": "skill_pierce_sky",
+    "boss": true
+  },
+
+  {
+    "id": "boss_thorn_true", "name": "荆棘之母·真体", "race": "植物", "class": "Boss", "cost": 0,
+    "baseStats": { "hp": 1500, "attack": 52, "armor": 25, "attackSpeed": 0.9, "range": 1, "moveSpeed": 0.6 },
+    "upgradeMultiplier": 1.0,
+    "defaultPriority": "NEAREST", "specialPriority": null,
+    "skillId": "skill_thorn_sea",
+    "boss": true
   }
 ]
