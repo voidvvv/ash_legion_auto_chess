@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>战斗主循环流程图（Phase 3）</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.3/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true });</script>
+<style>body{font-family:"Microsoft YaHei",sans-serif;max-width:1100px;margin:24px auto;padding:0 12px;}</style>
+</head>
+<body>
+<h1>战斗主循环流程图（Phase 3）</h1>
+<p>依据 battle_design §二（H 语义）/§五/§六；实现层口径见 spec_plan/2026-08-21_phase3_battle_engine.md §三。</p>
+<pre class="mermaid">
+flowchart TD
+    subgraph INIT["startBattle · 开战一次（tick 0，零 RNG 消耗）"]
+        direction TB
+        I1["玩家部署名单（Player 部署表 18 格）&lt;br/&gt;+ 敌方 WaveSpec 列表（Phase 2 产出）"]
+        I2["IdIssuer 发号：玩家侧先（扫描序 y升 x升）&lt;br/&gt;→ 敌方后（WaveSpec 列表序 = 抽取序 + Boss 殿后）"]
+        I3["SynergySystem 两侧双通道统计（race / class）&lt;br/&gt;→ StatPipeline 第一级基准快照（battle §八）"]
+        I4["开局效果落地（如兽人6 开局 SHIELD 30% maxHp）&lt;br/&gt;初始 HP=maxHp · 能量=0 · 攻击/移动计时器就绪"]
+        I5["按 id 序初始 findTarget（GDD §6.6 步骤1）"]
+        I1 --> I2 --> I3 --> I4 --> I5
+    end
+    INIT --> STEP
+
+    subgraph LOOP["BattleSystem.step · 每逻辑 tick（60Hz，固定序）"]
+        direction TB
+        P0["tick+1 · elapsed += 1/60&lt;br/&gt;每 120 tick 全局强制重评估（id 序，结果可能不变）"]
+        P1["① 状态推进&lt;br/&gt;DOT / REGEN 1s 心跳（DOT 真伤可致死）&lt;br/&gt;时长递减 · 到期移除 + 属性脏标记"]
+        P2["② 弹道推进&lt;br/&gt;目标已被清扫 → 消散（ProjectileFizzled）&lt;br/&gt;到达 → 按冻结载荷走唯一伤害管线"]
+        P3["③ 逐单位行动（id 升序，跳过已清扫单位）&lt;br/&gt;被控制 → 跳过（能量冻结）&lt;br/&gt;目标失效（已被标记死亡）→ findTarget&lt;br/&gt;能量 ≥ 100 → 就地施放（不清攻击计时）&lt;br/&gt;射程内（曼哈顿 ≤ range）→ 计时到点出手&lt;br/&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;近战即时结算 / 远程发射锁定弹（roll 暴击）&lt;br/&gt;否则 → 跳格冷却就绪走一步（贪婪步）"]
+        P4["④ 死亡清扫&lt;br/&gt;统一标记 · 腾格 · 状态销毁 · UnitDied 事件&lt;br/&gt;目标指向亡者的单位立即重选（id 序）"]
+        P5{"⑤ 胜负 / 超时判定"}
+        P0 --> P1 --> P2 --> P3 --> P4 --> P5
+        P5 -->|"未分胜负"| P0
+    end
+
+    P5 -->|"玩家全灭或同 tick 双灭（从严判负）"| LOSE(["BattleEnded · ENEMY_WIN"])
+    P5 -->|"敌方全灭"| WIN(["BattleEnded · PLAYER_WIN"])
+    P5 -->|"elapsed ≥ 60s（GDD §6.4）"| TIMEOUT(["BattleEnded · TIMEOUT（玩家判负）"])
+</pre>
+</body>
+</html>

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>战斗状态数据流图（Phase 3）</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.3/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true });</script>
+<style>body{font-family:"Microsoft YaHei",sans-serif;max-width:1100px;margin:24px auto;padding:0 12px;}</style>
+</head>
+<body>
+<h1>战斗状态数据流图（Phase 3）</h1>
+<p>依据 architecture §二/§六、battle §二；Q1 裁决（交付物按出生表 + 发号器接口占位）。</p>
+<pre class="mermaid">
+flowchart LR
+    subgraph IN["开战输入（全部显式注入，无全局单例）"]
+        direction TB
+        PL["Player 名单&lt;br/&gt;bench 备战席 9 格 + 部署表 18 格&lt;br/&gt;（本期增补字段，Q1）"]
+        WV["List of WaveSpec&lt;br/&gt;WaveGenerator 产出（Phase 2）&lt;br/&gt;模板引用 + star + scale + 格坐标"]
+        GD["GameData&lt;br/&gt;units / skills / synergies / scenes&lt;br/&gt;（只读，加载期已交叉校验）"]
+        RG["RandomGenerator&lt;br/&gt;seed 注入 · 消耗计数&lt;br/&gt;（战斗内唯一消耗点 = 暴击 roll）"]
+        II["IdIssuer（接口占位）&lt;br/&gt;单一 int id 空间发号&lt;br/&gt;Phase 5 归 RunState / UnitRegistry"]
+    end
+
+    subgraph SB["BattleSystem.startBattle（tick 0）"]
+        direction TB
+        D1["派生 BattleUnit（两侧）&lt;br/&gt;身份不可变（id/模板/星级/阵营）&lt;br/&gt;+ 受控战斗态（HP/能量/坐标/状态）"]
+        D2["SynergySystem 双通道统计&lt;br/&gt;race 与 class 各自计数&lt;br/&gt;→ SynergySnapshot × 两侧"]
+        D3["StatPipeline 第一级基准快照&lt;br/&gt;raw = 模板 × 星级倍率 × scale&lt;br/&gt;→ ( raw + ΣADD ) × ( 1 + ΣPCT )"]
+        D4["布格 grid[x][y]（6 列 × 7 行）&lt;br/&gt;敌区 0~2 · 缓冲行 3（可通行可停留）· 我区 4~6"]
+        D1 --> D2 --> D3 --> D4
+    end
+
+    IN --> SB
+    SB --> ST["BattleState（一场战斗，战斗结束整体丢弃）&lt;br/&gt;units（id 升序）· grid · projectiles&lt;br/&gt;events（追加式）· tick / elapsed · outcome"]
+
+    STEP["BattleSystem.step（60Hz 固定步）"]
+    STEP -->|"五阶段固定序读写（见主循环图）"| ST
+    ST --> EV["CombatEvent 事件流（纯数据 · 只产出不消费）&lt;br/&gt;AttackLaunched / Hit / Cast / StatusApplied&lt;br/&gt;Healed / Shielded / UnitDied / ProjectileFizzled / BattleEnded"]
+    ST --> OC["BattleOutcome&lt;br/&gt;PLAYER_WIN / ENEMY_WIN / TIMEOUT"]
+
+    EV --> C1["单元测试断言&lt;br/&gt;（equals 逐位对拍）"]
+    EV --> C2["回放复盘&lt;br/&gt;（同 seed 同输入 = 同事件流）"]
+    EV --> C3["Phase 4 渲染消费&lt;br/&gt;FxLayer / 飘字 / 战斗日志面板"]
+</pre>
+<h2>边界与约束</h2>
+<table>
+<tr><th>约束</th><th>出处</th></tr>
+<tr><td>BattleUnit 战斗作用域内受控可变、出作用域即弃（不可变优先的显式例外）</td><td>architecture §2.4 第三层</td></tr>
+<tr><td>棋盘占位归 BattleState，不归 Player</td><td>GDD §10.2 注 / architecture §2.3</td></tr>
+<tr><td>战斗内 RNG 消耗仅暴击判定一点（发射序消耗）</td><td>architecture §六</td></tr>
+<tr><td>Unit（名单）绝不被战斗污染——战斗只读名单派生新实例</td><td>architecture §2.1</td></tr>
+<tr><td>逻辑层只产出事件；渲染/测试/回放是消费者</td><td>battle §二</td></tr>
+</table>
+</body>
+</html>

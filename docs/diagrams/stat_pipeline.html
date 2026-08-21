@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>属性派生管线图（Phase 3，两级）</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.3/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true });</script>
+<style>body{font-family:"Microsoft YaHei",sans-serif;max-width:1100px;margin:24px auto;padding:0 12px;}</style>
+</head>
+<body>
+<h1>属性派生管线图（Phase 3，两级）</h1>
+<p>依据 battle_design §八；Q4 裁决"修正源列表"（Phase 5 装备源零改插入）。</p>
+<pre class="mermaid">
+flowchart TD
+    subgraph L1["第一级 · 基准快照（startBattle 一次算死 → BattleUnit.baseStats，不可变）"]
+        direction TB
+        T["UnitData.baseStats 模板 9 键&lt;br/&gt;hp · attack · armor · attackSpeed · moveSpeed · range&lt;br/&gt;lifesteal · energyGainRate · skillPower（百分点整数）"]
+        R["raw = 模板值 × starStatMultiplier( upgradeMultiplier , star ) × scale&lt;br/&gt;scale：玩家侧 = 1.0 / 敌方杂兵 = k（enemyScale）/ Boss = 1.0（烘焙不二次放大）"]
+        F["基准 = ( raw + ΣADD ) × ( 1 + ΣPCT )&lt;br/&gt;先加后乘，合成顺序写死（battle §8.1）"]
+        T --> R
+        R --> F
+        SRCS["修正源列表 List of StatModifierSource（Q4）&lt;br/&gt;本期源①：羁绊 SynergySnapshot（实现 StatModifierSource）&lt;br/&gt;星级不占源——已并入上面的 raw 阶段&lt;br/&gt;Phase 5 源②：装备（追加进列表，结算器零改动）"]
+        SRCS -.->|"按 StatKey 聚合的 ADD / PCT"| F
+        F --> BASE["BattleStats（不可变 · 9 键浮点）"]
+    end
+
+    subgraph L2["第二级 · 战斗期有效属性（battle §8.2）"]
+        direction TB
+        ST["ActiveStatus 列表（可组合事实，同 type 不叠加）"]
+        MAP["StatusType → StatKey 修正映射表（写死于 StatPipeline）&lt;br/&gt;ATK_UP / ATK_DOWN → attack · PCT ±value&lt;br/&gt;ASPD_UP → attackSpeed · PCT +value&lt;br/&gt;SLOW → moveSpeed · PCT −value&lt;br/&gt;STUN / BLEED / POISON / REGEN / SHIELD 非属性类"]
+        RE["有效 = ( 基准 + Σ状态ADD ) × ( 1 + Σ状态PCT )"]
+        BASE --> RE
+        ST --> MAP
+        MAP --> RE
+        RE --> EFF["有效属性缓存（BattleUnit.effectiveStats，一切结算读它）&lt;br/&gt;状态集合变化 → 脏标记 → 下一 tick 重算&lt;br/&gt;maxHp 被降低 → currentHp 同步钳制&lt;br/&gt;百分比键（lifesteal / skillPower / energyGainRate）&lt;br/&gt;以百分点存储，结算处统一 ÷100"]
+    end
+
+    L1 --> L2
+</pre>
+<h2>消费点</h2>
+<table>
+<tr><th>结算处</th><th>读取</th></tr>
+<tr><td>普攻出手 / 技能施放的攻击力基数</td><td>有效 attack（发射时冻结快照）</td></tr>
+<tr><td>命中时护甲公式 100/(100+armor)</td><td>目标命中时有效 armor</td></tr>
+<tr><td>攻击间隔 = 1/attackSpeed、跳格冷却 = 1/moveSpeed</td><td>有效值（攻速/移速类状态即时生效）</td></tr>
+<tr><td>技能幅度 ×(1+skillPower/100)、回能 ×energyGainRate/100、吸血 ×lifesteal/100</td><td>有效值（百分点 ÷100）</td></tr>
+</table>
+</body>
+</html>
