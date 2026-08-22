@@ -23,7 +23,7 @@ import java.util.List;
  *
  * <p>系统行为不经命令队列（input §7.1）——阶段推进由 BattleScreen 在逻辑 tick 内观察
  * {@code isOver} 后委托（口径 #7）。零 Gdx（JUnit 零后端前提不破）。
- * 演示名单沿 {@code tools/BattleConsoleMain.buyAndDeploy} 先例：经济与买卖归 Phase 5。
+ * 演示名单按用户反馈只发备战席（不预部署）：经济与买卖归 Phase 5。
  */
 public final class RunFlowSystem {
 
@@ -70,7 +70,7 @@ public final class RunFlowSystem {
 
     /**
      * 新开一局（要求新鲜 RunContext：round=1 / phase=SHOPPING 由 RunState 初始态保证）：
-     * 发放演示名单（战士(2,5) / 刺客(3,5) / 游侠(2,6)，1 星）→ beginRound。
+     * 发放演示名单（战士/刺客/游侠各 1，1 星，只入备战席）→ beginRound。
      */
     public void startNewRun(RunContext ctx) {
         RunState runState = ctx.getRunState();
@@ -137,21 +137,18 @@ public final class RunFlowSystem {
         startNewRun(ctx);
     }
 
-    /** 演示名单（Q2 兵源：沿 BattleConsoleMain.java:62-64 先例，经济不动） */
+    /** 演示名单（Q2 兵源；按用户反馈只发备战席不预部署——布阵是玩家操作；经济不动） */
     private void grantDemoRoster(RunContext ctx) {
         Player player = ctx.getPlayer();
         IdIssuer idIssuer = ctx.getRunState().getIdIssuer();
         GameData data = ctx.getGameData();
-        buyAndDeploy(player, idIssuer, data, "unit_warrior_01", 2, 5);
-        buyAndDeploy(player, idIssuer, data, "unit_assassin_01", 3, 5);
-        buyAndDeploy(player, idIssuer, data, "unit_ranger_01", 2, 6);
+        grantBenchUnit(player, idIssuer, data, "unit_warrior_01");
+        grantBenchUnit(player, idIssuer, data, "unit_assassin_01");
+        grantBenchUnit(player, idIssuer, data, "unit_ranger_01");
     }
 
-    /** 发号 → 入席 → 部署（沿 BattleConsoleMain.buyAndDeploy 先例） */
-    private static void buyAndDeploy(Player player, IdIssuer idIssuer, GameData data,
-                                     String unitId, int gridX, int gridY) {
-        Unit unit = new Unit(idIssuer.nextId(), data.getUnit(unitId), 1);
-        player.addToBench(unit);
-        player.deploy(unit, gridX, gridY);
+    /** 发号 → 入备战席（不预部署；控制台 tools/BattleConsoleMain 仍保持 buyAndDeploy 先例） */
+    private static void grantBenchUnit(Player player, IdIssuer idIssuer, GameData data, String unitId) {
+        player.addToBench(new Unit(idIssuer.nextId(), data.getUnit(unitId), 1));
     }
 }

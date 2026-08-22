@@ -94,7 +94,7 @@ class RunFlowSystemTest {
     // —— startNewRun / beginRound ——
 
     @Test
-    @DisplayName("startNewRun：3 演示兵固定格与 BattleConsoleMain 先例一致、round=1、敌阵已生成")
+    @DisplayName("startNewRun：3 演示兵只入备战席（不预部署）、round=1、敌阵已生成")
     void startNewRunGrantsDemoRoster() {
         GameData data = demoData();
         RunFlowSystem flow = new RunFlowSystem();
@@ -103,10 +103,17 @@ class RunFlowSystemTest {
         assertThat(ctx.getRunState().getRound()).isEqualTo(1);
         assertThat(ctx.getRunState().getPhase()).isEqualTo(GamePhase.SHOPPING);
         assertThat(ctx.getBattleState()).isNull();
-        assertThat(ctx.getPlayer().deployedAt(2, 5).getTemplate().getId()).isEqualTo("unit_warrior_01");
-        assertThat(ctx.getPlayer().deployedAt(3, 5).getTemplate().getId()).isEqualTo("unit_assassin_01");
-        assertThat(ctx.getPlayer().deployedAt(2, 6).getTemplate().getId()).isEqualTo("unit_ranger_01");
-        assertThat(ctx.getPlayer().getBench()).isEmpty();
+        List<String> benchTemplateIds = new ArrayList<String>();
+        for (com.voidvvv.kz_auto_chess_n.entities.Unit benchUnit : ctx.getPlayer().getBench()) {
+            benchTemplateIds.add(benchUnit.getTemplate().getId());
+        }
+        assertThat(benchTemplateIds)
+                .containsExactly("unit_warrior_01", "unit_assassin_01", "unit_ranger_01");
+        for (int y = 4; y <= 6; y++) { // 不预部署：玩家区全空（布阵是玩家操作，反馈 #1）
+            for (int x = 0; x < GameBalance.BOARD_COLS; x++) {
+                assertThat(ctx.getPlayer().deployedAt(x, y)).isNull();
+            }
+        }
         assertThat(ctx.getRunState().getEnemyWave()).isNotEmpty();
     }
 
@@ -128,7 +135,7 @@ class RunFlowSystemTest {
     // —— 门控矩阵（architecture §5.2 精神：BATTLE 拒布阵/开战，SHOPPING 拒投降） ——
 
     @Test
-    @DisplayName("门控：BATTLE 期 MoveUnit 被拒（位置不变）")
+    @DisplayName("门控：BATTLE 期 MoveUnit 被拒（名单不变）")
     void moveUnitGatedToShoppingPhase() {
         GameData data = demoData();
         RunFlowSystem flow = new RunFlowSystem();
@@ -137,11 +144,11 @@ class RunFlowSystemTest {
         flow.startNewRun(ctx);
         manager.addCommand(StartBattleCommand.INSTANCE);
         manager.executeAll(ctx);
-        int warriorId = ctx.getPlayer().deployedAt(2, 5).getId();
-        manager.addCommand(new MoveUnitCommand(warriorId, new PlacementTarget.Cell(0, 4)));
+        int benchUnitId = ctx.getPlayer().getBench().get(0).getId();
+        manager.addCommand(new MoveUnitCommand(benchUnitId, new PlacementTarget.Cell(0, 4)));
         manager.executeAll(ctx);
         assertThat(ctx.getPlayer().deployedAt(0, 4)).isNull();
-        assertThat(ctx.getPlayer().deployedAt(2, 5).getId()).isEqualTo(warriorId);
+        assertThat(ctx.getPlayer().getBench()).hasSize(3); // BATTLE 门控拒绝：备战席原样
     }
 
     @Test
@@ -177,19 +184,22 @@ class RunFlowSystemTest {
     // —— StartBattle / Surrender ——
 
     @Test
-    @DisplayName("StartBattle：派生 BattleState 非空、phase=BATTLE、双方单位就位")
+    @DisplayName("StartBattle：部署演示兵后派生 BattleState、phase=BATTLE、双方单位就位")
     void startBattleDerivesStateAndEntersBattle() {
         GameData data = demoData();
         RunFlowSystem flow = new RunFlowSystem();
         CommandManager manager = armedManager(flow);
         RunContext ctx = newContext(data);
         flow.startNewRun(ctx);
+        manager.addCommand(new MoveUnitCommand(ctx.getPlayer().getBench().get(0).getId(),
+                new PlacementTarget.Cell(2, 5))); // 玩家手动上阵一个演示兵
+        manager.executeAll(ctx);
         manager.addCommand(StartBattleCommand.INSTANCE);
         manager.executeAll(ctx);
         BattleState state = ctx.getBattleState();
         assertThat(state).isNotNull();
         assertThat(ctx.getRunState().getPhase()).isEqualTo(GamePhase.BATTLE);
-        assertThat(state.getUnits()).hasSize(4); // 3 演示兵 + round1 敌兵 1
+        assertThat(state.getUnits()).hasSize(2); // 1 已部署演示兵 + round1 敌兵 1
     }
 
     @Test
