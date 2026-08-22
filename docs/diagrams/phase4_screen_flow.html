@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Phase 4 Screen 流转与命令链路图</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.3/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true });</script>
+<style>body{font-family:"Microsoft YaHei",sans-serif;max-width:1100px;margin:24px auto;padding:0 12px;}</style>
+</head>
+<body>
+<h1>Phase 4 Screen 流转与命令链路图</h1>
+<p>依据 architecture §五/§七、input §2.2/§2.4~2.5；Q1~Q4 裁决（2026-08-22）。</p>
+<pre class="mermaid">
+flowchart TB
+    MAIN["Main extends Game（本期改造，替换 ApplicationAdapter 模板）&lt;br/&gt;create(): JsonLoader.loadFromDirectory → PlaceholderArt 生成 → new Assets → LoadingScreen"]
+    LD["LoadingScreen&lt;br/&gt;全量加载永不卸载（本期近空载）· 占位图集 GL 线程生成"]
+    MM["MainMenuScreen（极简，architecture §七）&lt;br/&gt;标题 + 开始按钮（UI 态 → Screen 导航）"]
+    BAT["BattleScreen（局内模拟域 · 内部零换屏）&lt;br/&gt;装配 RunContext / CommandManager / RunFlowSystem / BattleSystem&lt;br/&gt;双 viewport + InputMultiplexer + 帧循环"]
+
+    MAIN --> LD --> MM --> BAT
+
+    subgraph PHASE["GamePhase 状态机（RunState.phase；RunFlowSystem 推进，Screen 只观察联动）"]
+        SH["SHOPPING&lt;br/&gt;拖拽布阵（MoveUnit）· 开战按钮（StartBattle）&lt;br/&gt;顶栏：轮次 / 金币 / 等级"]
+        BT["BATTLE&lt;br/&gt;battleSystem.step 60Hz · 战斗 HUD（×1/×2 / 投降 / 60s 计时条）"]
+        RS["RESULT（瞬态横幅 ≤3s，Q3）&lt;br/&gt;胜负文字 + 点击继续或超时自动"]
+        RE["RUN_END（第 25 轮战斗结束后）&lt;br/&gt;终局文字 + 重开（同 seed，确定性对照）"]
+        SH -->|"StartBattle（零棋子允许开战）"| BT
+        BT -->|"state.isOver()（胜负/超时/投降）"| RS
+        RS -->|"round+1 · WaveGenerator 重生成敌阵 · battleState=null"| SH
+        RS -->|"round == TOTAL_ROUNDS(25)"| RE
+        RE -->|"restart：round=1 · 同 seed 重掷（重试/怜悯推 Phase 5）"| SH
+    end
+    BAT --- PHASE
+
+    subgraph CMD["命令链路（input §1 四层流向；AI / 系统行为不入队）"]
+        direction TB
+        IP["输入捕获+路由：InputMultiplexer&lt;br/&gt;① uiStage（UI 域：按钮命中）② boardProcessor（棋盘域：棋盘 6×7 / 备战席 3×3）&lt;br/&gt;（dialogStage / keyProcessor 推 Phase 5，位置预留）"]
+        TR["翻译层&lt;br/&gt;boardProcessor: unproject 棋盘 viewport · 死区 20px 判点击/拖拽&lt;br/&gt;拖拽松手才入队，非法落点回弹不产生命令"]
+        Q["CommandManager（Q1 出生）&lt;br/&gt;MoveUnit / StartBattle / Surrender（Q2 裁决）&lt;br/&gt;队列 + (tick, cmd) 历史 + onExecuted"]
+        HD["handler（RunFlowSystem 注册，Phase 5 拆归各 system）&lt;br/&gt;纯确定性校验：禁时间 / 禁随机 / 非法静默忽略+记日志"]
+        SYS["模拟层&lt;br/&gt;MoveUnitExecutor → Player 名单 API（含交换语义）&lt;br/&gt;StartBattle → BattleSystem.startBattle → BattleState&lt;br/&gt;Surrender → state.finish(ENEMY_WIN)"]
+        IP --> TR --> Q --> HD --> SYS
+    end
+    BAT --- CMD
+</pre>
+<h2>边界与约束</h2>
+<table>
+<tr><th>约束</th><th>出处</th></tr>
+<tr><td>SHOPPING / BATTLE / RESULT 是逻辑状态机的状态，由 BattleScreen 观察并切换 UI 可用性，不是 Screen</td><td>architecture §七</td></tr>
+<tr><td>命令只承载玩家输入（纯数据，禁 run/execute 方法）；系统行为（阶段推进/轮开始/演示名单）不入队</td><td>input §4.1 / §7.1~7.2</td></tr>
+<tr><td>Screen 只做点火器：初始化 multiplexer + render 里 executeAll，业务判断不写在 Screen</td><td>input §7.3</td></tr>
+<tr><td>拖拽永不跨域：棋盘/备战席归 boardProcessor，按钮归 uiStage；跨域交互退化为点击</td><td>input §2.5</td></tr>
+<tr><td>判负同轮重试 + 怜悯推 Phase 5：本期胜负统一推进轮次（差异声明 #6）</td><td>Q3 裁决 / architecture §5.1</td></tr>
+<tr><td>6 Screen 中 Loading / MainMenu(极简) / Battle 本期出生；RunSetup / Codex / RunResult 推 Phase 5~6</td><td>architecture §七</td></tr>
+</table>
+</body>
+</html>

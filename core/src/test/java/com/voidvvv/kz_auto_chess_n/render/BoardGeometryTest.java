@@ -1,0 +1,148 @@
+package com.voidvvv.kz_auto_chess_n.render;
+
+import com.voidvvv.kz_auto_chess_n.config.GameBalance;
+import com.voidvvv.kz_auto_chess_n.render.board.BoardGeometry;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * BoardGeometry 测试：布局常量自洽、行 0 在顶的 y 翻转、格↔像素往返、整数吸附（render §九/§八.2）。
+ */
+class BoardGeometryTest {
+
+    @Test
+    @DisplayName("常量自洽：BOARD = 6×32 × 7×32、BENCH = 3×36 × 3×40、虚拟画布 640×360")
+    void constantsSelfConsistent() {
+        assertThat(BoardGeometry.BOARD_W).isEqualTo(GameBalance.BOARD_COLS * BoardGeometry.CELL);
+        assertThat(BoardGeometry.BOARD_H).isEqualTo(GameBalance.BOARD_ROWS * BoardGeometry.CELL);
+        assertThat(BoardGeometry.BENCH_W).isEqualTo(3 * BoardGeometry.BENCH_SLOT_W);
+        assertThat(BoardGeometry.BENCH_H).isEqualTo(3 * BoardGeometry.BENCH_SLOT_H);
+        assertThat(BoardGeometry.VIRTUAL_W).isEqualTo(640);
+        assertThat(BoardGeometry.VIRTUAL_H).isEqualTo(360);
+    }
+
+    @Test
+    @DisplayName("cellCenter 行 0（敌区）在顶：gridY=0 的中心 py 大于 gridY=6 的中心 py")
+    void rowZeroAtTop() {
+        int[] enemy = BoardGeometry.cellCenter(0, 0);
+        int[] player = BoardGeometry.cellCenter(0, 6);
+        assertThat(enemy[1]).isGreaterThan(player[1]);
+    }
+
+    @Test
+    @DisplayName("cellCenter 落在各自 32px 格内（中心 = 格矩形中点）")
+    void cellCenterInsideOwnCellRect() {
+        for (int y = 0; y < GameBalance.BOARD_ROWS; y++) {
+            for (int x = 0; x < GameBalance.BOARD_COLS; x++) {
+                int[] c = BoardGeometry.cellCenter(x, y);
+                int top = BoardGeometry.BOARD_Y + BoardGeometry.BOARD_H - (y + 1) * BoardGeometry.CELL;
+                assertThat(c[0]).isEqualTo(BoardGeometry.BOARD_X + x * BoardGeometry.CELL + BoardGeometry.CELL / 2);
+                assertThat(c[1]).isEqualTo(top + BoardGeometry.CELL / 2);
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("cellCenter ↔ pixelToCell 往返一致（全 42 格中心点）")
+    void cellCenterRoundTrip() {
+        for (int y = 0; y < GameBalance.BOARD_ROWS; y++) {
+            for (int x = 0; x < GameBalance.BOARD_COLS; x++) {
+                int[] center = BoardGeometry.cellCenter(x, y);
+                int[] cell = BoardGeometry.pixelToCell(center[0], center[1]);
+                assertThat(cell).containsExactly(x, y);
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("pixelToCell 界外返回 null：左/右/上/下边界外")
+    void pixelToCellRejectsOutside() {
+        assertThat(BoardGeometry.pixelToCell(BoardGeometry.BOARD_X - 1, 100)).isNull();
+        assertThat(BoardGeometry.pixelToCell(BoardGeometry.BOARD_X + BoardGeometry.BOARD_W, 100)).isNull();
+        assertThat(BoardGeometry.pixelToCell(300, BoardGeometry.BOARD_Y - 1)).isNull();
+        assertThat(BoardGeometry.pixelToCell(300, BoardGeometry.BOARD_Y + BoardGeometry.BOARD_H)).isNull();
+    }
+
+    @Test
+    @DisplayName("pixelToCell 半格像素命中正确格（格内任意点归属该格）")
+    void pixelToCellHalfCellResolution() {
+        // 格 (3,4) 的矩形：x ∈ [224+96, 224+128)，y ∈ [114, 146)（top = 274-160）
+        assertThat(BoardGeometry.pixelToCell(224 + 96, 114)).containsExactly(3, 4);
+        assertThat(BoardGeometry.pixelToCell(224 + 127, 145)).containsExactly(3, 4);
+        assertThat(BoardGeometry.pixelToCell(224 + 128, 118)).containsExactly(4, 4); // 下一列
+        assertThat(BoardGeometry.pixelToCell(224 + 96, 146)).containsExactly(3, 3);  // 屏幕上方一行（更靠敌区，gridY 更小）
+    }
+
+    @Test
+    @DisplayName("cellCenter 输出整数吸附（render §八.2 Math.round）")
+    void cellCenterSnapsToInteger() {
+        for (int y = 0; y < 7; y++) {
+            for (int x = 0; x < 6; x++) {
+                int[] c = BoardGeometry.cellCenter(x, y);
+                assertThat(c[0]).isEqualTo((int) c[0]);
+                assertThat(c[1]).isEqualTo((int) c[1]);
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("continuousCenter 与 cellCenter 等价：全 6×7 格 (grid+0.5) 逐位相等（0.5×32=16 浮点精确）")
+    void continuousCenterEquivalentToCellCenter() {
+        for (int y = 0; y < GameBalance.BOARD_ROWS; y++) {
+            for (int x = 0; x < GameBalance.BOARD_COLS; x++) {
+                assertThat(BoardGeometry.continuousCenterX(x + 0.5f))
+                        .isEqualTo((float) BoardGeometry.cellCenterX(x));
+                assertThat(BoardGeometry.continuousCenterY(y + 0.5f))
+                        .isEqualTo((float) BoardGeometry.cellCenterY(y));
+            }
+        }
+        // 抽查：格 (2,5) 中心 (304, 98)；连续坐标 y 大 → 像素 y 小（行 0 在顶）
+        assertThat(BoardGeometry.continuousCenterX(2.5f)).isEqualTo(304f);
+        assertThat(BoardGeometry.continuousCenterY(5.5f)).isEqualTo(98f);
+        assertThat(BoardGeometry.continuousCenterY(5.5f)).isGreaterThan(BoardGeometry.continuousCenterY(6.5f));
+    }
+
+    @Test
+    @DisplayName("benchSlotCenter 列主序：槽 0/1/2 同列向下、槽 3 起换列")
+    void benchSlotsColumnMajor() {
+        int[] s0 = BoardGeometry.benchSlotCenter(0);
+        int[] s1 = BoardGeometry.benchSlotCenter(1);
+        int[] s3 = BoardGeometry.benchSlotCenter(3);
+        assertThat(s0[0]).isEqualTo(s1[0]);            // 同列
+        assertThat(s1[1] - s0[1]).isEqualTo(BoardGeometry.BENCH_SLOT_H); // 向下一行
+        assertThat(s3[0] - s0[0]).isEqualTo(BoardGeometry.BENCH_SLOT_W); // 换列
+        assertThat(s3[1]).isEqualTo(s0[1]);
+    }
+
+    @Test
+    @DisplayName("benchSlotCenter ↔ pixelToBenchSlot 往返一致（全 9 槽）")
+    void benchSlotRoundTrip() {
+        for (int slot = 0; slot < GameBalance.BENCH_SIZE; slot++) {
+            int[] center = BoardGeometry.benchSlotCenter(slot);
+            assertThat(BoardGeometry.pixelToBenchSlot(center[0], center[1])).isEqualTo(slot);
+        }
+    }
+
+    @Test
+    @DisplayName("pixelToBenchSlot 界外返回 -1")
+    void pixelToBenchSlotRejectsOutside() {
+        assertThat(BoardGeometry.pixelToBenchSlot(BoardGeometry.BENCH_X - 1, 60)).isEqualTo(-1);
+        assertThat(BoardGeometry.pixelToBenchSlot(400, 60)).isEqualTo(-1);
+        assertThat(BoardGeometry.pixelToBenchSlot(30, BoardGeometry.BENCH_Y - 1)).isEqualTo(-1);
+        assertThat(BoardGeometry.pixelToBenchSlot(30, BoardGeometry.BENCH_Y + BoardGeometry.BENCH_H)).isEqualTo(-1);
+    }
+
+    @Test
+    @DisplayName("benchSlotCenter 输出整数吸附且落在槽矩形内")
+    void benchSlotCenterInsideSlotRect() {
+        for (int slot = 0; slot < 9; slot++) {
+            int col = slot / 3; // 列主序：slot = col*3 + row
+            int row = slot % 3;
+            int[] c = BoardGeometry.benchSlotCenter(slot);
+            assertThat(c[0]).isEqualTo(BoardGeometry.BENCH_X + col * BoardGeometry.BENCH_SLOT_W + BoardGeometry.BENCH_SLOT_W / 2);
+            assertThat(c[1]).isEqualTo(BoardGeometry.BENCH_Y + row * BoardGeometry.BENCH_SLOT_H + BoardGeometry.BENCH_SLOT_H / 2);
+        }
+    }
+}

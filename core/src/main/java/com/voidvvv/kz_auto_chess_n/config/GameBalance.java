@@ -34,6 +34,18 @@ public final class GameBalance {
     /** 就地施放重入深度上限（口径 #19）：能量跨百回调的嵌套施放链防御性保险，超限推迟到下一行动 tick */
     public static final int MAX_INLINE_CAST_DEPTH = 16;
 
+    // —— 帧循环 / 输入（Phase 4；input §5.3 / §3 死区 / Q2/Q3）——
+    /** 单帧最大 delta（秒）：accumulator 累积前的死亡螺旋防御钳制 */
+    public static final float MAX_DELTA = 0.1f;
+    /** 单帧最大逻辑步数：超限丢弃剩余 accumulator（与 MAX_DELTA 双保险） */
+    public static final int MAX_TICKS_PER_FRAME = 5;
+    /** 拖拽死区（虚拟像素）：unproject 后位移小于此值未进入拖拽，视为点击 */
+    public static final int DRAG_DEAD_ZONE_PX = 20;
+    /** 战毕横幅停留秒数（到时自动回 SHOPPING，Q3） */
+    public static final float RESULT_BANNER_SECONDS = 3f;
+    /** 战斗快进倍率（×2 变速档，只乘 accumulator 消费速率，Q2） */
+    public static final float BATTLE_SPEED_FACTOR_FAST = 2f;
+
     // —— 经济 ——
     public static final int START_GOLD = 10;
     public static final int SHOP_REFRESH_COST = 2;
