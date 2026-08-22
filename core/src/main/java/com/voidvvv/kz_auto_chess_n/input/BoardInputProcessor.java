@@ -9,9 +9,14 @@ import com.voidvvv.kz_auto_chess_n.command.PlacementTarget;
 import com.voidvvv.kz_auto_chess_n.command.RunContext;
 import com.voidvvv.kz_auto_chess_n.command.SellUnitCommand;
 import com.voidvvv.kz_auto_chess_n.config.GameBalance;
+import com.voidvvv.kz_auto_chess_n.entities.BattleState;
+import com.voidvvv.kz_auto_chess_n.entities.BattleUnit;
 import com.voidvvv.kz_auto_chess_n.entities.GamePhase;
 import com.voidvvv.kz_auto_chess_n.entities.Unit;
+import com.voidvvv.kz_auto_chess_n.entities.WaveSpec;
 import com.voidvvv.kz_auto_chess_n.render.board.BoardGeometry;
+
+import java.util.List;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -55,8 +60,11 @@ public final class BoardInputProcessor implements InputProcessor {
     private final BooleanSupplier modalBlocked;
     /** 死区内松手 = 点击棋子的回调（Phase 5：详情面板 / 装备待定态落点；null = 无监听） */
     private final IntConsumer unitClickListener;
-    /** 悬停中的棋子 id（Phase 5.1 R1：mouseMoved 轨迹维护；-1 = 无；候选抑制见 getHoverCandidateUnitId） */
-    private int hoverUnitId = -1;
+    /** 悬停指针轨迹（feedback04：mouseMoved 记虚拟坐标，查询时按当前局面重命中——
+     *  BATTLE 期单位移动/清扫/名单变化即时反映；候选抑制见 getHoverCandidate） */
+    private float hoverX;
+    private float hoverY;
+    private boolean hoverTracked;
     private final Map<Integer, DragContext> drags = new HashMap<Integer, DragContext>();
     private final Vector2 touch = new Vector2(); // 复用（unproject 输出，零分配）
 
@@ -92,7 +100,7 @@ public final class BoardInputProcessor implements InputProcessor {
             return false; // 未命中单位：事件下传
         }
         drags.put(pointer, new DragContext(unit.getId(), placementAt(touch.x, touch.y), touch.x, touch.y));
-        hoverUnitId = -1; // 按下即清悬停（起手瞬间不出残卡；拖拽抑制由候选查询施加）
+        hoverTracked = false; // 按下即清悬停（起手瞬间不出残卡；拖拽抑制由候选查询施加）
         return true;
     }
 
@@ -160,31 +168,78 @@ public final class BoardInputProcessor implements InputProcessor {
     @Override
     public boolean mouseMoved(int screenX, int screenY) {
         if (modalBlocked.getAsBoolean()) {
-            hoverUnitId = -1; // 模态期无悬停（input §3）
+            hoverTracked = false; // 模态期无悬停（input §3）
             return false;
         }
-        RunContext ctx = context.get();
-        if (ctx.getRunState().getPhase() != GamePhase.SHOPPING) {
-            hoverUnitId = -1; // 悬停仅备战期（R1 抑制条件）
+        GamePhase phase = context.get().getRunState().getPhase();
+        if (phase != GamePhase.SHOPPING && phase != GamePhase.BATTLE) {
+            hoverTracked = false; // 悬停仅备战/战斗期（feedback04：BATTLE 敌我战斗单位）
             return false;
         }
         unproject(screenX, screenY);
-        Unit unit = unitAt(touch.x, touch.y, ctx);
-        hoverUnitId = unit == null ? -1 : unit.getId();
+        hoverX = touch.x;
+        hoverY = touch.y;
+        hoverTracked = true;
         return false; // 悬停不消费事件（uiStage/后续处理器照常收）
     }
 
-    /** 悬停候选（渲染帧轮询，R1）：拖拽中/模态/非 SHOPPING/名单已无该棋子 → 一律 -1（抑制集中于此） */
-    public int getHoverCandidateUnitId() {
-        if (isDragging() || modalBlocked.getAsBoolean()) {
-            return -1;
+    /**
+     * 悬停候选（渲染帧轮询，R1 + feedback04）：拖拽中/模态/无轨迹 → NONE（抑制集中于此）。
+     * 按阶段查找：SHOPPING → 玩家名单（备战席/玩家区）+ 敌阵侦察虚影（多 spec 同格取第一个，
+     * 与 drawShopping 绘制序一致的登记口径）；BATTLE → 战斗单位（敌我，isCleaned 自行过滤
+     * ——沿 BattleRenderer 口径 #13）；RESULT/其它 → NONE。
+     */
+    public HoverCandidate getHoverCandidate() {
+        if (isDragging() || modalBlocked.getAsBoolean() || !hoverTracked) {
+            return HoverCandidate.NONE;
         }
         RunContext ctx = context.get();
-        if (ctx.getRunState().getPhase() != GamePhase.SHOPPING) {
-            return -1;
+        GamePhase phase = ctx.getRunState().getPhase();
+        if (phase == GamePhase.SHOPPING) {
+            return shoppingCandidateAt(hoverX, hoverY, ctx);
         }
-        Unit unit = ctx.getPlayer().getUnitById(hoverUnitId);
-        return unit == null ? -1 : unit.getId();
+        if (phase == GamePhase.BATTLE) {
+            return battleCandidateAt(hoverX, hoverY, ctx);
+        }
+        return HoverCandidate.NONE;
+    }
+
+    /** SHOPPING 候选：玩家棋子优先（区域互斥——虚影仅敌区行 0~2，玩家区行 4~6 + 备战席） */
+    private HoverCandidate shoppingCandidateAt(float vx, float vy, RunContext ctx) {
+        Unit player = unitAt(vx, vy, ctx);
+        if (player != null) {
+            return HoverCandidate.ofPlayerUnit(player);
+        }
+        int[] cell = BoardGeometry.pixelToCell((int) vx, (int) vy);
+        if (cell == null) {
+            return HoverCandidate.NONE;
+        }
+        List<WaveSpec> wave = ctx.getRunState().getEnemyWave();
+        for (int i = 0; i < wave.size(); i++) {
+            WaveSpec spec = wave.get(i);
+            if (spec.getGridX() == cell[0] && spec.getGridY() == cell[1]) {
+                return HoverCandidate.ofEnemyPreview(i, spec.getTemplate());
+            }
+        }
+        return HoverCandidate.NONE;
+    }
+
+    /** BATTLE 候选：战斗单位敌我（getUnits 构造序 = id 升序，首命中即返回——确定性） */
+    private HoverCandidate battleCandidateAt(float vx, float vy, RunContext ctx) {
+        BattleState battle = ctx.getBattleState();
+        if (battle == null) {
+            return HoverCandidate.NONE;
+        }
+        int[] cell = BoardGeometry.pixelToCell((int) vx, (int) vy);
+        if (cell == null) {
+            return HoverCandidate.NONE;
+        }
+        for (BattleUnit unit : battle.getUnits()) { // 含亡者：isCleaned 自行过滤（口径 #13）
+            if (!unit.isCleaned() && unit.getGridX() == cell[0] && unit.getGridY() == cell[1]) {
+                return HoverCandidate.ofBattleUnit(unit);
+            }
+        }
+        return HoverCandidate.NONE;
     }
 
     @Override

@@ -21,6 +21,7 @@ import com.voidvvv.kz_auto_chess_n.entities.RunState;
 import com.voidvvv.kz_auto_chess_n.entities.SequentialIdIssuer;
 import com.voidvvv.kz_auto_chess_n.input.BoardInputProcessor;
 import com.voidvvv.kz_auto_chess_n.input.GlobalKeyProcessor;
+import com.voidvvv.kz_auto_chess_n.input.HoverCandidate;
 import com.voidvvv.kz_auto_chess_n.render.Assets;
 import com.voidvvv.kz_auto_chess_n.render.board.BattleRenderer;
 import com.voidvvv.kz_auto_chess_n.render.board.BoardGeometry;
@@ -264,8 +265,8 @@ public final class BattleScreen implements Screen {
         synergyPanel.refresh(runContext);
         notificationPanel.refresh(runContext);
         notificationPanel.syncBattle(runContext.getBattleState());
-        hoverPreview.refresh(boardProcessor == null ? -1 : boardProcessor.getHoverCandidateUnitId(),
-                shopBar.getHoveredSlot(), frozen, frozen ? 0f : delta); // R1：候选/槽位/冻结位（§5.3-8）
+        hoverPreview.refresh(boardProcessor == null ? HoverCandidate.NONE : boardProcessor.getHoverCandidate(),
+                shopBar.getHoveredSlot(), frozen, frozen ? 0f : delta); // R1+feedback04：候选/槽位/冻结位（§5.3-8）
         if (phase == GamePhase.BATTLE) {
             battleHud.refresh(runContext.getBattleState());
         }
