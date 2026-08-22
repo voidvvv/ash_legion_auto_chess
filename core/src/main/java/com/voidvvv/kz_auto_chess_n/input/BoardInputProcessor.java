@@ -7,6 +7,7 @@ import com.voidvvv.kz_auto_chess_n.command.CommandManager;
 import com.voidvvv.kz_auto_chess_n.command.MoveUnitCommand;
 import com.voidvvv.kz_auto_chess_n.command.PlacementTarget;
 import com.voidvvv.kz_auto_chess_n.command.RunContext;
+import com.voidvvv.kz_auto_chess_n.command.SellUnitCommand;
 import com.voidvvv.kz_auto_chess_n.config.GameBalance;
 import com.voidvvv.kz_auto_chess_n.entities.GamePhase;
 import com.voidvvv.kz_auto_chess_n.entities.Unit;
@@ -15,10 +16,11 @@ import com.voidvvv.kz_auto_chess_n.render.board.BoardGeometry;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.BooleanSupplier;
+import java.util.function.IntConsumer;
 import java.util.function.Supplier;
 
 /**
- * 棋盘域输入（input §2.3/§2.4/§3）：统辖棋盘 6×7 玩家区与备战席 3×3（出售区 Phase 5）。
+ * 棋盘域输入（input §2.3/§2.4/§3）：统辖棋盘 6×7 玩家区与备战席 3×3。
  *
  * <p>unproject 用棋盘 viewport（含其 camera）——坐标陷阱防御（input §3 第四行）；
  * 每 pointer 独立 DragContext（第一陷阱：多点互不串扰，同时拖拽 ≤1 有意义）；
@@ -51,15 +53,24 @@ public final class BoardInputProcessor implements InputProcessor {
     private final CommandManager commandManager;
     private final Supplier<RunContext> context;
     private final BooleanSupplier modalBlocked;
+    /** 死区内松手 = 点击棋子的回调（Phase 5：详情面板 / 装备待定态落点；null = 无监听） */
+    private final IntConsumer unitClickListener;
     private final Map<Integer, DragContext> drags = new HashMap<Integer, DragContext>();
     private final Vector2 touch = new Vector2(); // 复用（unproject 输出，零分配）
 
     public BoardInputProcessor(Viewport boardViewport, CommandManager commandManager,
                                Supplier<RunContext> context, BooleanSupplier modalBlocked) {
+        this(boardViewport, commandManager, context, modalBlocked, null);
+    }
+
+    public BoardInputProcessor(Viewport boardViewport, CommandManager commandManager,
+                               Supplier<RunContext> context, BooleanSupplier modalBlocked,
+                               IntConsumer unitClickListener) {
         this.boardViewport = boardViewport;
         this.commandManager = commandManager;
         this.context = context;
         this.modalBlocked = modalBlocked;
+        this.unitClickListener = unitClickListener;
     }
 
     // —— InputProcessor ——
@@ -106,7 +117,14 @@ public final class BoardInputProcessor implements InputProcessor {
             return false;
         }
         if (!drag.dragging) {
-            return true; // 死区内松手 = 点击：本期无命令（Phase 5 详情面板挂点位）
+            if (unitClickListener != null) {
+                unitClickListener.accept(drag.unitId); // 死区内松手 = 点击（input §2.4：查看详情/装备落点）
+            }
+            return true;
+        }
+        if (BoardGeometry.isInSellZone((int) drag.currentX, (int) drag.currentY)) {
+            commandManager.addCommand(new SellUnitCommand(drag.unitId)); // ⑦ 出售区（GDD §3.6）
+            return true;
         }
         PlacementTarget target = dropTargetAt(drag.currentX, drag.currentY);
         if (target != null) {
@@ -174,6 +192,12 @@ public final class BoardInputProcessor implements InputProcessor {
             return null;
         }
         return dropTargetAt(drag.currentX, drag.currentY);
+    }
+
+    /** 拖拽悬停是否在 ⑦ 出售区（渲染金红高亮用） */
+    public boolean isDropOnSellZone() {
+        DragContext drag = dropContext();
+        return drag != null && BoardGeometry.isInSellZone((int) drag.currentX, (int) drag.currentY);
     }
 
     // —— 内部 ——
