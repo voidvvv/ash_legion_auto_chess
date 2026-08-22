@@ -154,6 +154,13 @@ class JsonLoaderTest {
         assertThat(orcShield.getEffect().jsonName()).isEqualTo("SHIELD");
         assertThat(orcShield.getValue()).isEqualTo(0.3f);
         assertThat(orcShield.getStat()).isNull();
+
+        // Phase 5.1 CP4：synergy 级 desc 手写文案（裁决 2）——主题句落位且六条全非空
+        assertThat(data.getSynergy("syn_orc").getDesc())
+                .isEqualTo("焰痕部族的雇佣兵，越战越硬的正面铁壁");
+        for (SynergyData synergy : data.getSynergies().values()) {
+            assertThat(synergy.getDesc()).as("羁绊 %s desc 非空", synergy.getId()).isNotEmpty();
+        }
     }
 
     @Test

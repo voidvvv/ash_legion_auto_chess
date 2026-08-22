@@ -9,6 +9,7 @@ import com.voidvvv.kz_auto_chess_n.data.BaseStats;
 import com.voidvvv.kz_auto_chess_n.data.GameData;
 import com.voidvvv.kz_auto_chess_n.data.TargetPriority;
 import com.voidvvv.kz_auto_chess_n.data.UnitData;
+import com.voidvvv.kz_auto_chess_n.entities.GamePhase;
 import com.voidvvv.kz_auto_chess_n.entities.Player;
 import com.voidvvv.kz_auto_chess_n.entities.RunState;
 import com.voidvvv.kz_auto_chess_n.entities.SequentialIdIssuer;
@@ -146,5 +147,74 @@ class BoardInputProcessorTest {
 
         manager.executeAll(ctx);
         assertThat(manager.getHistory()).isEmpty();
+    }
+
+    // —— Phase 5.1 CP6：悬停轨迹与候选查询（四类抑制集中于此） ——
+
+    @Test
+    @DisplayName("mouseMoved 命中备战席棋子：候选 = 该棋子 id；移到空地清空；事件不消费（return false）")
+    void mouseMovedTracksHoverCandidate() {
+        RunContext ctx = shoppingContext();
+        BoardInputProcessor processor = new BoardInputProcessor(new IdentityViewport(),
+                new CommandManager(), () -> ctx, () -> false);
+
+        assertThat(processor.mouseMoved(BENCH0_X, BENCH0_Y)).isFalse(); // 不消费：uiStage 照常收
+        assertThat(processor.getHoverCandidateUnitId()).isEqualTo(1);
+
+        assertThat(processor.mouseMoved(400, 60)).isFalse(); // 敌区行（gridY=0 < 4）无我方棋子
+        assertThat(processor.getHoverCandidateUnitId()).isEqualTo(-1);
+    }
+
+    @Test
+    @DisplayName("拖拽抑制：出死区拖拽中候选恒 -1（即使 mouseMoved 仍悬在棋子上）")
+    void draggingSuppressesHoverCandidate() {
+        RunContext ctx = shoppingContext();
+        BoardInputProcessor processor = new BoardInputProcessor(new IdentityViewport(),
+                new CommandManager(), () -> ctx, () -> false);
+
+        assertThat(processor.touchDown(BENCH0_X, BENCH0_Y, 0, 0)).isTrue();
+        assertThat(processor.touchDragged(SELL_X, SELL_Y, 0)).isTrue(); // 出死区成拖拽
+        processor.mouseMoved(BENCH0_X, BENCH0_Y); // 拖拽中轨迹仍记录
+        assertThat(processor.getHoverCandidateUnitId()).isEqualTo(-1); // 查询侧抑制
+    }
+
+    @Test
+    @DisplayName("模态抑制：modalBlocked=true 时 mouseMoved 清悬停且候选 -1")
+    void modalBlockSuppressesHoverCandidate() {
+        RunContext ctx = shoppingContext();
+        BoardInputProcessor processor = new BoardInputProcessor(new IdentityViewport(),
+                new CommandManager(), () -> ctx, () -> true);
+
+        assertThat(processor.mouseMoved(BENCH0_X, BENCH0_Y)).isFalse();
+        assertThat(processor.getHoverCandidateUnitId()).isEqualTo(-1);
+    }
+
+    @Test
+    @DisplayName("非 SHOPPING 抑制：开战（BATTLE）后候选 -1（查询侧与 mouseMoved 双路径）")
+    void nonShoppingPhaseSuppressesHoverCandidate() {
+        RunContext ctx = shoppingContext();
+        BoardInputProcessor processor = new BoardInputProcessor(new IdentityViewport(),
+                new CommandManager(), () -> ctx, () -> false);
+
+        processor.mouseMoved(BENCH0_X, BENCH0_Y); // 备战期悬停命中
+        assertThat(processor.getHoverCandidateUnitId()).isEqualTo(1);
+        ctx.getRunState().setPhase(GamePhase.BATTLE); // 开战（悬停中切换）
+        assertThat(processor.getHoverCandidateUnitId()).isEqualTo(-1); // 查询侧抑制
+        processor.mouseMoved(BENCH0_X, BENCH0_Y); // 非 SHOPPING 分支亦清
+        assertThat(processor.getHoverCandidateUnitId()).isEqualTo(-1);
+    }
+
+    @Test
+    @DisplayName("名单核验：悬停中棋子被卖出/合并移出名单 → 候选 -1（防残卡）")
+    void removedUnitInvalidatesHoverCandidate() {
+        RunContext ctx = shoppingContext();
+        BoardInputProcessor processor = new BoardInputProcessor(new IdentityViewport(),
+                new CommandManager(), () -> ctx, () -> false);
+
+        processor.mouseMoved(BENCH0_X, BENCH0_Y);
+        assertThat(processor.getHoverCandidateUnitId()).isEqualTo(1);
+
+        ctx.getPlayer().removeUnit(ctx.getPlayer().getBench().get(0));
+        assertThat(processor.getHoverCandidateUnitId()).isEqualTo(-1);
     }
 }

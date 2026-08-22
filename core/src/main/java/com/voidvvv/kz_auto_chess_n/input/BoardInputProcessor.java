@@ -25,7 +25,7 @@ import java.util.function.Supplier;
  * <p>unproject 用棋盘 viewport（含其 camera）——坐标陷阱防御（input §3 第四行）；
  * 每 pointer 独立 DragContext（第一陷阱：多点互不串扰，同时拖拽 ≤1 有意义）；
  * 拖拽死区 DRAG_DEAD_ZONE_PX（unproject 后虚拟坐标，§3 第三陷阱：位移未出死区不算拖拽）；
- * 模态阻断位首行吞事件（本期常 false）。松手才入队（表现层只在合法落点产生命令，
+ * 模态阻断位首行吞事件（BattleScreen 已接 UIDialogManager::isShowing）。松手才入队（表现层只在合法落点产生命令，
  * input §4.3 双层校验的输入侧；handler 侧门控归 RunFlowSystem）。
  */
 public final class BoardInputProcessor implements InputProcessor {
@@ -55,6 +55,8 @@ public final class BoardInputProcessor implements InputProcessor {
     private final BooleanSupplier modalBlocked;
     /** 死区内松手 = 点击棋子的回调（Phase 5：详情面板 / 装备待定态落点；null = 无监听） */
     private final IntConsumer unitClickListener;
+    /** 悬停中的棋子 id（Phase 5.1 R1：mouseMoved 轨迹维护；-1 = 无；候选抑制见 getHoverCandidateUnitId） */
+    private int hoverUnitId = -1;
     private final Map<Integer, DragContext> drags = new HashMap<Integer, DragContext>();
     private final Vector2 touch = new Vector2(); // 复用（unproject 输出，零分配）
 
@@ -90,6 +92,7 @@ public final class BoardInputProcessor implements InputProcessor {
             return false; // 未命中单位：事件下传
         }
         drags.put(pointer, new DragContext(unit.getId(), placementAt(touch.x, touch.y), touch.x, touch.y));
+        hoverUnitId = -1; // 按下即清悬停（起手瞬间不出残卡；拖拽抑制由候选查询施加）
         return true;
     }
 
@@ -156,7 +159,32 @@ public final class BoardInputProcessor implements InputProcessor {
 
     @Override
     public boolean mouseMoved(int screenX, int screenY) {
-        return false;
+        if (modalBlocked.getAsBoolean()) {
+            hoverUnitId = -1; // 模态期无悬停（input §3）
+            return false;
+        }
+        RunContext ctx = context.get();
+        if (ctx.getRunState().getPhase() != GamePhase.SHOPPING) {
+            hoverUnitId = -1; // 悬停仅备战期（R1 抑制条件）
+            return false;
+        }
+        unproject(screenX, screenY);
+        Unit unit = unitAt(touch.x, touch.y, ctx);
+        hoverUnitId = unit == null ? -1 : unit.getId();
+        return false; // 悬停不消费事件（uiStage/后续处理器照常收）
+    }
+
+    /** 悬停候选（渲染帧轮询，R1）：拖拽中/模态/非 SHOPPING/名单已无该棋子 → 一律 -1（抑制集中于此） */
+    public int getHoverCandidateUnitId() {
+        if (isDragging() || modalBlocked.getAsBoolean()) {
+            return -1;
+        }
+        RunContext ctx = context.get();
+        if (ctx.getRunState().getPhase() != GamePhase.SHOPPING) {
+            return -1;
+        }
+        Unit unit = ctx.getPlayer().getUnitById(hoverUnitId);
+        return unit == null ? -1 : unit.getId();
     }
 
     @Override

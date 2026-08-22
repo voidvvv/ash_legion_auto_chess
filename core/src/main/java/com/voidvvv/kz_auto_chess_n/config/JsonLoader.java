@@ -258,9 +258,10 @@ public final class JsonLoader {
             if (!ids.add(id)) {
                 fail(w, "id 全文件唯一，重复声明");
             }
-            checkUnknownKeys(e, w, "id", "name", "source", "key", "thresholds");
+            checkUnknownKeys(e, w, "id", "name", "desc", "source", "key", "thresholds");
 
             String name = requireString(e, "name", w);
+            String desc = requireString(e, "desc", w);
             SynergySource source = requireVocab(e, "source", SynergySource.class, w);
             String key = requireString(e, "key", w);
             if (!sourceKeys.add(source.jsonName() + ":" + key)) {
@@ -295,7 +296,7 @@ public final class JsonLoader {
                 thresholds.add(new SynergyData.Threshold(count, effects));
             }
 
-            result.put(id, new SynergyData(id, name, source, key, thresholds));
+            result.put(id, new SynergyData(id, name, desc, source, key, thresholds));
         }
         return result;
     }

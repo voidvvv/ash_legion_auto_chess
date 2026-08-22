@@ -41,9 +41,9 @@ class JsonLoaderEquipmentsTest {
             + " \"effects\": [ { \"effect\": \"DAMAGE\", \"value\": 2.0 } ] }]";
 
     private static final String VALID_SYNERGY =
-            "[{ \"id\": \"syn1\", \"name\": \"兽人\", \"source\": \"RACE\", \"key\": \"兽人\","
+            "[{ \"id\": \"syn1\", \"name\": \"兽人\", \"desc\": \"试作\", \"source\": \"RACE\", \"key\": \"兽人\","
             + " \"thresholds\": [ { \"count\": 2, \"effects\": [ { \"stat\": \"hp\", \"op\": \"ADD\", \"value\": 10 } ] } ] },"
-            + "{ \"id\": \"syn2\", \"name\": \"战士\", \"source\": \"CLASS\", \"key\": \"战士\","
+            + "{ \"id\": \"syn2\", \"name\": \"战士\", \"desc\": \"试作\", \"source\": \"CLASS\", \"key\": \"战士\","
             + " \"thresholds\": [ { \"count\": 2, \"effects\": [ { \"stat\": \"armor\", \"op\": \"ADD\", \"value\": 10 } ] } ] }]";
 
     private static final String VALID_SCENES =
