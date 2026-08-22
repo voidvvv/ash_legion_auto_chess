@@ -115,8 +115,8 @@ public final class InventoryPanel extends Group {
             if (item != null) {
                 assets.font().draw(batch, item.getTemplate().getName().substring(0,
                                 Math.min(3, item.getTemplate().getName().length())),
-                        getX() + 4f, getY() + 14f);
-                assets.font().draw(batch, slotMark(item), getX() + 4f, getY() + 30f);
+                        getX() + 4f, getY() + 13f);
+                assets.font().draw(batch, slotMark(item), getX() + 4f, getY() + 27f);
             }
         }
     }

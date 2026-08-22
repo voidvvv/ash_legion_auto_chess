@@ -31,6 +31,7 @@ public final class UIDialogManager {
         this.dialogStage = new Stage(new FitViewport(BoardGeometry.VIRTUAL_W, BoardGeometry.VIRTUAL_H));
         this.backdrop = createBackdrop();
         dialogStage.addActor(backdrop);
+        syncBackdrop(); // 构造即同步：Actor 默认 visible=true，若不置隐背板将吞掉全屏输入（feedback01 修复）
     }
 
     public Stage getStage() {

@@ -149,13 +149,14 @@ class BoardGeometryTest {
     // —— Phase 5 CP17：③⑤⑦⑧⑨ 区常量与命中判定（render §九 Phase 4 遗留区） ——
 
     @Test
-    @DisplayName("③⑤⑦⑧ 区常量与 render §九坐标表逐项对照（±4px 容差；⑨ 差异声明 #4 例外单独断言）")
+    @DisplayName("③⑤⑦⑧ 区常量与 render §九坐标表逐项对照（±4px 容差；③ 为 feedback01 修正值、⑨ 差异声明 #4 例外单独断言）")
     void phase5ZonesMatchRenderLayoutTable() {
-        // render_design.md §九：③ (20,140,108,100)、⑤ (508,48,112,144)、⑦ (564,246,56,46)、⑧ (0,296,640,64)
+        // render_design.md §九：③ (20,140,108,100)——原表值与 ② 压叠 28px，feedback01 修正为 (20,172,108,72)；
+        // ⑤ (508,48,112,144)、⑦ (564,246,56,46)、⑧ (0,296,640,64)
         assertThat(BoardGeometry.INVENTORY_X).isBetween(20 - 4, 20 + 4);
-        assertThat(BoardGeometry.INVENTORY_Y).isBetween(140 - 4, 140 + 4);
+        assertThat(BoardGeometry.INVENTORY_Y).isBetween(172 - 4, 172 + 4);
         assertThat(BoardGeometry.INVENTORY_W).isBetween(108 - 4, 108 + 4);
-        assertThat(BoardGeometry.INVENTORY_H).isBetween(100 - 4, 100 + 4);
+        assertThat(BoardGeometry.INVENTORY_H).isBetween(72 - 4, 72 + 4);
         assertThat(BoardGeometry.SYNERGY_X).isBetween(508 - 4, 508 + 4);
         assertThat(BoardGeometry.SYNERGY_Y).isBetween(48 - 4, 48 + 4);
         assertThat(BoardGeometry.SYNERGY_W).isBetween(112 - 4, 112 + 4);
@@ -174,8 +175,9 @@ class BoardGeometryTest {
     }
 
     @Test
-    @DisplayName("⑨ 区顶边不低于 ③ 区底边（布局冲突回归：render §九原值重叠 10px 已避让）")
+    @DisplayName("布局冲突回归：②③、③⑨、⑤⑦、⑨⑧ 相邻区互不压叠（feedback01：原 ③(140) 压叠 ② 底边 168 达 28px）")
     void notifyZoneDoesNotOverlapInventory() {
+        assertThat(BoardGeometry.INVENTORY_Y).isGreaterThanOrEqualTo(BoardGeometry.BENCH_Y + BoardGeometry.BENCH_H);
         assertThat(BoardGeometry.NOTIFY_Y).isGreaterThanOrEqualTo(BoardGeometry.INVENTORY_Y + BoardGeometry.INVENTORY_H);
         // 其余相邻对也自洽：⑤ 底边不侵入 ⑦、⑨ 底边不侵入 ⑧
         assertThat(BoardGeometry.SELL_ZONE_Y).isGreaterThanOrEqualTo(BoardGeometry.SYNERGY_Y + BoardGeometry.SYNERGY_H);
@@ -183,7 +185,17 @@ class BoardGeometryTest {
     }
 
     @Test
-    @DisplayName("③ 背包常量自洽：3 列 × 2 行槽位铺满区域、槽 36×50")
+    @DisplayName("引导文案基线在 ⑧ 商店栏带与 ④ 棋盘之上、顶栏之下（feedback01 回归：原 y=24 落在 ⑧ 内被卡牌遮挡）")
+    void shopHintBaselineClearOfShopBarAndBoard() {
+        int shopBandTop = BoardGeometry.VIRTUAL_H - BoardGeometry.SHOP_BAR_Y;          // ⑧ 换算 y 向上 = 64
+        int boardBandTop = BoardGeometry.BOARD_Y + BoardGeometry.BOARD_H;              // ④ 上边 = 274
+        assertThat(BoardGeometry.SHOP_HINT_Y).isGreaterThanOrEqualTo(shopBandTop + 4);
+        assertThat(BoardGeometry.SHOP_HINT_Y).isGreaterThanOrEqualTo(boardBandTop + 4);
+        assertThat(BoardGeometry.SHOP_HINT_Y + 12).isLessThanOrEqualTo(BoardGeometry.VIRTUAL_H - 40); // 不侵入顶栏带
+    }
+
+    @Test
+    @DisplayName("③ 背包常量自洽：3 列 × 2 行槽位铺满区域、槽 36×36")
     void inventoryConstantsSelfConsistent() {
         assertThat(BoardGeometry.INVENTORY_W).isEqualTo(3 * BoardGeometry.INVENTORY_SLOT_W);
         assertThat(BoardGeometry.INVENTORY_H).isEqualTo(2 * BoardGeometry.INVENTORY_SLOT_H);

@@ -24,11 +24,13 @@ public final class BoardGeometry {
     public static final int BENCH_W = 108;
     public static final int BENCH_H = 120;
 
-    /** ③ 装备背包 3×2（UI 域 InventoryPanel 定位同源；槽 36×50） */
+    /** ③ 装备背包 3×2（UI 域 InventoryPanel 定位同源；槽 36×36）。
+     *  render §九原表值 (20,140,108,100) 与 ② 备战席底边 168 压叠 28px——feedback01 修正：
+     *  下移至 172 起、槽高 36（2×36=72），底边 244 与 ⑨ 顶边相接。 */
     public static final int INVENTORY_X = 20;
-    public static final int INVENTORY_Y = 140;
+    public static final int INVENTORY_Y = 172;
     public static final int INVENTORY_W = 108;
-    public static final int INVENTORY_H = 100;
+    public static final int INVENTORY_H = 72;
     /** ⑤ 羁绊面板（UI 域） */
     public static final int SYNERGY_X = 508;
     public static final int SYNERGY_Y = 48;
@@ -52,7 +54,9 @@ public final class BoardGeometry {
     public static final int BENCH_SLOT_W = 36;
     public static final int BENCH_SLOT_H = 40;
     public static final int INVENTORY_SLOT_W = 36;
-    public static final int INVENTORY_SLOT_H = 50;
+    public static final int INVENTORY_SLOT_H = 36;
+    /** 备战期引导文案基线（feedback01 修正：原 y=24 落在 ⑧ 商店栏带内被半透明卡牌遮挡——移到 ④ 棋盘上边 274 之上） */
+    public static final int SHOP_HINT_Y = 280;
 
     private BoardGeometry() {
     }

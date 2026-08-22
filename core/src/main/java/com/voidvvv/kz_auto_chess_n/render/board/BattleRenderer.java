@@ -207,13 +207,13 @@ public final class BattleRenderer {
         assets.font().draw(batch, "SELL", BoardGeometry.SELL_ZONE_X + 10f, BoardGeometry.SELL_ZONE_Y + 28f);
     }
 
-    /** 备战期引导文案（非 CJK 字符——默认字体无 CJK 字模；画布底部居中，不遮挡棋盘/备战席，P1b） */
+    /** 备战期引导文案（非 CJK 字符——默认字体无 CJK 字模；棋盘上方居中，不遮挡棋盘/备战席/⑧ 商店栏，feedback01 修正） */
     private void drawShoppingHint(SpriteBatch batch) {
         if (hintLayout == null) {
             hintLayout = new GlyphLayout(assets.font(), SHOPPING_HINT);
         }
         assets.font().draw(batch, SHOPPING_HINT,
-                Math.round((BoardGeometry.VIRTUAL_W - hintLayout.width) / 2f), 24f);
+                Math.round((BoardGeometry.VIRTUAL_W - hintLayout.width) / 2f), BoardGeometry.SHOP_HINT_Y);
     }
 
     // —— 战斗期：⑦ 单位视图 → ⑧ 弹道 → 特效 → 飘字 ——
