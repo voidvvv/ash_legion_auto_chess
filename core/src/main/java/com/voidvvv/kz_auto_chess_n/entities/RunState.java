@@ -23,6 +23,8 @@ public final class RunState {
     private GamePhase phase = GamePhase.SHOPPING;
     private int mercyLossCount;
     private List<WaveSpec> enemyWave = Collections.emptyList();
+    /** 系统反应通知行（有界 32，UI drain 后清空——实现口径 #13 第三流；CP13 切片提前落地供 T2 经营系统调用） */
+    private final List<String> notices = new ArrayList<String>();
 
     public RunState(long seed, String sceneId, IdIssuer idIssuer) {
         this.seed = seed;
@@ -56,5 +58,23 @@ public final class RunState {
     public void setEnemyWave(List<WaveSpec> wave) {
         Objects.requireNonNull(wave, "wave 不能为 null");
         this.enemyWave = Collections.unmodifiableList(new ArrayList<WaveSpec>(wave));
+    }
+
+    /** 系统反应通知行（有界 32，FIFO 丢最老；null/空串忽略——实现口径 #13） */
+    public void addNotice(String line) {
+        if (line == null || line.trim().isEmpty()) {
+            return;
+        }
+        if (notices.size() >= 32) {
+            notices.remove(0);
+        }
+        notices.add(line);
+    }
+
+    /** 取走全部通知行（拷贝后清空——UI 每帧 drain） */
+    public List<String> drainNotices() {
+        List<String> drained = new ArrayList<String>(notices);
+        notices.clear();
+        return drained;
     }
 }

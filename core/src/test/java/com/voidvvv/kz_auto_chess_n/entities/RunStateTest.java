@@ -112,4 +112,38 @@ class RunStateTest {
         assertThatThrownBy(() -> state.setEnemyWave(null))
                 .isInstanceOf(NullPointerException.class);
     }
+
+    // —— 系统反应通知行（CP13 切片提前落地：T2 经营系统 CP10~CP12 依赖 addNotice） ——
+
+    @Test
+    @DisplayName("addNotice 追加通知行；drainNotices 取走全部并清空（二次 drain 为空）")
+    void noticeAddAndDrain() {
+        RunState state = newState();
+        state.addNotice("第一行");
+        state.addNotice("第二行");
+        assertThat(state.drainNotices()).containsExactly("第一行", "第二行");
+        assertThat(state.drainNotices()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("addNotice 忽略 null 与空白行")
+    void noticeIgnoresBlankLines() {
+        RunState state = newState();
+        state.addNotice(null);
+        state.addNotice("   ");
+        assertThat(state.drainNotices()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("addNotice 有界 32：超限 FIFO 丢最老")
+    void noticeBoundedAt32Fifo() {
+        RunState state = newState();
+        for (int i = 0; i < 40; i++) {
+            state.addNotice("行" + i);
+        }
+        List<String> drained = state.drainNotices();
+        assertThat(drained).hasSize(32);
+        assertThat(drained.get(0)).isEqualTo("行8");
+        assertThat(drained.get(31)).isEqualTo("行39");
+    }
 }
