@@ -218,6 +218,39 @@ class BoardGeometryTest {
                 .isEqualTo(BoardGeometry.INVENTORY_SLOT_W);
     }
 
+    // —— Phase 5.1 CP8：悬停预览卡固定锚点（裁决 A；防遮挡论证见计划 §5.3-1） ——
+
+    @Test
+    @DisplayName("棋盘域悬停卡锚点：不压 ④ 棋盘/②③ 左列/⑨ 通知、上沿沿 ② 顶")
+    void boardHoverAnchorClearOfZones() {
+        // 右缘不压 ④ 棋盘（224 起，留 ≥2px 间隙）
+        assertThat(BoardGeometry.BOARD_HOVER_X + BoardGeometry.BOARD_HOVER_W)
+                .isLessThanOrEqualTo(BoardGeometry.BOARD_X);
+        // 左缘不压 ②③（② 底边 128 = ③ 底边 128，同一右缘）
+        assertThat(BoardGeometry.BOARD_HOVER_X)
+                .isGreaterThanOrEqualTo(BoardGeometry.BENCH_X + BoardGeometry.BENCH_W);
+        assertThat(BoardGeometry.BOARD_HOVER_X)
+                .isGreaterThanOrEqualTo(BoardGeometry.INVENTORY_X + BoardGeometry.INVENTORY_W);
+        // 下缘不压 ⑨（244 起）
+        assertThat(BoardGeometry.BOARD_HOVER_Y + BoardGeometry.BOARD_HOVER_H)
+                .isLessThanOrEqualTo(BoardGeometry.NOTIFY_Y);
+        // 上沿沿 ② 备战席顶 48
+        assertThat(BoardGeometry.BOARD_HOVER_Y).isGreaterThanOrEqualTo(BoardGeometry.BENCH_Y);
+    }
+
+    @Test
+    @DisplayName("商店悬停卡锚点：与 ⑤ 羁绊面板同位、右缘不出虚拟宽、下缘避开 ⑦ 出售区")
+    void shopHoverAnchorMatchesSynergyZone() {
+        assertThat(BoardGeometry.SHOP_HOVER_X).isEqualTo(BoardGeometry.SYNERGY_X);
+        assertThat(BoardGeometry.SHOP_HOVER_Y).isEqualTo(BoardGeometry.SYNERGY_Y);
+        assertThat(BoardGeometry.SHOP_HOVER_W).isEqualTo(BoardGeometry.SYNERGY_W);
+        assertThat(BoardGeometry.SHOP_HOVER_X + BoardGeometry.SHOP_HOVER_W)
+                .isLessThanOrEqualTo(BoardGeometry.VIRTUAL_W);
+        // 下缘不压 ⑦ 出售区（246 起）
+        assertThat(BoardGeometry.SHOP_HOVER_Y + BoardGeometry.SHOP_HOVER_H)
+                .isLessThanOrEqualTo(BoardGeometry.SELL_ZONE_Y);
+    }
+
     @Test
     @DisplayName("isInSellZone 四角命中、界外四向不命中（半开区间）")
     void isInSellZoneCornersAndOutside() {

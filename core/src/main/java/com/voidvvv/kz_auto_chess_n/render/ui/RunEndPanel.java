@@ -47,12 +47,12 @@ public final class RunEndPanel extends Group {
         RunContext ctx = context.get();
         boolean abandoned = ctx.getRunState().getEndCause() == com.voidvvv.kz_auto_chess_n.entities.RunEndCause.ABANDONED;
         assets.font().getData().setScale(2f);
-        assets.font().draw(batch, abandoned ? "RUN ABANDONED" : "RUN COMPLETE", abandoned ? 215f : 225f, 230f);
+        assets.font().draw(batch, abandoned ? "远征已放弃" : "远征通关", 272f, 230f); // 4 字 ×24px 居中
         assets.font().getData().setScale(1f);
         int round = ctx.getRunState().getRound();
-        assets.font().draw(batch, "survived to round " + round + "/" + GameBalance.TOTAL_ROUNDS, 240f, 200f);
-        assets.font().draw(batch, "mastery +" + ctx.getRunState().getMasteryAwarded() + " (stub, Phase 6)", 235f, 180f);
-        assets.font().draw(batch, "seed " + ctx.getRunState().getSeed(), 262f, 160f);
+        assets.font().draw(batch, "抵达第 " + round + "/" + GameBalance.TOTAL_ROUNDS + " 轮", 280f, 200f);
+        assets.font().draw(batch, "熟练度 +" + ctx.getRunState().getMasteryAwarded() + "（Phase 6 接档案）", 262f, 180f);
+        assets.font().draw(batch, "种子 " + ctx.getRunState().getSeed(), 285f, 160f);
     }
 
     private final class RestartButton extends Actor {
@@ -72,7 +72,7 @@ public final class RunEndPanel extends Group {
             batch.setColor(0.75f, 0.35f, 0.25f, parentAlpha);
             batch.draw(assets.region(PlaceholderKeys.PANEL_9SLICE), getX(), getY(), getWidth(), getHeight());
             batch.setColor(old);
-            assets.font().draw(batch, "RESTART", getX() + 34f, getY() + 23f);
+            assets.font().draw(batch, "重新开始", getX() + 46f, getY() + 23f);
         }
     }
 }

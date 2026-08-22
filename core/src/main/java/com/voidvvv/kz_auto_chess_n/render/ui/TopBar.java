@@ -50,13 +50,13 @@ public final class TopBar extends Group {
         }
     }
 
-    /** ① 区文案数据源（纯函数；expToNextLevel(Lv.7)=0 → MAX） */
+    /** ① 区文案数据源（纯函数；expToNextLevel(Lv.7)=0 → 满级；术语见计划 §2.1） */
     static String statusText(int round, int gold, int level, int currentExp) {
         int need = GameBalance.expToNextLevel(level);
-        String exp = need == 0 ? "MAX" : currentExp + "/" + need;
-        return "ROUND " + round + "/" + GameBalance.TOTAL_ROUNDS
-                + "  GOLD " + gold
-                + "  LV " + level + " (" + exp + ")";
+        String exp = need == 0 ? "满级" : currentExp + "/" + need;
+        return "轮次 " + round + "/" + GameBalance.TOTAL_ROUNDS
+                + "  金币 " + gold
+                + "  等级 " + level + "（" + exp + "）";
     }
 
     /** 暂停按钮（自绘，无 Skin——Q4=B） */

@@ -90,7 +90,7 @@ public final class MainMenuScreen implements Screen {
             batch.setColor(0.75f, 0.35f, 0.25f, parentAlpha);
             batch.draw(assets.region(PlaceholderKeys.PANEL_9SLICE), getX(), getY(), getWidth(), getHeight());
             batch.setColor(old);
-            assets.font().draw(batch, "START", getX() + 58f, getY() + 23f);
+            assets.font().draw(batch, "开始远征", getX() + 56f, getY() + 23f); // 4 字 ×12px 居中于 160 宽钮
         }
     }
 }

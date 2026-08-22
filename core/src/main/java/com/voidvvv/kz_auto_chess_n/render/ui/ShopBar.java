@@ -5,6 +5,7 @@ import com.badlogic.gdx.graphics.g2d.Batch;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.Group;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
+import com.badlogic.gdx.scenes.scene2d.InputListener;
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.voidvvv.kz_auto_chess_n.command.BuyExpCommand;
 import com.voidvvv.kz_auto_chess_n.command.BuyUnitCommand;
@@ -40,6 +41,8 @@ public final class ShopBar extends Group {
     private final Assets assets;
     private final Supplier<RunContext> context;
     private final boolean[] affordable = new boolean[GameBalance.SHOP_SLOTS];
+    /** 悬停中的商店槽位（Phase 5.1 R1：ShopCard enter/exit 维护；-1 = 无；原始暴露，归一见 HoverPreviewCard） */
+    private int hoveredSlot = -1;
 
     public ShopBar(CommandManager commandManager, Assets assets, Supplier<RunContext> context) {
         this.commandManager = commandManager;
@@ -48,7 +51,7 @@ public final class ShopBar extends Group {
         for (int i = 0; i < GameBalance.SHOP_SLOTS; i++) {
             addActor(new ShopCard(i));
         }
-        Actor refresh = new ActionButton("REFRESH 2G") {
+        Actor refresh = new ActionButton("刷新 2金") {
             @Override
             protected void onClicked() {
                 commandManager.addCommand(RefreshShopCommand.INSTANCE);
@@ -56,7 +59,7 @@ public final class ShopBar extends Group {
         };
         refresh.setPosition(BUTTON_X_REFRESH, 14f);
         addActor(refresh);
-        Actor exp = new ActionButton("EXP 4G") {
+        Actor exp = new ActionButton("经验 4金") {
             @Override
             protected void onClicked() {
                 commandManager.addCommand(BuyExpCommand.INSTANCE);
@@ -64,6 +67,11 @@ public final class ShopBar extends Group {
         };
         exp.setPosition(BUTTON_X_EXP, 14f);
         addActor(exp);
+    }
+
+    /** 悬停中的商店槽位（R1）；无悬停 = -1（空槽/非 SHOPPING 的归一在 HoverPreviewCard.refresh） */
+    public int getHoveredSlot() {
+        return hoveredSlot;
     }
 
     /** 每帧刷新预校验态（只读；SHOPPING 期 Screen 调用） */
@@ -114,6 +122,19 @@ public final class ShopBar extends Group {
                     commandManager.addCommand(new BuyUnitCommand(slot));
                 }
             });
+            addListener(new InputListener() { // R1 悬停槽位轨迹（Scene2D enter/exit）
+                @Override
+                public void enter(InputEvent event, float x, float y, int pointer, Actor fromActor) {
+                    hoveredSlot = slot;
+                }
+
+                @Override
+                public void exit(InputEvent event, float x, float y, int pointer, Actor toActor) {
+                    if (hoveredSlot == slot) {
+                        hoveredSlot = -1;
+                    }
+                }
+            });
         }
 
         @Override
@@ -130,7 +151,7 @@ public final class ShopBar extends Group {
             batch.setColor(old);
             batch.draw(assets.region(PlaceholderKeys.unitFrame(template.getId(), PlaceholderKeys.ANIM_IDLE, 0)),
                     getX() + 4f, getY() + 18f, 32f, 32f);
-            assets.font().draw(batch, String.valueOf(template.getCost()) + "G", getX() + 44f, getY() + 44f);
+            assets.font().draw(batch, template.getCost() + "金", getX() + 44f, getY() + 44f);
             assets.font().draw(batch, template.getName(), getX() + 6f, getY() + 12f);
         }
     }
@@ -158,7 +179,7 @@ public final class ShopBar extends Group {
             batch.setColor(0.32f, 0.36f, 0.3f, parentAlpha);
             batch.draw(assets.region(PlaceholderKeys.PANEL_9SLICE), getX(), getY(), getWidth(), getHeight());
             batch.setColor(old);
-            assets.font().draw(batch, text, getX() + 8f, getY() + 22f);
+            assets.font().draw(batch, text, getX() + 16f, getY() + 22f); // 中文化后文案变窄：8 → 16 视觉居中（§5.3-7）
         }
     }
 }

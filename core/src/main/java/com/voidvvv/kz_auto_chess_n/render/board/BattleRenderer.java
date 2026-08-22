@@ -34,8 +34,8 @@ import java.util.Map;
  * 只读 entities（铁律 1）。
  */
 public final class BattleRenderer {
-    /** 备战期引导文案（仅 SHOPPING 期可见，drawShopping 尾部） */
-    private static final String SHOPPING_HINT = "DRAG UNITS TO BOARD · DRAG TO SELL · THEN FIGHT";
+    /** 备战期引导文案（仅 SHOPPING 期可见，drawShopping 尾部；中文化——Fusion Pixel 已入库，降级口径见计划 §5.3-6） */
+    private static final String SHOPPING_HINT = "拖拽棋子布阵 · 拖至右下出售区卖出 · 点开战";
 
     private static final com.badlogic.gdx.graphics.Color ENEMY_ZONE_TINT =
             new com.badlogic.gdx.graphics.Color(0.26f, 0.14f, 0.14f, 1f); // 敌区暗红
@@ -204,10 +204,10 @@ public final class BattleRenderer {
         batch.draw(panel, BoardGeometry.SELL_ZONE_X, BoardGeometry.SELL_ZONE_Y,
                 BoardGeometry.SELL_ZONE_W, BoardGeometry.SELL_ZONE_H);
         batch.setColor(com.badlogic.gdx.graphics.Color.WHITE);
-        assets.font().draw(batch, "SELL", BoardGeometry.SELL_ZONE_X + 10f, BoardGeometry.SELL_ZONE_Y + 28f);
+        assets.font().draw(batch, "出售", BoardGeometry.SELL_ZONE_X + 16f, BoardGeometry.SELL_ZONE_Y + 28f);
     }
 
-    /** 备战期引导文案（非 CJK 字符——默认字体无 CJK 字模；棋盘上方居中，不遮挡棋盘/备战席/⑧ 商店栏，feedback01 修正） */
+    /** 备战期引导文案（棋盘上方居中，不遮挡棋盘/备战席/⑧ 商店栏，feedback01 修正；字体缺文件回退时中文不渲染但不炸——§5.3-6） */
     private void drawShoppingHint(SpriteBatch batch) {
         if (hintLayout == null) {
             hintLayout = new GlyphLayout(assets.font(), SHOPPING_HINT);

@@ -6,6 +6,8 @@ import com.badlogic.gdx.scenes.scene2d.Group;
 import com.voidvvv.kz_auto_chess_n.command.CommandManager;
 import com.voidvvv.kz_auto_chess_n.command.GameCommand;
 import com.voidvvv.kz_auto_chess_n.command.RunContext;
+import com.voidvvv.kz_auto_chess_n.data.GameData;
+import com.voidvvv.kz_auto_chess_n.data.SkillData;
 import com.voidvvv.kz_auto_chess_n.entities.BattleState;
 import com.voidvvv.kz_auto_chess_n.entities.CombatEvent;
 import com.voidvvv.kz_auto_chess_n.render.Assets;
@@ -67,7 +69,7 @@ public final class NotificationPanel extends Group {
         inbox.forEachNew(new Consumer<CombatEvent>() {
             @Override
             public void accept(CombatEvent event) {
-                String line = formatEvent(event);
+                String line = formatEvent(event, ctx.getGameData());
                 if (line != null && log.appendCapped(line, appended[0])) {
                     appended[0]++; // 超限丢弃（§5.5 防刷屏，WARNING-6）
                 }
@@ -87,16 +89,22 @@ public final class NotificationPanel extends Group {
         }
     }
 
-    /** 战斗事件行（仅 UNIT_DIED/CAST——HIT/HEALED 过噪跳过，口径 #13） */
-    static String formatEvent(CombatEvent event) {
+    /** 战斗事件行（仅 UNIT_DIED/CAST——HIT/HEALED 过噪跳过，口径 #13；技能行显中文名，查表失败回退 id） */
+    static String formatEvent(CombatEvent event, GameData data) {
         switch (event.getType()) {
             case UNIT_DIED:
                 return "单位倒下";
             case CAST:
-                return "技能施放: " + event.getSkillId();
+                return "技能施放：" + skillName(data, event.getSkillId());
             default:
                 return null;
         }
+    }
+
+    /** 技能中文名（GameData 查表；未登记 id 回退原值——防御，正常路径加载期已校验存在） */
+    private static String skillName(GameData data, String skillId) {
+        SkillData skill = data.getSkill(skillId);
+        return skill != null ? skill.getName() : skillId;
     }
 
     public void toggleLargeMode() {

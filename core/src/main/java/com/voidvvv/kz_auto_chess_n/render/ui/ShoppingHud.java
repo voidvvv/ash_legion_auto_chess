@@ -46,7 +46,7 @@ public final class ShoppingHud extends Group {
             batch.setColor(0.8f, 0.45f, 0.2f, parentAlpha);
             batch.draw(assets.region(PlaceholderKeys.PANEL_9SLICE), getX(), getY(), getWidth(), getHeight());
             batch.setColor(old);
-            assets.font().draw(batch, "FIGHT", getX() + 10f, getY() + 24f);
+            assets.font().draw(batch, "开战", getX() + 20f, getY() + 24f);
         }
     }
 }

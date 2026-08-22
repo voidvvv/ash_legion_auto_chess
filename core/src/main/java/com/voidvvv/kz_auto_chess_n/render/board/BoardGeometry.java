@@ -50,6 +50,20 @@ public final class BoardGeometry {
     public static final int NOTIFY_W = 128;
     public static final int NOTIFY_H = 46;
 
+    // —— Phase 5.1 R1：悬停预览卡固定锚点（裁决 A；防遮挡论证见计划 §5.3-1） ——
+
+    /** 棋盘域悬停卡：②③（右缘 128）与 ④ 棋盘（左缘 224）之间的左侧空带；底边 240 避开 ⑨（y 244 起）。
+     *  瞬态覆盖 ⑥ 开战按钮（x134~198, y88~128）：指针移向按钮即离开棋子命中域 → 卡立即隐藏，无点击阻塞（§5.3-1） */
+    public static final int BOARD_HOVER_X = 128;
+    public static final int BOARD_HOVER_Y = 48;
+    public static final int BOARD_HOVER_W = 94;
+    public static final int BOARD_HOVER_H = 192;
+    /** 商店卡悬停卡：精确覆盖 ⑤ 羁绊面板区（瞬态覆盖，移开即恢复；⑥ 实际在左侧——差异声明 #2） */
+    public static final int SHOP_HOVER_X = 508;
+    public static final int SHOP_HOVER_Y = 48;
+    public static final int SHOP_HOVER_W = 112;
+    public static final int SHOP_HOVER_H = 192;
+
     public static final int CELL = 32;
     public static final int BENCH_SLOT_W = 36;
     public static final int BENCH_SLOT_H = 40;

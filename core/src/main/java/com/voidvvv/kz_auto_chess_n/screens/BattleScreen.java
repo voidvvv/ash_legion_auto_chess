@@ -27,6 +27,7 @@ import com.voidvvv.kz_auto_chess_n.render.board.BoardGeometry;
 import com.voidvvv.kz_auto_chess_n.render.ui.BattleHud;
 import com.voidvvv.kz_auto_chess_n.render.ui.ChestDialog;
 import com.voidvvv.kz_auto_chess_n.render.ui.EquipPendingState;
+import com.voidvvv.kz_auto_chess_n.render.ui.HoverPreviewCard;
 import com.voidvvv.kz_auto_chess_n.render.ui.InventoryPanel;
 import com.voidvvv.kz_auto_chess_n.render.ui.NotificationPanel;
 import com.voidvvv.kz_auto_chess_n.render.ui.PauseMenuDialog;
@@ -90,6 +91,7 @@ public final class BattleScreen implements Screen {
     private final InventoryPanel inventoryPanel;
     private final SynergyPanel synergyPanel;
     private final NotificationPanel notificationPanel;
+    private final HoverPreviewCard hoverPreview; // Phase 5.1 R1：悬停预览卡（uiStage 最上层瞬态）
     private final ChestDialog chestDialog;
     private final UnitDetailDialog unitDetailDialog;
     private final PauseMenuDialog pauseMenuDialog;
@@ -141,6 +143,7 @@ public final class BattleScreen implements Screen {
         this.inventoryPanel = new InventoryPanel(assets, contextSupplier(), equipPending);
         this.synergyPanel = new SynergyPanel(assets, contextSupplier());
         this.notificationPanel = new NotificationPanel(assets, contextSupplier(), commandManager);
+        this.hoverPreview = new HoverPreviewCard(assets, contextSupplier());
         this.chestDialog = new ChestDialog(commandManager, assets, data);
         this.unitDetailDialog = new UnitDetailDialog(commandManager, assets, contextSupplier(),
                 new UnitDetailDialog.CloseListener() {
@@ -176,6 +179,7 @@ public final class BattleScreen implements Screen {
         uiStage.addActor(inventoryPanel);
         uiStage.addActor(synergyPanel);
         uiStage.addActor(notificationPanel);
+        uiStage.addActor(hoverPreview); // 最上层：瞬态悬停卡（无输入监听，不阻断任何交互）
     }
 
     /** 上下文供应者（面板/横幅共用——值随 restartRun 换新） */
@@ -260,6 +264,8 @@ public final class BattleScreen implements Screen {
         synergyPanel.refresh(runContext);
         notificationPanel.refresh(runContext);
         notificationPanel.syncBattle(runContext.getBattleState());
+        hoverPreview.refresh(boardProcessor == null ? -1 : boardProcessor.getHoverCandidateUnitId(),
+                shopBar.getHoveredSlot(), frozen, frozen ? 0f : delta); // R1：候选/槽位/冻结位（§5.3-8）
         if (phase == GamePhase.BATTLE) {
             battleHud.refresh(runContext.getBattleState());
         }
