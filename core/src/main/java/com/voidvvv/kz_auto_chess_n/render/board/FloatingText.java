@@ -15,6 +15,8 @@ public final class FloatingText {
     public static final float RISE_PIXELS = 22f;
 
     private final Color tint = new Color();
+    /** 恢复用颜色值拷贝——BitmapFont.getColor() 返回内部 live 引用，直接持有则恢复成自身 = no-op（feedback05 修复） */
+    private final Color savedColor = new Color();
     private String text = "";
     private float scale = 1f;
     private float x;
@@ -58,11 +60,11 @@ public final class FloatingText {
         float alpha = t < 0.7f ? 1f : 1f - (t - 0.7f) / 0.3f; // 后 30% 淡出
         com.badlogic.gdx.graphics.g2d.BitmapFont font = assets.font();
         float oldScale = font.getScaleX();
-        Color oldColor = font.getColor();
+        savedColor.set(font.getColor());
         font.getData().setScale(oldScale * scale);
         font.setColor(tint.r, tint.g, tint.b, alpha);
         font.draw(batch, text, x, y + RISE_PIXELS * t);
         font.getData().setScale(oldScale);
-        font.setColor(oldColor);
+        font.setColor(savedColor);
     }
 }
