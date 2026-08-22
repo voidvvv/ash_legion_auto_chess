@@ -8,6 +8,11 @@ import com.voidvvv.kz_auto_chess_n.data.Delivery;
 import com.voidvvv.kz_auto_chess_n.data.EffectData;
 import com.voidvvv.kz_auto_chess_n.data.EffectOp;
 import com.voidvvv.kz_auto_chess_n.data.EffectTarget;
+import com.voidvvv.kz_auto_chess_n.data.EquipmentData;
+import com.voidvvv.kz_auto_chess_n.data.EquipmentEffect;
+import com.voidvvv.kz_auto_chess_n.data.EquipmentPassive;
+import com.voidvvv.kz_auto_chess_n.data.EquipmentRarity;
+import com.voidvvv.kz_auto_chess_n.data.EquipmentSlot;
 import com.voidvvv.kz_auto_chess_n.data.GameData;
 import com.voidvvv.kz_auto_chess_n.data.SkillData;
 import com.voidvvv.kz_auto_chess_n.data.SkillEffect;
@@ -49,21 +54,31 @@ public final class JsonLoader {
     private JsonLoader() {
     }
 
-    /** 从目录按标准文件名加载：units.json / skills.json / synergies.json / scenes.json */
+    /** 从目录按标准文件名加载：units.json / skills.json / synergies.json / scenes.json / equipments.json */
     public static GameData loadFromDirectory(FileHandle dataDir) {
         return load(dataDir.child("units.json"), dataDir.child("skills.json"),
-                dataDir.child("synergies.json"), dataDir.child("scenes.json"));
+                dataDir.child("synergies.json"), dataDir.child("scenes.json"),
+                dataDir.child("equipments.json"));
+    }
+
+    /** 兼容重载：无装备文件（存量测试路径）——装备表为空 */
+    public static GameData load(FileHandle unitsFile, FileHandle skillsFile,
+                                FileHandle synergiesFile, FileHandle scenesFile) {
+        return load(unitsFile, skillsFile, synergiesFile, scenesFile, null);
     }
 
     public static GameData load(FileHandle unitsFile, FileHandle skillsFile,
-                                FileHandle synergiesFile, FileHandle scenesFile) {
+                                FileHandle synergiesFile, FileHandle scenesFile,
+                                FileHandle equipmentsFile) {
         Map<String, UnitData> units = parseUnits(unitsFile);
         Map<String, SkillData> skills = parseSkills(skillsFile);
         Map<String, SynergyData> synergies = parseSynergies(synergiesFile);
         Map<String, SceneData> scenes = parseScenes(scenesFile);
+        Map<String, EquipmentData> equipments = parseEquipments(equipmentsFile);
         List<String> warnings = new ArrayList<String>();
         crossValidate(units, skills, synergies, scenes, warnings);
-        return new GameData(units, skills, synergies, scenes, warnings);
+        warnEmptyRarityPools(equipments, warnings);
+        return new GameData(units, skills, synergies, scenes, equipments, warnings);
     }
 
     // ==================================================================
@@ -397,6 +412,97 @@ public final class JsonLoader {
             }
         }
         return bosses;
+    }
+
+    // ==================================================================
+    // equipments.json（data_schema §八 结构锁定版；Phase 5）
+    // ==================================================================
+
+    /** equipmentsFile 可 null（兼容重载）：null → 空表；传入文件不存在沿 parseArray 即死（loadFromDirectory 生产路径缺文件启动死） */
+    private static Map<String, EquipmentData> parseEquipments(FileHandle file) {
+        Map<String, EquipmentData> result = new LinkedHashMap<String, EquipmentData>();
+        if (file == null) {
+            return result;
+        }
+        Set<String> ids = new HashSet<String>();
+        for (JsonValue e = parseArray(file).child; e != null; e = e.next) {
+            requireObject(e, file.name());
+            String id = requireString(e, "id", file.name() + "#?");
+            String w = file.name() + "#" + id + "/";
+            if (!ids.add(id)) {
+                fail(w, "id 全文件唯一，重复声明");
+            }
+            checkUnknownKeys(e, w, "id", "name", "slot", "rarity", "effects", "passiveStatus");
+
+            String name = requireString(e, "name", w);
+            EquipmentSlot slot = requireVocab(e, "slot", EquipmentSlot.class, w);
+            EquipmentRarity rarity = requireVocab(e, "rarity", EquipmentRarity.class, w);
+
+            JsonValue effectsNode = require(e, "effects", w);
+            if (!effectsNode.isArray() || effectsNode.size < 1) {
+                fail(w + "effects", "必须为非空数组（1~" + GameBalance.MAX_EFFECTS_PER_SKILL + " 条）");
+            }
+            if (effectsNode.size > GameBalance.MAX_EFFECTS_PER_SKILL) {
+                fail(w + "effects", "每装备效果至多 " + GameBalance.MAX_EFFECTS_PER_SKILL + " 条，实际=" + effectsNode.size);
+            }
+            List<EquipmentEffect> effects = new ArrayList<EquipmentEffect>(effectsNode.size);
+            for (JsonValue fe = effectsNode.child; fe != null; fe = fe.next) {
+                effects.add(parseEquipmentEffect(fe, w + "effects[" + effects.size() + "]/"));
+            }
+            EquipmentPassive passive = null;
+            JsonValue passiveNode = e.get("passiveStatus");
+            if (passiveNode != null && !passiveNode.isNull()) {
+                passive = parseEquipmentPassive(passiveNode, w + "passiveStatus/");
+            }
+            result.put(id, new EquipmentData(id, name, slot, rarity, effects, passive));
+        }
+        return result;
+    }
+
+    private static EquipmentEffect parseEquipmentEffect(JsonValue fe, String w) {
+        requireObject(fe, w);
+        checkUnknownKeys(fe, w, "stat", "op", "value");
+        StatKey stat = requireVocab(fe, "stat", StatKey.class, w);
+        EffectOp op = requireVocab(fe, "op", EffectOp.class, w);
+        float value = requireFloat(fe, "value", w);
+        return new EquipmentEffect(stat, op, value);
+    }
+
+    private static EquipmentPassive parseEquipmentPassive(JsonValue node, String w) {
+        requireObject(node, w);
+        checkUnknownKeys(node, w, "type", "power", "tick");
+        StatusType type = requireVocab(node, "type", StatusType.class, w);
+        if (type != StatusType.REGEN) {
+            fail(w + "type", "passiveStatus 本期仅支持 REGEN，遇到: " + type.jsonName());
+        }
+        float power = requireFloat(node, "power", w);
+        if (power <= 0) {
+            fail(w + "power", "必须 > 0，实际=" + power);
+        }
+        float tick = requireFloat(node, "tick", w);
+        if (tick <= 0) {
+            fail(w + "tick", "必须 > 0（秒），实际=" + tick);
+        }
+        return new EquipmentPassive(type, power, tick);
+    }
+
+    /** 软告警：equipments 非空但某稀有度池为空（宝箱 roll 将降级——内容缺失预警，不阻断） */
+    private static void warnEmptyRarityPools(Map<String, EquipmentData> equipments, List<String> warnings) {
+        if (equipments.isEmpty()) {
+            return;
+        }
+        for (EquipmentRarity rarity : EquipmentRarity.values()) {
+            boolean any = false;
+            for (EquipmentData equipment : equipments.values()) {
+                if (equipment.getRarity() == rarity) {
+                    any = true;
+                    break;
+                }
+            }
+            if (!any) {
+                warnings.add("装备稀有度池为空（宝箱该档将降级/退化金币）: " + rarity.jsonName());
+            }
+        }
     }
 
     // ==================================================================

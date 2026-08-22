@@ -1,5 +1,6 @@
 package com.voidvvv.kz_auto_chess_n.entities;
 
+import com.voidvvv.kz_auto_chess_n.config.GameBalance;
 import com.voidvvv.kz_auto_chess_n.data.StatusType;
 
 import java.util.Objects;
@@ -17,15 +18,25 @@ public final class ActiveStatus {
     /** 施加者 unit id；开局效果等无单位来源时为 -1 */
     private final int sourceId;
     private float remainingTime;
-    /** DOT/REGEN 的 1s 心跳累积器（施加时 0，首跳在满 1s——口径 #10） */
+    /** DOT/REGEN 的心跳累积器（施加时 0，首跳在满一个间隔——口径 #10） */
     private float tickTimer;
     private float power;
+    /** 心跳间隔（秒）：技能/羁绊缺省 1s（DOT_TICK_INTERVAL）；装备 passiveStatus 可自定义（龙心 5s） */
+    private final float tickInterval;
 
     public ActiveStatus(StatusType type, int sourceId, float power, float duration) {
+        this(type, sourceId, power, duration, GameBalance.DOT_TICK_INTERVAL);
+    }
+
+    public ActiveStatus(StatusType type, int sourceId, float power, float duration, float tickInterval) {
         this.type = Objects.requireNonNull(type, "type 不能为 null");
         this.sourceId = sourceId;
         this.power = power;
         this.remainingTime = duration;
+        if (tickInterval <= 0) {
+            throw new IllegalArgumentException("心跳间隔必须 > 0（秒），实际=" + tickInterval);
+        }
+        this.tickInterval = tickInterval;
     }
 
     public StatusType getType() { return type; }
@@ -33,6 +44,7 @@ public final class ActiveStatus {
     public float getRemainingTime() { return remainingTime; }
     public float getTickTimer() { return tickTimer; }
     public float getPower() { return power; }
+    public float getTickInterval() { return tickInterval; }
 
     public boolean isExpired() {
         return remainingTime <= 0f;

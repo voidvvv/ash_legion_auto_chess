@@ -1,0 +1,19 @@
+[
+  { "id": "eq_iron_sword", "name": "铁剑", "slot": "WEAPON", "rarity": "WHITE",
+    "effects": [ { "stat": "attack", "op": "PCT", "value": 20 } ] },
+  { "id": "eq_bronze_blade", "name": "青铜短刃", "slot": "WEAPON", "rarity": "WHITE",
+    "effects": [ { "stat": "attackSpeed", "op": "PCT", "value": 10 } ] },
+  { "id": "eq_mithril_armor", "name": "秘银胸甲", "slot": "ARMOR", "rarity": "WHITE",
+    "effects": [ { "stat": "armor", "op": "ADD", "value": 20 } ] },
+  { "id": "eq_vampire_fang", "name": "吸血獠牙", "slot": "TRINKET", "rarity": "WHITE",
+    "effects": [ { "stat": "lifesteal", "op": "ADD", "value": 10 } ] },
+  { "id": "eq_war_horn", "name": "战歌号角", "slot": "TRINKET", "rarity": "RARE",
+    "effects": [ { "stat": "energyGainRate", "op": "PCT", "value": 15 } ] },
+  { "id": "eq_hunting_bow", "name": "猎风长弓", "slot": "WEAPON", "rarity": "RARE",
+    "effects": [ { "stat": "attack", "op": "PCT", "value": 35 } ] },
+  { "id": "eq_plate_armor", "name": "玄铁板甲", "slot": "ARMOR", "rarity": "RARE",
+    "effects": [ { "stat": "hp", "op": "ADD", "value": 200 } ] },
+  { "id": "eq_dragon_heart", "name": "龙心", "slot": "ARMOR", "rarity": "LEGENDARY",
+    "effects": [ { "stat": "hp", "op": "ADD", "value": 400 } ],
+    "passiveStatus": { "type": "REGEN", "power": 0.02, "tick": 5 } }
+]

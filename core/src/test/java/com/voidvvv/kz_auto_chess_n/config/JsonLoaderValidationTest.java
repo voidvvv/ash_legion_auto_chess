@@ -76,6 +76,7 @@ class JsonLoaderValidationTest {
         write(dir, "skills.json", skills == null ? VALID_SKILL : skills);
         write(dir, "synergies.json", synergies == null ? VALID_SYNERGY : synergies);
         write(dir, "scenes.json", scenes == null ? VALID_SCENES : scenes);
+        write(dir, "equipments.json", "[]"); // Phase 5 起 loadFromDirectory 增读 equipments.json（沿 scenes.json 先例）
         return JsonLoader.loadFromDirectory(new FileHandle(dir.toString()));
     }
 
@@ -114,6 +115,7 @@ class JsonLoaderValidationTest {
         write(dir, "skills.json", VALID_SKILL);
         write(dir, "synergies.json", VALID_SYNERGY);
         write(dir, "scenes.json", VALID_SCENES);
+        write(dir, "equipments.json", "[]");
         GameData data = JsonLoader.loadFromDirectory(new FileHandle(dir.toString()));
         assertThat(data.getUnits()).hasSize(5);
     }

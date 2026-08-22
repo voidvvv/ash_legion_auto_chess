@@ -66,6 +66,7 @@ class JsonLoaderScenesTest {
         write(dir, "skills.json", VALID_SKILL);
         write(dir, "synergies.json", "[]");
         write(dir, "scenes.json", scenes);
+        write(dir, "equipments.json", "[]"); // Phase 5 起 loadFromDirectory 增读 equipments.json
         return JsonLoader.loadFromDirectory(new FileHandle(dir.toString()));
     }
 

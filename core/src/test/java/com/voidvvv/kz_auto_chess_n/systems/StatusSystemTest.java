@@ -142,6 +142,27 @@ class StatusSystemTest {
     }
 
     @Test
+    @DisplayName("自定义心跳间隔 REGEN（装备 passiveStatus，龙心口径）：interval=5 时 4.9s 零跳、5.1s 恰一跳回 2% maxHp")
+    void regenWithCustomTickInterval() {
+        BattleUnit target = target();
+        target.modifyHp(-50f); // hp 50 / maxHp 100
+        BattleState state = withTarget(target);
+        SYSTEM.apply(state, target, StatusType.REGEN, 0.02f, 10f, 1, 5f);
+        assertThat(target.getStatuses().get(0).getTickInterval()).isEqualTo(5f);
+
+        for (int i = 0; i < Math.round(4.9f / GameBalance.LOGIC_STEP); i++) { // 4.9s：未满间隔
+            SYSTEM.tickStatuses(state, GameBalance.LOGIC_STEP);
+        }
+        assertThat(target.getCurrentHp()).isEqualTo(50f); // 零跳
+
+        for (int i = 0; i < Math.round(0.2f / GameBalance.LOGIC_STEP); i++) { // 累计 5.1s：恰一跳
+            SYSTEM.tickStatuses(state, GameBalance.LOGIC_STEP);
+        }
+        assertThat(target.getCurrentHp()).isCloseTo(52f, within(1e-4f)); // 50 + 100×2%
+        assertThat(target.getStatuses()).hasSize(1);                    // 未到期
+    }
+
+    @Test
     @DisplayName("SHIELD 吸收条目：同类刷新取大、被消耗至零移除并打脏标记")
     void shieldEntryMergeAndConsume() {
         BattleUnit target = target();

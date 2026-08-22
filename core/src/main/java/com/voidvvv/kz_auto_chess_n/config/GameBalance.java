@@ -55,6 +55,20 @@ public final class GameBalance {
     public static final int MERCY_START_LOSS = 3;
     public static final int MERCY_CAP_PER_ROUND = 3;
 
+    // —— 宝箱三选一（Q2 裁决 A：最小可玩规则，数值待调）——
+    /** 槽2 经验书固定经验值（对齐"4 金 = 4 经验"购买价比，待调） */
+    public static final int CHEST_EXP_BOOK_GAIN = 4;
+    /** 普通箱装备槽稀有度权重 [白, 成, 传]（GDD §5.2：70/25/5，待调） */
+    public static final int[] CHEST_RARITY_WEIGHTS = {70, 25, 5};
+    /** Boss 箱装备槽稀有度权重 [白, 成, 传]——白位 0 = 必含 ≥1 成装及以上；传说 20% = 大幅提升（待调） */
+    public static final int[] BOSS_CHEST_RARITY_WEIGHTS = {0, 80, 20};
+    /** 费阶概率 float → weightedPick int 权重的放大刻度（锚点概率和恒 100 → 权重和恒 100000） */
+    public static final int PROBABILITY_WEIGHT_SCALE = 1000;
+
+    // —— 装备（GDD §5.2 B2）——
+    /** 每棋子装备槽数：武器 + 盔甲 + 饰品各一 */
+    public static final int EQUIP_SLOTS_PER_UNIT = 3;
+
     // —— 商店 / 棋盘 ——
     public static final int SHOP_SLOTS = 5;
     public static final int BOARD_COLS = 6;
