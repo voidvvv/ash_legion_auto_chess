@@ -43,7 +43,7 @@ public final class UnitDetailDialog extends Group {
         this.context = context;
         this.closeListener = closeListener;
         Actor close = new CloseButton();
-        close.setPosition(310f, 200f);
+        close.setPosition(396f, 226f);
         addActor(close);
     }
 
@@ -76,7 +76,7 @@ public final class UnitDetailDialog extends Group {
         float y = 170f;
         for (Equipment item : unit.getEquipped()) {
             UnequipButton button = new UnequipButton(item);
-            button.setPosition(150f, y);
+            button.setPosition(90f, y);
             addActor(button);
             y -= 30f;
         }
@@ -90,16 +90,16 @@ public final class UnitDetailDialog extends Group {
         }
         Color old = batch.getColor();
         batch.setColor(0f, 0f, 0f, 0.75f * parentAlpha);
-        batch.draw(assets.region(PlaceholderKeys.WHITE), 70f, 60f, 380f, 180f);
+        batch.draw(assets.region(PlaceholderKeys.WHITE), 70f, 50f, 380f, 200f);
         batch.setColor(old);
         UnitData template = unit.getTemplate();
         BaseStats stats = template.getBaseStats();
         assets.font().draw(batch, template.getName() + "  " + unit.getStar() + "星"
-                + "  spend " + unit.getSpend(), 90f, 215f);
+                + "  spend " + unit.getSpend(), 90f, 235f);
         assets.font().draw(batch, "HP " + stats.getHp() + "  ATK " + stats.getAttack()
-                + "  ARMOR " + stats.getArmor(), 90f, 195f);
+                + "  ARMOR " + stats.getArmor(), 90f, 215f);
         assets.font().draw(batch, "ASPD " + stats.getAttackSpeed() + "  RANGE " + stats.getRange()
-                + "  MSPD " + stats.getMoveSpeed(), 90f, 178f);
+                + "  MSPD " + stats.getMoveSpeed(), 90f, 198f);
         super.draw(batch, parentAlpha); // 卸下/关闭按钮
     }
 
