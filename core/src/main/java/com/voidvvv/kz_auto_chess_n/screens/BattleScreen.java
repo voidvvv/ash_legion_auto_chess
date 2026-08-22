@@ -266,7 +266,9 @@ public final class BattleScreen implements Screen {
         notificationPanel.refresh(runContext);
         notificationPanel.syncBattle(runContext.getBattleState());
         hoverPreview.refresh(boardProcessor == null ? HoverCandidate.NONE : boardProcessor.getHoverCandidate(),
-                shopBar.getHoveredSlot(), frozen, frozen ? 0f : delta); // R1+feedback04：候选/槽位/冻结位（§5.3-8）
+                shopBar.getHoveredSlot(),
+                boardProcessor != null && boardProcessor.isDragging() ? -1 : inventoryPanel.getHoveredSlot(), // feedback07：拖拽中抑制背包源（口径 B4-2）
+                frozen, frozen ? 0f : delta); // R1+feedback04+feedback07：候选/槽位/冻结位（§5.3-8）
         if (phase == GamePhase.BATTLE) {
             battleHud.refresh(runContext.getBattleState());
         }

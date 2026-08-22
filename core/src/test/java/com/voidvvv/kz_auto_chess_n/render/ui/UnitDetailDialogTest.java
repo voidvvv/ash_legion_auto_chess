@@ -125,6 +125,14 @@ class UnitDetailDialogTest {
                 Arrays.asList(new EquipmentEffect(StatKey.ATTACK, EffectOp.ADD, 1f)), null);
     }
 
+    /** 龙心镜像（equipments.json eq_dragon_heart：HP+400 + REGEN 0.02/5） */
+    private static EquipmentData dragonHeart() {
+        return new EquipmentData("eq_dragon_heart", "龙心", EquipmentSlot.ARMOR, EquipmentRarity.LEGENDARY,
+                Arrays.asList(new EquipmentEffect(StatKey.HP, EffectOp.ADD, 400f)),
+                new com.voidvvv.kz_auto_chess_n.data.EquipmentPassive(
+                        com.voidvvv.kz_auto_chess_n.data.StatusType.REGEN, 0.02f, 5f));
+    }
+
     /** 子节点快照（引用判等：Actor 未覆写 equals，containsExactly 即实例同一性） */
     private static Actor[] snapshotChildren(UnitDetailDialog dialog) {
         com.badlogic.gdx.utils.SnapshotArray<Actor> children = dialog.getChildren();
@@ -208,5 +216,22 @@ class UnitDetailDialogTest {
         assertThat(forUnitB).hasSize(2);
         assertThat(forUnitB[0]).isSameAs(forUnitA[0]); // 关闭按钮不变
         assertThat(forUnitB[1]).isNotSameAs(forUnitA[1]); // 卸下按钮随单位重建
+    }
+
+    // —— feedback07：卸下按钮右侧效果列（effectSideLines 纯函数） ——
+
+    @Test
+    @DisplayName("效果列行集：龙心摘要折 12 列 × 截 2 行（贪心断点 = 恰好 12 列处换行）")
+    void effectSideLinesDragonHeart() {
+        assertThat(UnitDetailDialog.effectSideLines(new Equipment(30, dragonHeart())))
+                .containsExactly("生命+400 · 被动：每 5 秒", "回复 2% 最大生命");
+    }
+
+    @Test
+    @DisplayName("效果列行集：无效果无被动 = 空列表（不绘制）")
+    void effectSideLinesEmptyTemplate() {
+        EquipmentData empty = new EquipmentData("eq_x", "空", EquipmentSlot.WEAPON, EquipmentRarity.WHITE,
+                java.util.Collections.<EquipmentEffect>emptyList(), null);
+        assertThat(UnitDetailDialog.effectSideLines(new Equipment(31, empty))).isEmpty();
     }
 }

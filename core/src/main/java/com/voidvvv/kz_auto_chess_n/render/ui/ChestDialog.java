@@ -15,6 +15,10 @@ import com.voidvvv.kz_auto_chess_n.entities.ChestOption;
 import com.voidvvv.kz_auto_chess_n.render.Assets;
 import com.voidvvv.kz_auto_chess_n.render.PlaceholderKeys;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 /**
  * 宝箱三选一弹窗（RESULT 胜局；Q2 裁决 A）。内容进 RESULT 时已 roll 好（architecture §4.1），
  * 本弹窗只读 offer；点击入队 PickChest(option)，领取后 Screen 观察 pendingChest==null 收起（§6.CP29）。
@@ -25,6 +29,9 @@ public final class ChestDialog extends Group {
     /** 选项底色（static final：渲染段零分配；传说金棕与 InventoryPanel 同源） */
     private static final Color TINT_LEGENDARY = new Color(0.55f, 0.42f, 0.12f, 1f);
     private static final Color TINT_DEFAULT = new Color(0.3f, 0.32f, 0.4f, 1f);
+    /** feedback07 装备选项效果行：折行列宽 (120-14-2)/12 = 8；行容量 3（名行 y+46 之下 y+32/20/8） */
+    private static final int OPTION_MAX_COLUMNS = 8;
+    private static final int OPTION_LINE_CAPACITY = 3;
 
     private final CommandManager commandManager;
     private final Assets assets;
@@ -67,6 +74,19 @@ public final class ChestDialog extends Group {
         return TINT_DEFAULT;
     }
 
+    /** 装备选项效果行（feedback07；纯函数，headless 可测）：effectEntries 逐条折行 8 列 × 截断 3 行；
+     *  金币/经验选项 = 空列表（走原版式） */
+    static List<String> optionEffectLines(GameData data, ChestOption option) {
+        if (option.getKind() != ChestOption.Kind.EQUIPMENT) {
+            return Collections.emptyList();
+        }
+        List<String> wrapped = new ArrayList<String>();
+        for (String entry : EquipmentInfoText.effectEntries(data.getEquipment(option.getEquipmentId()))) {
+            wrapped.addAll(UnitInfoText.wrap(entry, OPTION_MAX_COLUMNS));
+        }
+        return UnitInfoText.clipLines(wrapped, OPTION_LINE_CAPACITY);
+    }
+
     private final class OptionButton extends Actor {
         private final int index;
 
@@ -93,8 +113,17 @@ public final class ChestDialog extends Group {
             batch.setColor(tint.r, tint.g, tint.b, 0.95f * parentAlpha);
             batch.draw(assets.region(PlaceholderKeys.PANEL_9SLICE), getX(), getY(), getWidth(), getHeight());
             batch.setColor(old);
-            assets.font().draw(batch, optionText(data, option), getX() + 14f, getY() + 34f);
-            assets.font().draw(batch, "选择", getX() + 44f, getY() + 14f);
+            List<String> effects = optionEffectLines(data, option);
+            if (effects.isEmpty()) { // 金币/经验书：原版式（名 + 选择）
+                assets.font().draw(batch, optionText(data, option), getX() + 14f, getY() + 34f);
+                assets.font().draw(batch, "选择", getX() + 44f, getY() + 14f);
+                return;
+            }
+            // feedback07 装备选项：名 y+46 + 效果行 y+32/20/8（「选择」让位，口径 B5-2；整钮可点击不变）
+            assets.font().draw(batch, optionText(data, option), getX() + 14f, getY() + 46f);
+            for (int i = 0; i < effects.size(); i++) {
+                assets.font().draw(batch, effects.get(i), getX() + 10f, getY() + 32f - i * 12f);
+            }
         }
     }
 

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>feedback06 战斗事件行主体解析数据流图</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.3/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true });</script>
+<style>body{font-family:"Microsoft YaHei",sans-serif;max-width:1100px;margin:24px auto;padding:0 12px;} table{border-collapse:collapse;} th,td{border:1px solid #999;padding:4px 10px;font-size:14px;} th{background:#eee;}</style>
+</head>
+<body>
+<h1>feedback06 战斗事件行主体解析数据流图</h1>
+<p>feedback06（2026-08-22）：CAST / UNIT_DIED 行加主体名，敌方附「（敌方）」标记；依据计划 §5.1/§6.CP-A2、render_design §5.5。</p>
+
+<h2>1. 事件行生成链（三流之一：战斗 CombatEvent 流）</h2>
+<pre class="mermaid">
+flowchart TB
+    SIM["systems（BattleSystem 五阶段）&lt;br/&gt;state.record(CombatEvent) —— 追加式事件流"]
+    BS["BattleState&lt;br/&gt;getEvents() 不可变视图（口径 #12）&lt;br/&gt;units 列表终身持有（含已清扫，BattleState.java:45-58）&lt;br/&gt;getUnitById 死后仍可查"]
+    INBOX["EventInbox（attach 缓存视图 + cursor）&lt;br/&gt;NotificationPanel.syncBattle(state) 时 attach"]
+    FIELD["NotificationPanel.battleState 字段（feedback06 新增）&lt;br/&gt;attach 时赋值 / detach 时置 null（生命周期与 inbox 对齐）"]
+    FMT["formatEvent(event, data, battleState)（包级静态纯函数）&lt;br/&gt;CAST → 主体名 + \" 施放 \" + 技能中文名&lt;br/&gt;UNIT_DIED → 主体名 + \" 倒下\"&lt;br/&gt;主体名 = getUnitById(sourceId) → 模板名&lt;br/&gt;（Side.ENEMY → 名后附「（敌方）」）&lt;br/&gt;查不到（防御）→ \"#id\"&lt;br/&gt;→ truncateColumns(16 列)"]
+    LOG["NotificationLog.appendCapped&lt;br/&gt;单帧 ≤2 行（§5.5 防刷屏，WARNING-6）"]
+    DRAW["小窗 4 行（NOTIFY 128×46，12px 字体硬画不折行）&lt;br/&gt;大窗 200 行（L 键）"]
+
+    SIM --&gt; BS
+    BS --&gt; INBOX
+    BS --&gt; FIELD
+    INBOX --&gt; FMT
+    FIELD --&gt; FMT
+    FMT --&gt;|"截断在入队前完成（两窗同文案）"| LOG
+    LOG --&gt; DRAW
+</pre>
+
+<h2>2. 主体解析与回退（subjectName 纯函数）</h2>
+<pre class="mermaid">
+flowchart LR
+    ID["event.getSourceId()&lt;br/&gt;（UNIT_DIED = 亡者 id；CAST = 施放者 id）"]
+    NULL{"battleState == null ?"}
+    LOOK["state.getUnitById(id)&lt;br/&gt;（units 构造序线性扫描，≤13 单位）"]
+    FOUND{"unit != null ?"}
+    SIDE{"unit.getSide() == ENEMY ?"}
+    OK["模板中文名&lt;br/&gt;（BattleUnit.getTemplate().getName()）"]
+    ENEMY["模板中文名 + 「（敌方）」"]
+    FB["\"#\" + id（防御回退）"]
+
+    ID --&gt; NULL
+    NULL --&gt;|"是"| FB
+    NULL --&gt;|"否"| LOOK
+    LOOK --&gt; FOUND
+    FOUND --&gt;|"否"| FB
+    FOUND --&gt;|"是"| SIDE
+    SIDE --&gt;|"否（玩家侧）"| OK
+    SIDE --&gt;|"是"| ENEMY
+</pre>
+
+<h2>3. 边界与约束</h2>
+<table>
+<tr><th>约束</th><th>出处</th></tr>
+<tr><td>HIT/HEALED 过噪跳过维持不变，不扩事件类型范围</td><td>口径 #13 / 用户裁决（feedback06 范围）</td></tr>
+<tr><td>行宽策略 = 截断不折行：16 列上限（192px），NOTIFY_X+6 起右缘 218 &lt; 棋盘左缘 224；折行会占多行配额、破坏单帧 2 行上限口径</td><td>计划 §5.3-A2 / render §5.5</td></tr>
+<tr><td>BattleUnit id 为战斗发号空间（IdIssuer.nextId，开战派生），与玩家名单 Unit id 不同源——主体解析必须走 BattleState，不得走 Player.getUnitById</td><td>BattleSystem.java:88-97</td></tr>
+<tr><td>截断发生在 formatEvent（入队前），大窗显示同样截断行（两窗一致，YAGNI 不存双份）</td><td>计划 §5.3-A2</td></tr>
+<tr><td>battleState 生命周期与 EventInbox 同步（syncBattle 双写），战毕 detach 后字段置 null 可 GC</td><td>用户指定生命周期方案</td></tr>
+</table>
+</body>
+</html>
