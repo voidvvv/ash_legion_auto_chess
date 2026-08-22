@@ -13,8 +13,9 @@ import com.voidvvv.kz_auto_chess_n.render.PlaceholderKeys;
 import com.voidvvv.kz_auto_chess_n.render.board.BoardGeometry;
 
 /**
- * 终局面板（RUN_END，Q3）：终局文字 + RESTART 按钮——同 DEMO_SEED 重开（口径 #22，
- * 确定性对照；新上下文组装归 Screen 装配点，本类只回调）。
+ * 终局面板（RUN_END，Q5 裁决）：成因文案（通关/放弃）+ 存活轮次 + 熟练度 stub +
+ * 本局 seed（复现参考）+ RESTART 按钮——RESTART 换新 seed 与新上下文组装归 Screen
+ * 装配点（CP29），本类只回调。
  */
 public final class RunEndPanel extends Group {
 
@@ -43,11 +44,15 @@ public final class RunEndPanel extends Group {
         batch.setColor(0f, 0f, 0f, 0.65f * parentAlpha);
         batch.draw(assets.region(PlaceholderKeys.WHITE), 90f, 80f, 460f, 200f);
         batch.setColor(Color.WHITE);
+        RunContext ctx = context.get();
+        boolean abandoned = ctx.getRunState().getEndCause() == com.voidvvv.kz_auto_chess_n.entities.RunEndCause.ABANDONED;
         assets.font().getData().setScale(2f);
-        assets.font().draw(batch, "RUN END", 250f, 230f);
+        assets.font().draw(batch, abandoned ? "RUN ABANDONED" : "RUN COMPLETE", abandoned ? 215f : 225f, 230f);
         assets.font().getData().setScale(1f);
-        int round = context.get().getRunState().getRound();
+        int round = ctx.getRunState().getRound();
         assets.font().draw(batch, "survived to round " + round + "/" + GameBalance.TOTAL_ROUNDS, 240f, 200f);
+        assets.font().draw(batch, "mastery +" + ctx.getRunState().getMasteryAwarded() + " (stub, Phase 6)", 235f, 180f);
+        assets.font().draw(batch, "seed " + ctx.getRunState().getSeed(), 262f, 160f);
     }
 
     private final class RestartButton extends Actor {

@@ -46,11 +46,6 @@ public final class ResultBanner extends Group {
         addActor(new ClickCatcher());
     }
 
-    /** 兼容桥（BattleScreen 现调用点；CP29 切双参传怜悯行） */
-    public void refresh(BattleOutcome outcome) {
-        refresh(outcome, null);
-    }
-
     /** 每帧刷新文案（RESULT 期由 Screen 调用；mercyLine 可 null——败局怜悯提示） */
     public void refresh(BattleOutcome outcome, String mercyLine) {
         if (outcome == BattleOutcome.PLAYER_WIN) {

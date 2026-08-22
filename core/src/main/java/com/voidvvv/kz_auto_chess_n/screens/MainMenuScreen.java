@@ -77,7 +77,9 @@ public final class MainMenuScreen implements Screen {
             addListener(new ClickListener() {
                 @Override
                 public void clicked(InputEvent event, float x, float y) {
-                    game.setScreen(new BattleScreen(game, assets, data));
+                    // UI 域边界事件：点击"开始远征"结算 seed → StartRun 参数（Q3 裁决；architecture §一）
+                    long runSeed = System.nanoTime();
+                    game.setScreen(new BattleScreen(game, assets, data, runSeed));
                 }
             });
         }

@@ -29,19 +29,6 @@ public final class TopBar extends Group {
     private final PauseListener pauseListener;
     private String lastText = "";
 
-    /**
-     * 兼容构造（BattleScreen 现行调用点暂用；暂停菜单随 CP29 装配后由双参构造取代，
-     * 届时移除）。占位回调为无操作——按钮可点但暂不开窗。
-     */
-    public TopBar(Assets assets) {
-        this(assets, new PauseListener() {
-            @Override
-            public void onPauseRequested() {
-                // CP26/CP29 装配暂停菜单前的占位：点击无操作
-            }
-        });
-    }
-
     public TopBar(Assets assets, PauseListener pauseListener) {
         this.assets = assets;
         this.pauseListener = pauseListener;
