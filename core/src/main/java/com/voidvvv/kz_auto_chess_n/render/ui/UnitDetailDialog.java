@@ -15,6 +15,7 @@ import com.voidvvv.kz_auto_chess_n.render.Assets;
 import com.voidvvv.kz_auto_chess_n.render.PlaceholderKeys;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.function.Supplier;
 
@@ -39,6 +40,10 @@ public final class UnitDetailDialog extends Group {
     private static final float EQUIP_X = 90f;
     private static final float EQUIP_Y0 = 100f;
     private static final float EQUIP_STEP = 26f;
+    /** 卸下按钮右侧效果列（feedback07 口径 B2-1）：12 列 = 144px ≤ 右侧可用 152px（298~442 < BG 右缘 450-8）；
+     *  2 行 = 24px 与按钮同高（基线 y+16/y+4） */
+    private static final int EFFECT_COLUMNS = 12;
+    private static final int EFFECT_MAX_LINES = 2;
 
     /** 关闭请求（Screen 实现：dialogManager.closeTop） */
     public interface CloseListener {
@@ -141,6 +146,16 @@ public final class UnitDetailDialog extends Group {
         return true;
     }
 
+    /** 卸下按钮右侧效果列行集（feedback07；纯函数，headless 可测）：摘要折行 12 列 × 截断 2 行；
+     *  无效果无被动 = 空列表（不绘制） */
+    static List<String> effectSideLines(Equipment item) {
+        String summary = EquipmentInfoText.effectSummary(item.getTemplate());
+        if (summary.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return UnitInfoText.clipLines(UnitInfoText.wrap(summary, EFFECT_COLUMNS), EFFECT_MAX_LINES);
+    }
+
     @Override
     public void draw(Batch batch, float parentAlpha) {
         Unit unit = context.get().getPlayer().getUnitById(unitId);
@@ -180,12 +195,14 @@ public final class UnitDetailDialog extends Group {
         }
     }
 
-    /** 单件卸下按钮（UnequipItem 命令路径，input §2.4） */
+    /** 单件卸下按钮（UnequipItem 命令路径，input §2.4）；右侧效果列 = feedback07（重建时预计算，draw 零分配） */
     private final class UnequipButton extends Actor {
         private final Equipment item;
+        private final List<String> effectLines;
 
         UnequipButton(final Equipment item) {
             this.item = item;
+            this.effectLines = effectSideLines(item);
             setSize(200f, 24f);
             addListener(new ClickListener() {
                 @Override
@@ -203,6 +220,10 @@ public final class UnitDetailDialog extends Group {
             batch.setColor(old);
             assets.font().draw(batch, item.getTemplate().getName() + "  [卸下]",
                     getX() + 8f, getY() + 16f);
+            for (int i = 0; i < effectLines.size(); i++) { // 右侧效果列（按钮命中域之外，纯绘制）
+                assets.font().draw(batch, effectLines.get(i),
+                        getX() + getWidth() + 8f, getY() + 16f - i * 12f);
+            }
         }
     }
 }

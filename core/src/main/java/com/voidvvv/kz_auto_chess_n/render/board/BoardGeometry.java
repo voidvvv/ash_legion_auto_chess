@@ -64,6 +64,14 @@ public final class BoardGeometry {
     public static final int SHOP_HOVER_W = 112;
     public static final int SHOP_HOVER_H = 192;
 
+    /** feedback07 背包格装备悬停卡：③ 背包（右缘 128）与 ④ 棋盘（左缘 224）之间空带内、③ 顶 172 之上。
+     *  与棋盘域卡（128,48,94,192）同带不同源——单指针命中域互斥（背包 x≤128 y172~244，棋盘/备战
+     *  候选均在界外）；底边 240 避开 ⑨ 通知（y 244 起）、顶边 140 避开 ⑥ 开战按钮（y 88~128）。 */
+    public static final int INVENTORY_HOVER_X = 132;
+    public static final int INVENTORY_HOVER_Y = 140;
+    public static final int INVENTORY_HOVER_W = 90;
+    public static final int INVENTORY_HOVER_H = 100;
+
     public static final int CELL = 32;
     public static final int BENCH_SLOT_W = 36;
     public static final int BENCH_SLOT_H = 40;

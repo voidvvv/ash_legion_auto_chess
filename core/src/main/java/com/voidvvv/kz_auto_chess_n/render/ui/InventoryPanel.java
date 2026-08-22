@@ -5,6 +5,7 @@ import com.badlogic.gdx.graphics.g2d.Batch;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.Group;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
+import com.badlogic.gdx.scenes.scene2d.InputListener;
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.voidvvv.kz_auto_chess_n.command.RunContext;
 import com.voidvvv.kz_auto_chess_n.data.EquipmentRarity;
@@ -37,6 +38,8 @@ public final class InventoryPanel extends Group {
     private final Assets assets;
     private final Supplier<RunContext> context;
     private final EquipPendingState pending;
+    /** 悬停中的背包槽位（feedback07：InventorySlot enter/exit 维护；-1 = 无；原始暴露，归一见 HoverPreviewCard） */
+    private int hoveredSlot = -1;
 
     public InventoryPanel(Assets assets, Supplier<RunContext> context, EquipPendingState pending) {
         this.assets = assets;
@@ -45,6 +48,11 @@ public final class InventoryPanel extends Group {
         for (int i = 0; i < VISIBLE_SLOTS; i++) {
             addActor(new InventorySlot(i));
         }
+    }
+
+    /** 悬停中的背包槽位（feedback07）；无悬停 = -1（空槽/BATTLE 置灰期的归一在 HoverPreviewCard.refresh） */
+    public int getHoveredSlot() {
+        return hoveredSlot;
     }
 
     /** 每帧刷新（无内部缓存：待定高亮与置灰随 ctx 变化即时反映） */
@@ -93,6 +101,19 @@ public final class InventoryPanel extends Group {
                         pending.clear(); // 再点同一装备 = 取消（input §2.4）
                     } else {
                         pending.set(item.getId()); // 进入待定态（等棋子点击落点）
+                    }
+                }
+            });
+            addListener(new InputListener() { // feedback07 悬停槽位轨迹（Scene2D enter/exit，沿 ShopBar 先例）
+                @Override
+                public void enter(InputEvent event, float x, float y, int pointer, Actor fromActor) {
+                    hoveredSlot = index;
+                }
+
+                @Override
+                public void exit(InputEvent event, float x, float y, int pointer, Actor toActor) {
+                    if (hoveredSlot == index) {
+                        hoveredSlot = -1;
                     }
                 }
             });
