@@ -6,6 +6,7 @@ import com.badlogic.gdx.InputMultiplexer;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.voidvvv.kz_auto_chess_n.command.CommandManager;
 import com.voidvvv.kz_auto_chess_n.command.RunContext;
@@ -140,6 +141,7 @@ public final class BattleScreen implements Screen {
 
     @Override
     public void render(float delta) {
+        ScreenUtils.clear(0.05f, 0.04f, 0.08f, 1f); // 清屏（与菜单/装载屏同底色）：否则棋盘外区域无重绘，拖拽 ghost 与已隐藏 HUD 留余像
         if (!paused) {
             stepSimulation(delta);
             renderClock += delta;
