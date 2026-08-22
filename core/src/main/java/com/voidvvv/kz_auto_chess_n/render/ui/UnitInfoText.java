@@ -255,6 +255,26 @@ public final class UnitInfoText {
         return c > 0xFF ? 1f : 0.5f;
     }
 
+    /** 按列宽截断（feedback06 通知行防溢出）：超宽时保留 maxColumns-1 列内容并以 … 收尾（… 计 1 列）；
+     *  maxColumns ≤ 0、null 或未超宽 = 原样返回（沿 wrap 的 ≤0 不处理惯例） */
+    public static String truncateColumns(String text, int maxColumns) {
+        if (text == null || maxColumns <= 0 || columns(text) <= maxColumns) {
+            return text;
+        }
+        StringBuilder sb = new StringBuilder();
+        float used = 0f;
+        for (int i = 0; i < text.length(); i++) {
+            float w = charColumns(text.charAt(i));
+            if (used + w > maxColumns - 1f) {
+                break;
+            }
+            sb.append(text.charAt(i));
+            used += w;
+        }
+        sb.append('…');
+        return sb.toString();
+    }
+
     /** 卡高截断（§5.3-4）：超容量行丢弃、末行以 … 示意；capacity ≤ 0 或未超 = 原样返回 */
     public static List<String> clipLines(List<String> lines, int capacity) {
         if (capacity <= 0 || lines.size() <= capacity) {

@@ -231,4 +231,36 @@ class UnitInfoTextTest {
         assertThat(UnitInfoText.clipLines(five, 3)).containsExactly("一", "二", "…");
         assertThat(UnitInfoText.clipLines(five, 1)).containsExactly("一", "…"); // 至少保留 1 行实文
     }
+
+    // —— 列宽截断（feedback06 通知行防溢出；全角 1 列 / 半角 0.5 列同折行口径） ——
+
+    @Test
+    @DisplayName("截断：未超宽（含恰好触及上限）原样返回")
+    void truncateKeepsShortText() {
+        assertThat(UnitInfoText.truncateColumns("夹具u_a 倒下", 16)).isEqualTo("夹具u_a 倒下"); // 7.5 列
+        assertThat(UnitInfoText.truncateColumns("一二三四五六七八九十甲乙丙丁戊己", 16)) // 恰 16 全角
+                .isEqualTo("一二三四五六七八九十甲乙丙丁戊己");
+    }
+
+    @Test
+    @DisplayName("截断：17 全角 → 保留 15 全角 + …（… 计 1 列，总 16 列）")
+    void truncateFullWidth() {
+        assertThat(UnitInfoText.truncateColumns("一二三四五六七八九十甲乙丙丁戊己庚", 16))
+                .isEqualTo("一二三四五六七八九十甲乙丙丁戊…");
+    }
+
+    @Test
+    @DisplayName("截断：34 半角（17 列）→ 保留 30 半角（15 列）+ …")
+    void truncateHalfWidth() {
+        assertThat(UnitInfoText.truncateColumns("0123456789012345678901234567890123", 16))
+                .isEqualTo("012345678901234567890123456789…");
+    }
+
+    @Test
+    @DisplayName("截断：maxColumns ≤ 0 与 null 原样返回（沿 wrap 的 ≤0 不处理惯例）")
+    void truncateIgnoresNonPositiveAndNull() {
+        assertThat(UnitInfoText.truncateColumns("任意长文案", 0)).isEqualTo("任意长文案");
+        assertThat(UnitInfoText.truncateColumns("任意长文案", -3)).isEqualTo("任意长文案");
+        assertThat(UnitInfoText.truncateColumns(null, 16)).isNull();
+    }
 }

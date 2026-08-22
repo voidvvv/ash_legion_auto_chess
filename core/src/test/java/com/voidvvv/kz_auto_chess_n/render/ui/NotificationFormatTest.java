@@ -12,7 +12,11 @@ import com.voidvvv.kz_auto_chess_n.data.SkillEffect;
 import com.voidvvv.kz_auto_chess_n.data.SkillShape;
 import com.voidvvv.kz_auto_chess_n.data.SynergyData;
 import com.voidvvv.kz_auto_chess_n.data.UnitData;
+import com.voidvvv.kz_auto_chess_n.entities.BattleState;
+import com.voidvvv.kz_auto_chess_n.entities.BattleUnit;
 import com.voidvvv.kz_auto_chess_n.entities.CombatEvent;
+import com.voidvvv.kz_auto_chess_n.entities.Side;
+import com.voidvvv.kz_auto_chess_n.systems.support.BattleTestFixtures;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -24,7 +28,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * 通知文案纯函数测试（CP28；口径 #13）：命令行四态（RefreshShop/BuyExp/SellUnit/其余 null）
- * 与战斗事件行三态（UNIT_DIED/CAST/过噪跳过；CP15 起 CAST 显中文技能名，GameData 查表）。
+ * 与战斗事件行带主体名（feedback06：UNIT_DIED/CAST 行显施放者/亡者中文名，敌方附（敌方）
+ * 标记、超 16 列截断；主体查 BattleState，与名单 id 不同源；CP15 起 CAST 显中文技能名）。
  * SellUnit 返回静态行、动态数额由 notices 富行承担（WARNING-15 去重口径）。
  */
 class NotificationFormatTest {
@@ -74,39 +79,115 @@ class NotificationFormatTest {
         assertThat(NotificationFormat.formatCommand(StartBattleCommand.INSTANCE)).isNull();
     }
 
-    @Test
-    @DisplayName("战斗事件行：UNIT_DIED → 单位倒下")
-    void unitDiedLine() {
-        assertThat(NotificationPanel.formatEvent(CombatEvent.unitDied(3, 11), emptyData()))
-                .isEqualTo("单位倒下");
+    // —— feedback06 夹具：微型战斗（BattleTestFixtures 公开夹具；名字 = "夹具" + 模板 id） ——
+
+    private static BattleState battleWith(BattleUnit... units) {
+        return BattleTestFixtures.state(units);
     }
 
     @Test
-    @DisplayName("战斗事件行：CAST 显中文技能名（GameData 查表）")
-    void castLineWithSkillName() {
+    @DisplayName("战斗事件行：UNIT_DIED 带主体名（玩家侧）")
+    void unitDiedLineWithSubject() {
+        BattleState state = battleWith(BattleTestFixtures.unit(11, Side.PLAYER,
+                BattleTestFixtures.tpl("u_a"), 0, 4));
+        assertThat(NotificationPanel.formatEvent(CombatEvent.unitDied(3, 11), emptyData(), state))
+                .isEqualTo("夹具u_a 倒下");
+    }
+
+    @Test
+    @DisplayName("战斗事件行：UNIT_DIED 敌方主体带（敌方）标记（feedback04-2 同款字面）")
+    void unitDiedLineMarksEnemy() {
+        BattleState state = battleWith(BattleTestFixtures.unit(21, Side.ENEMY,
+                BattleTestFixtures.tpl("u_e"), 0, 0));
+        assertThat(NotificationPanel.formatEvent(CombatEvent.unitDied(3, 21), emptyData(), state))
+                .isEqualTo("夹具u_e（敌方） 倒下");
+    }
+
+    @Test
+    @DisplayName("战斗事件行：CAST 带主体名 + 中文技能名（GameData 查表）")
+    void castLineWithSubjectAndSkillName() {
         GameData data = new GameData(new LinkedHashMap<String, UnitData>(),
                 skillsOf("skill_fireball", "火球术"),
                 new LinkedHashMap<String, SynergyData>(),
                 new LinkedHashMap<String, SceneData>(),
                 new LinkedHashMap<String, com.voidvvv.kz_auto_chess_n.data.EquipmentData>(),
                 new ArrayList<String>());
+        BattleState state = battleWith(BattleTestFixtures.unit(1, Side.PLAYER,
+                BattleTestFixtures.tpl("u_a"), 0, 4));
         assertThat(NotificationPanel.formatEvent(
-                CombatEvent.cast(3, 1, 2, "skill_fireball"), data))
-                .isEqualTo("技能施放：火球术");
+                CombatEvent.cast(3, 1, 2, "skill_fireball"), data, state))
+                .isEqualTo("夹具u_a 施放 火球术");
     }
 
     @Test
-    @DisplayName("战斗事件行：CAST 查表失败回退原始 id（防御路径）")
-    void castLineFallsBackToId() {
+    @DisplayName("战斗事件行：CAST 敌方主体带（敌方）标记")
+    void castLineMarksEnemy() {
+        GameData data = new GameData(new LinkedHashMap<String, UnitData>(),
+                skillsOf("skill_fireball", "火球术"),
+                new LinkedHashMap<String, SynergyData>(),
+                new LinkedHashMap<String, SceneData>(),
+                new LinkedHashMap<String, com.voidvvv.kz_auto_chess_n.data.EquipmentData>(),
+                new ArrayList<String>());
+        BattleState state = battleWith(BattleTestFixtures.unit(1, Side.ENEMY,
+                BattleTestFixtures.tpl("u_e"), 0, 0));
         assertThat(NotificationPanel.formatEvent(
-                CombatEvent.cast(3, 1, 2, "skill_ghost"), emptyData()))
-                .isEqualTo("技能施放：skill_ghost");
+                CombatEvent.cast(3, 1, 2, "skill_fireball"), data, state))
+                .isEqualTo("夹具u_e（敌方） 施放 火球术");
     }
 
     @Test
-    @DisplayName("战斗事件行：HIT 过噪跳过（返回 null）")
+    @DisplayName("战斗事件行：技能查表失败回退原始 id（防御路径，主体仍解析）")
+    void castLineFallsBackToSkillId() {
+        BattleState state = battleWith(BattleTestFixtures.unit(1, Side.PLAYER,
+                BattleTestFixtures.tpl("u_a"), 0, 4));
+        assertThat(NotificationPanel.formatEvent(
+                CombatEvent.cast(3, 1, 2, "skill_ghost"), emptyData(), state))
+                .isEqualTo("夹具u_a 施放 skill_ghost");
+    }
+
+    @Test
+    @DisplayName("战斗事件行：主体查不到回退 #id（id 不在战斗 / state 为 null——防御路径）")
+    void subjectFallsBackToHashId() {
+        BattleState state = battleWith(BattleTestFixtures.unit(1, Side.PLAYER,
+                BattleTestFixtures.tpl("u_a"), 0, 4));
+        assertThat(NotificationPanel.formatEvent(CombatEvent.unitDied(3, 99), emptyData(), state))
+                .isEqualTo("#99 倒下");
+        assertThat(NotificationPanel.formatEvent(CombatEvent.unitDied(3, 99), emptyData(), null))
+                .isEqualTo("#99 倒下");
+    }
+
+    @Test
+    @DisplayName("战斗事件行：极端长主体截断 ≤16 列且以 … 收尾（口径 A2-3）")
+    void longSubjectLineTruncated() {
+        BattleState state = battleWith(BattleTestFixtures.unit(1, Side.ENEMY,
+                BattleTestFixtures.tpl("名字特别长的测试单位"), 0, 0));
+        String line = NotificationPanel.formatEvent(
+                CombatEvent.cast(3, 1, 2, "skill_fireball"), emptyData(), state);
+        assertThat(UnitInfoText.columns(line)).isLessThanOrEqualTo(NotificationPanel.NOTIFY_MAX_COLUMNS);
+        assertThat(line).endsWith("…");
+    }
+
+    @Test
+    @DisplayName("战斗事件行：HIT 过噪跳过（返回 null；口径 #13 维持不变）")
     void hitFilteredOut() {
-        assertThat(NotificationPanel.formatEvent(CombatEvent.hit(3, 1, 2, 12.5f, false, null), emptyData()))
-                .isNull();
+        assertThat(NotificationPanel.formatEvent(
+                CombatEvent.hit(3, 1, 2, 12.5f, false, null), emptyData(), null)).isNull();
+    }
+
+    // —— feedback06：BattleState 生命周期（syncBattle 与 inbox 对齐） ——
+
+    @Test
+    @DisplayName("syncBattle 保留/释放 BattleState 引用（attach 赋值、detach 置 null）")
+    void syncBattleRetainsAndReleasesState() {
+        NotificationPanel panel = new NotificationPanel(null, () -> null,
+                new com.voidvvv.kz_auto_chess_n.command.CommandManager()); // refresh 零 GL：assets 可 null
+        BattleState state = battleWith(BattleTestFixtures.unit(1, Side.PLAYER,
+                BattleTestFixtures.tpl("u_a"), 0, 4));
+
+        panel.syncBattle(state);
+        assertThat(panel.currentBattle()).isSameAs(state);
+
+        panel.syncBattle(null);
+        assertThat(panel.currentBattle()).isNull();
     }
 }
