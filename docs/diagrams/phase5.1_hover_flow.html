@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Phase 5.1 悬停状态机与预览数据流图</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.3/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true });</script>
+<style>body{font-family:"Microsoft YaHei",sans-serif;max-width:1100px;margin:24px auto;padding:0 12px;} table{border-collapse:collapse;} th,td{border:1px solid #999;padding:4px 10px;font-size:14px;} th{background:#eee;}</style>
+</head>
+<body>
+<h1>Phase 5.1 悬停状态机与预览数据流图</h1>
+<p>裁决 1（2026-08-22）= A 固定锚悬停卡；依据 phase5.1_ui_polish_brief R1、user_input §2.4、计划 §5.1/§5.3。</p>
+
+<h2>1. 悬停驻留状态机（HoverStateMachine，每源一实例）</h2>
+<pre class="mermaid">
+stateDiagram-v2
+    direction LR
+    [*] --&gt; NONE
+    NONE --&gt; ARMING : candidate ≥ 0 且 !suppressed&lt;br/&gt;（帧 delta 累计，accumulator 型）
+    ARMING --&gt; ARMING : 同候选继续累计&lt;br/&gt;（同格微移不重抖）
+    ARMING --&gt; NONE : candidate 变化 / -1 / suppressed&lt;br/&gt;（计时清零）
+    ARMING --&gt; VISIBLE : elapsed ≥ DELAY_SECONDS(0.25)
+    VISIBLE --&gt; VISIBLE : 同候选持续（保持显示）
+    VISIBLE --&gt; NONE : candidate 变化 / -1 / suppressed
+</pre>
+
+<h2>抑制条件的施加位置（集中两处，状态机只认 candidate 与 suppressed）</h2>
+<table>
+<tr><th>源</th><th>归一位置</th><th>条件</th></tr>
+<tr><td>棋盘域</td><td>BoardInputProcessor.getHoverCandidateUnitId()（CP6）</td><td>拖拽中 isDragging() / modalBlocked / 非 SHOPPING / 名单核验 getUnitById（悬停中被卖出/合并 → -1）</td></tr>
+<tr><td>商店卡</td><td>HoverPreviewCard.refresh 归一（CP8）</td><td>非 SHOPPING / 空槽（slotAt==null）/ suppressed</td></tr>
+<tr><td>两源共用</td><td>BattleScreen.render 传 frozen（CP16）</td><td>frozen = paused || UIDialogManager.isShowing()（与模拟冻结同源；冻结帧 delta 传 0）</td></tr>
+</table>
+
+<h2>2. 预览数据流（输入 → 状态机 → 卡 → 格式化 → 数据）</h2>
+<pre class="mermaid">
+flowchart TB
+    subgraph SRC["双悬停源（互斥——单指针不同时悬停两处；棋盘源优先）"]
+        direction TB
+        BP["BoardInputProcessor（棋盘域，CP6）&lt;br/&gt;mouseMoved → unproject → unitAt 命中&lt;br/&gt;（备战槽 / 玩家区格）→ hoverUnitId&lt;br/&gt;返回 false：不消费事件"]
+        SB["ShopBar（UI 域，CP7）&lt;br/&gt;ShopCard 增 InputListener enter/exit&lt;br/&gt;→ hoveredSlot；getHoveredSlot() 原始暴露"]
+    end
+
+    subgraph SM["HoverStateMachine ×2（CP5；250ms 驻留，见上图状态机）"]
+        direction TB
+        S1["boardHover.update(board候选, frozen, delta)"]
+        S2["shopHover.update(shop槽位, frozen, delta)"]
+    end
+
+    BS["BattleScreen.render（CP16 装配点）&lt;br/&gt;hoverPreview.refresh(&lt;br/&gt;  boardProcessor.getHoverCandidateUnitId(),&lt;br/&gt;  shopBar.getHoveredSlot(), frozen, frozen ? 0 : delta)"]
+
+    CARD["HoverPreviewCard（CP8；uiStage 最上层非模态瞬态）&lt;br/&gt;resolveTemplate（棋盘源优先，名单/空槽再核验）&lt;br/&gt;→ UnitInfoText.previewLines(模板, data, maxColumns)&lt;br/&gt;→ clipLines(容量 15，末行 …) → draw&lt;br/&gt;锚点：棋盘 (128,48,94,192) / 商店 (508,48,112,192)"]
+
+    UIT["UnitInfoText（CP1；纯函数，headless 可测）&lt;br/&gt;名/N费 → 属性 3 行 → 技能名+desc → 羁绊块×≤2（名+desc+档位行）&lt;br/&gt;wrap：CJK=1 列 / ASCII=0.5 列；棋盘 7 列 / 商店 8 列&lt;br/&gt;synergyTierLine：档位数值行由 thresholds/effects 生成（R2 混合口径）"]
+
+    DATA["GameData（只读）&lt;br/&gt;skills.json desc —— 已有（SkillData.getDesc 就位，零改动）&lt;br/&gt;synergies.json desc —— CP2~CP4 新增（必填 fail-fast）"]
+
+    DETAIL["UnitDetailDialog（CP9；dialogStage 模态）&lt;br/&gt;UnitInfoText.detailLines（实例级：星/累计花费）&lt;br/&gt;唤起 = 棋子死区点击（既有链路）；模态期悬停自动抑制"]
+
+    BS --&gt; S1
+    BS --&gt; S2
+    BP --&gt; BS
+    SB --&gt; BS
+    S1 --&gt; CARD
+    S2 --&gt; CARD
+    CARD --&gt; UIT
+    UIT --&gt; DATA
+    UIT --&gt; DETAIL
+</pre>
+
+<h2>3. 边界与约束</h2>
+<table>
+<tr><th>约束</th><th>出处</th></tr>
+<tr><td>悬停只读、模板级（不含 spend/已穿装备）；实例级信息走点击详情弹窗</td><td>简报 R1 / 裁决 1</td></tr>
+<tr><td>计时为表现层 accumulator（帧 delta），不进 stepSimulation 固定步长、不进命令队列、零 RNG</td><td>architecture §4.2 同类口径 / 计划 §5.3-2</td></tr>
+<tr><td>悬停卡非模态：无输入监听、不阻断任何交互（区别于 dialogStage 弹窗族）</td><td>计划 §5.1</td></tr>
+<tr><td>双源互斥 + 棋盘源优先（单指针物理不可能同时命中两源，优先级为防御性定义）</td><td>计划 §5.1</td></tr>
+<tr><td>行集/折行/截断全部纯函数化（wrap/clipLines/synergyTierLine），绘制层零策略</td><td>TDD 约束 / 计划 §6.CP1</td></tr>
+<tr><td>CJK 降级：缺字体回退时中文不渲染但不炸（不维护双语表）</td><td>计划 §5.3-6 / 裁决 3</td></tr>
+</table>
+</body>
+</html>

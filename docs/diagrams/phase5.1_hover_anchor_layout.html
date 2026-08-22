@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Phase 5.1 悬停预览卡锚点布局图（640×360）</title>
+<style>
+body{font-family:"Microsoft YaHei",sans-serif;max-width:1100px;margin:24px auto;padding:0 12px;background:#111;color:#ddd;}
+pre{background:#1a1a22;color:#cfe3ff;padding:12px;border:1px solid #444;overflow-x:auto;font-size:13px;line-height:1.35;}
+table{border-collapse:collapse;} th,td{border:1px solid #666;padding:4px 10px;font-size:14px;} th{background:#2a2a33;}
+a{color:#8cf;}
+</style>
+</head>
+<body>
+<h1>Phase 5.1 悬停预览卡锚点布局图（640×360 虚拟坐标，y 向上）</h1>
+<p>裁决 1 = A 固定锚悬停卡：棋盘悬停与商店卡悬停各定锚点。本图为计划 <a href="../spec_plan/2026-08-22_phase5.1_ui_polish.md">§5.3-1</a> 的图形化；配套状态机/数据流图见 <a href="phase5.1_hover_flow.html">phase5.1_hover_flow.html</a>。</p>
+
+<h2>1. 布局示意图（约 20px/列，示意精度；上 = y 360）</h2>
+<pre>
+      x0         128       224       416       508   564  620  640
+y360  +----------+---------+---------+---------+-----+----+----+
+      | ① 顶栏（轮次/金币/等级+经验）              ①'暂停钮 x584 |
+y342  +----------+---------+---------+---------+-----+----+----+
+      | ⑧ 商店栏（5 卡 x12~480 · 刷新2金 x472 · 经验4金 x556） |
+y296  +----------+---------+---------+---------+-----+----+----+
+      |          |         ....引导文案....（基线 y280，居中）| ⑦ |
+y280  | ⑨ 通知   |         :         :         :  K  : 出 |售 |
+y244  | x20~148  | BOARD   | ④ 棋盘 6×7        | K   | 售区   |
+      +----------+ HOVER   | x224~416          |（⑤下| x564   |
+y192  | ③ 背包   | 卡位    | y50~274           | 空带）| ~620   |
+      | x20~128  | BBBBBB  |                   +-----+----+----+
+y172  +----------+ BBBBBB  |                   | ⑤ 羁绊面板     |
+      | ② 备战席 | BBBBBB  |                   | SHOP HOVER     |
+      | x20~128  | BBBBBB  |                   | 卡位覆盖此区    |
+y128  | 3×3      | BBBBBB  |                   | （y48~240）    |
+      |          | BB⑥BBB  |                   |                |
+y88   |          | BBBBBB  |                   |                |
+      +----------+---------+---------+---------+-----+----+----+
+y48   +----------+---------+---------+---------+-----+----+----+
+</pre>
+<ul>
+<li><b>BOARD HOVER</b> = BoardGeometry.BOARD_HOVER = (128, 48, 94, 192)，卡域 x 128~222、y 48~240。</li>
+<li><b>SHOP HOVER</b> = BoardGeometry.SHOP_HOVER = (508, 48, 112, 192)，卡域 x 508~620、y 48~240（与 ⑤ 羁绊面板同位）。</li>
+<li><b>⑥</b> = 开战按钮（代码实际位 x134~198、y88~128，ShoppingHud.java:34；render §九 原表位 508,200 未用——差异声明 #2）。<b>K</b> = ⑤ 下方空带（y192~246，原 ⑥ 表位，空置）。</li>
+</ul>
+
+<h2>2. 逐带核对表（防遮挡论证数据）</h2>
+<table>
+<tr><th>y 带（向上）</th><th>内容</th><th>BOARD_HOVER 关系</th><th>SHOP_HOVER 关系</th></tr>
+<tr><td>342~360</td><td>① 顶栏（Label x8 起 + 暂停钮 x584~632）</td><td>无交集</td><td>无交集</td></tr>
+<tr><td>296~360</td><td>⑧ 商店栏（全宽；悬停触发区）</td><td>无交集（卡顶 240 &lt; 296）</td><td>无交集（指针在此区悬停才触发，卡不遮本区）</td></tr>
+<tr><td>274~296</td><td>备战引导文案带（基线 y280 居中）</td><td>无交集</td><td>无交集</td></tr>
+<tr><td>244~292</td><td>⑨ 通知（x20~148）＋ ⑦ 出售区（x564~620）</td><td>卡底 240 &lt; 244：<b>避开 ⑨/⑦</b></td><td>卡底 240 &lt; 246：避开 ⑦</td></tr>
+<tr><td>192~246</td><td>⑤ 下空带 K（x508~620，原 ⑥ 表位）</td><td>无交集</td><td>卡底 240 落此带空隙，不压 ⑦</td></tr>
+<tr><td>48~192</td><td>⑤ 羁绊面板（x508~620）</td><td>无交集（卡右缘 222 &lt; 508）</td><td><b>完全重合</b>（瞬态覆盖，移开即恢复）</td></tr>
+<tr><td>128~244</td><td>③ 背包（x20~128，y172~244）</td><td>卡左缘 128 = ③ 右缘：相邻不压</td><td>无交集</td></tr>
+<tr><td>48~168</td><td>② 备战席（x20~128）</td><td>相邻不压；悬停源之一</td><td>无交集</td></tr>
+<tr><td>50~274</td><td>④ 棋盘（x224~416）</td><td>卡右缘 222 留 2px 间隙；悬停源之一</td><td>无交集</td></tr>
+<tr><td>88~128</td><td>⑥ 开战按钮（x134~198，落左带内）</td><td><b>瞬态覆盖</b>：指针移向按钮即离开棋子命中域 → 候选变 -1 → 卡立即隐藏，无点击阻塞（计划 §5.3-1）</td><td>无交集</td></tr>
+<tr><td>416~508</td><td>窄空带（全高，无归属）</td><td colspan="2">备选卡位（宽仅 86→6 列，否决）</td></tr>
+</table>
+
+<h2>3. 备选方案存档（均被否决，理由见计划 §8 WARNING-5）</h2>
+<table>
+<tr><th>备选</th><th>矩形</th><th>否决理由</th></tr>
+<tr><td>BOARD 完全避让 ⑥</td><td>x148~224 × y128~290（76×162）</td><td>行容量 15→12、列宽 7→6；且避让收益为零（现方案本就无点击阻塞）</td></tr>
+<tr><td>SHOP 避让 ⑤</td><td>x420~506 × 高 244（86 宽）</td><td>列宽 8→6、截断加剧；⑤ 为只读面板，瞬态覆盖代价低</td></tr>
+<tr><td>顶部 hint 带放卡</td><td>y274~296 全宽</td><td>带高仅 22px，容不下任何卡</td></tr>
+</table>
+</body>
+</html>
