@@ -24,9 +24,35 @@ public final class BoardGeometry {
     public static final int BENCH_W = 108;
     public static final int BENCH_H = 120;
 
+    /** ③ 装备背包 3×2（UI 域 InventoryPanel 定位同源；槽 36×50） */
+    public static final int INVENTORY_X = 20;
+    public static final int INVENTORY_Y = 140;
+    public static final int INVENTORY_W = 108;
+    public static final int INVENTORY_H = 100;
+    /** ⑤ 羁绊面板（UI 域） */
+    public static final int SYNERGY_X = 508;
+    public static final int SYNERGY_Y = 48;
+    public static final int SYNERGY_W = 112;
+    public static final int SYNERGY_H = 144;
+    /** ⑦ 出售区（棋盘域拖拽终点，仅 SHOPPING） */
+    public static final int SELL_ZONE_X = 564;
+    public static final int SELL_ZONE_Y = 246;
+    public static final int SELL_ZONE_W = 56;
+    public static final int SELL_ZONE_H = 46;
+    /** ⑧ 商店栏（UI 域 ShopBar，全宽 640） */
+    public static final int SHOP_BAR_Y = 296;
+    public static final int SHOP_BAR_H = 64;
+    /** ⑨ 事件通知小窗（render §九原值 y=230 与 ③ 底边 240 重叠 10px——差异声明 #4，改 244 起） */
+    public static final int NOTIFY_X = 20;
+    public static final int NOTIFY_Y = 244;
+    public static final int NOTIFY_W = 128;
+    public static final int NOTIFY_H = 46;
+
     public static final int CELL = 32;
     public static final int BENCH_SLOT_W = 36;
     public static final int BENCH_SLOT_H = 40;
+    public static final int INVENTORY_SLOT_W = 36;
+    public static final int INVENTORY_SLOT_H = 50;
 
     private BoardGeometry() {
     }
@@ -86,5 +112,21 @@ public final class BoardGeometry {
         int col = (px - BENCH_X) / BENCH_SLOT_W;
         int row = (py - BENCH_Y) / BENCH_SLOT_H;
         return col * 3 + row;
+    }
+
+    // —— Phase 5 CP17：⑦ 出售区命中 / ③ 背包槽定位 ——
+
+    /** 像素点是否在 ⑦ 出售区内（boardProcessor 拖拽终点判定） */
+    public static boolean isInSellZone(int px, int py) {
+        return px >= SELL_ZONE_X && px < SELL_ZONE_X + SELL_ZONE_W
+                && py >= SELL_ZONE_Y && py < SELL_ZONE_Y + SELL_ZONE_H;
+    }
+
+    /** ③ 背包槽中心（3 列 × 2 行；row 0 在下——scene2d y 向上） */
+    public static int[] inventorySlotCenter(int slotIndex) {
+        int col = slotIndex / 2;
+        int row = slotIndex % 2;
+        return new int[]{INVENTORY_X + col * INVENTORY_SLOT_W + INVENTORY_SLOT_W / 2,
+                INVENTORY_Y + INVENTORY_H - row * INVENTORY_SLOT_H - INVENTORY_SLOT_H / 2};
     }
 }
