@@ -167,3 +167,6 @@ Thumbs.db
 .omc/
 
 .report/
+
+## Local playtest feedback (not tracked):
+/feedback/
