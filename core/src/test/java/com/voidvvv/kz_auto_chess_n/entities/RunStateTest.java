@@ -49,6 +49,37 @@ class RunStateTest {
         assertThat(state.getIdIssuer()).isSameAs(issuer);
     }
 
+    // —— Phase 6 CP8：heroId / modifiers / setRound ——
+
+    @Test
+    @DisplayName("canonical 构造：heroId 与 modifiers 装配期冻结透传；兼容构造 heroId=null、modifiers=EMPTY")
+    void heroIdAndModifiersFrozen() {
+        RunModifiers modifiers = new RunModifiers(4, 0, 0, 0, new java.util.LinkedHashMap<String, Float>(),
+                "u_leg", new java.util.LinkedHashSet<String>(), true);
+        SequentialIdIssuer issuer = new SequentialIdIssuer();
+        RunState state = new RunState(7L, "scene_forest", "hero_greg", modifiers, issuer);
+        assertThat(state.getHeroId()).isEqualTo("hero_greg");
+        assertThat(state.getModifiers()).isSameAs(modifiers);
+
+        RunState legacy = new RunState(7L, "scene_forest", issuer);
+        assertThat(legacy.getHeroId()).isNull();
+        assertThat(legacy.getModifiers()).isSameAs(RunModifiers.EMPTY);
+    }
+
+    @Test
+    @DisplayName("setRound：合法值落位；越界（0/26）抛 IllegalArgumentException")
+    void setRoundValidated() {
+        RunState state = newState();
+        state.setRound(17);
+        assertThat(state.getRound()).isEqualTo(17);
+        assertThatThrownBy(() -> state.setRound(0))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("轮次");
+        assertThatThrownBy(() -> state.setRound(26))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("26");
+    }
+
     @Test
     @DisplayName("setPhase 更新阶段；advanceRound 递增轮次")
     void phaseAndRoundTransitions() {

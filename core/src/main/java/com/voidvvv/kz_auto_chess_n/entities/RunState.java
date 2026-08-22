@@ -1,5 +1,7 @@
 package com.voidvvv.kz_auto_chess_n.entities;
 
+import com.voidvvv.kz_auto_chess_n.config.GameBalance;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -19,6 +21,10 @@ public final class RunState {
     private final long seed;
     private final String sceneId;
     private final IdIssuer idIssuer;
+    /** 本局英雄 id（StartRun 参数；null = 无英雄防御路径） */
+    private final String heroId;
+    /** 局外修正聚合（ProfileService 产出，装配期冻结） */
+    private final RunModifiers modifiers;
     private int round = 1;
     private GamePhase phase = GamePhase.SHOPPING;
     private int mercyLossCount;
@@ -38,15 +44,25 @@ public final class RunState {
     /** 系统反应通知行（有界 32，UI drain 后清空——实现口径 #13 第三流；CP13 切片提前落地供 T2 经营系统调用） */
     private final List<String> notices = new ArrayList<String>();
 
+    /** 兼容构造（存量测试）：无英雄（heroId = null、修正 = EMPTY） */
     public RunState(long seed, String sceneId, IdIssuer idIssuer) {
+        this(seed, sceneId, null, RunModifiers.EMPTY, idIssuer);
+    }
+
+    /** canonical（Phase 6）：heroId + 局外修正随上下文装配冻结（同 seed/sceneId 语义） */
+    public RunState(long seed, String sceneId, String heroId, RunModifiers modifiers, IdIssuer idIssuer) {
         this.seed = seed;
         this.sceneId = Objects.requireNonNull(sceneId, "sceneId 不能为 null");
+        this.heroId = heroId;
+        this.modifiers = Objects.requireNonNull(modifiers, "modifiers 不能为 null");
         this.idIssuer = Objects.requireNonNull(idIssuer, "idIssuer 不能为 null");
     }
 
     public long getSeed() { return seed; }
     public String getSceneId() { return sceneId; }
     public IdIssuer getIdIssuer() { return idIssuer; }
+    public String getHeroId() { return heroId; }
+    public RunModifiers getModifiers() { return modifiers; }
     public int getRound() { return round; }
     public GamePhase getPhase() { return phase; }
     public int getMercyLossCount() { return mercyLossCount; }
@@ -66,6 +82,14 @@ public final class RunState {
 
     public void advanceRound() {
         round++;
+    }
+
+    /** 轮次复原（快照轨恢复唯一调用点；仅装配期，运行期推进走 advanceRound） */
+    public void setRound(int round) {
+        if (round < 1 || round > GameBalance.TOTAL_ROUNDS) {
+            throw new IllegalArgumentException("轮次必须在 1~" + GameBalance.TOTAL_ROUNDS + "，实际=" + round);
+        }
+        this.round = round;
     }
 
     public void setMercyLossCount(int count) {

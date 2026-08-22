@@ -17,6 +17,23 @@ public final class RandomGenerator {
         this.random = new Random(seed);
     }
 
+    /**
+     * 复原构造（快照轨）：重放 consumedCount 次 nextFloat() 对齐底层流。
+     * 前提不变量：全部消耗点均为单次 nextFloat（weightedPick/暴击——architecture §六
+     * 消耗点清单，已核无 nextInt 生产调用方）；未来若新增 nextInt 通道消耗点，
+     * 必须同步改造本恢复逻辑与对应单测。
+     */
+    public RandomGenerator(long seed, int consumedCount) {
+        this.random = new Random(seed);
+        if (consumedCount < 0) {
+            throw new IllegalArgumentException("消耗计数必须 ≥ 0，实际=" + consumedCount);
+        }
+        for (int i = 0; i < consumedCount; i++) {
+            this.random.nextFloat();
+        }
+        this.consumedCount = consumedCount;
+    }
+
     public int nextInt(int bound) {
         consumedCount++;
         return random.nextInt(bound);

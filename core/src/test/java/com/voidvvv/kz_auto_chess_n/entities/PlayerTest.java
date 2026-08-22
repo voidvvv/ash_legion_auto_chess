@@ -1,5 +1,6 @@
 package com.voidvvv.kz_auto_chess_n.entities;
 
+import com.voidvvv.kz_auto_chess_n.config.GameBalance;
 import com.voidvvv.kz_auto_chess_n.data.BaseStats;
 import com.voidvvv.kz_auto_chess_n.data.EquipmentData;
 import com.voidvvv.kz_auto_chess_n.data.EquipmentEffect;
@@ -54,6 +55,57 @@ class PlayerTest {
         assertThat(player.getLevel()).isEqualTo(1);
         assertThat(player.getCurrentExp()).isEqualTo(0);
         assertThat(player.getPopulationCap()).isEqualTo(3); // Lv.1 人口 3
+    }
+
+    // —— 复原构造与名单整体替换（快照轨，Phase 6 CP16）——
+
+    @Test
+    @DisplayName("复原构造：gold/level/exp 透传；等级越界即死；负经验钳 0")
+    void restoreConstructorValidates() {
+        Player restored = new Player(37, 3, 5);
+        assertThat(restored.getGold()).isEqualTo(37);
+        assertThat(restored.getLevel()).isEqualTo(3);
+        assertThat(restored.getCurrentExp()).isEqualTo(5);
+
+        assertThatThrownBy(() -> new Player(10, 0, 0))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("棋手等级");
+        assertThatThrownBy(() -> new Player(10, 8, 0))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("8");
+        assertThat(new Player(10, 2, -7).getCurrentExp()).isZero(); // 负经验防御钳 0
+    }
+
+    @Test
+    @DisplayName("restoreRoster：整体替换备战席与 18 格部署表（空格 null 原样）")
+    void restoreRosterReplacesBothStores() {
+        Player player = new Player(10);
+        player.addToBench(unit(1)); // 旧状态应被整体替换
+        Unit benchUnit = unit(2);
+        Unit deployedUnit = unit(3);
+        Unit[] grid = new Unit[18];
+        grid[7] = deployedUnit;
+        player.restoreRoster(java.util.Collections.singletonList(benchUnit), grid);
+        assertThat(player.getBench()).containsExactly(benchUnit);
+        assertThat(player.getDeployedUnits()).containsExactly(deployedUnit);
+        assertThat(player.deployedAt(1, 4)).isNull(); // 空格原样 null
+        assertThat(player.getRosterSize()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("restoreRoster 校验：超席/长度≠18/留空位越界即死")
+    void restoreRosterValidatesBounds() {
+        Player player = new Player(10);
+        java.util.List<Unit> tooMany = new java.util.ArrayList<Unit>();
+        for (int i = 0; i < GameBalance.BENCH_SIZE + 1; i++) {
+            tooMany.add(unit(100 + i));
+        }
+        assertThatThrownBy(() -> player.restoreRoster(tooMany, new Unit[18]))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("备战席");
+        assertThatThrownBy(() -> player.restoreRoster(java.util.Collections.<Unit>emptyList(), new Unit[17]))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("部署表长度");
     }
 
     @Test

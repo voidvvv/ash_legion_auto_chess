@@ -10,6 +10,7 @@ import com.voidvvv.kz_auto_chess_n.data.GameData;
 import com.voidvvv.kz_auto_chess_n.data.UnitData;
 import com.voidvvv.kz_auto_chess_n.entities.GamePhase;
 import com.voidvvv.kz_auto_chess_n.entities.Player;
+import com.voidvvv.kz_auto_chess_n.entities.RunModifiers;
 import com.voidvvv.kz_auto_chess_n.entities.Unit;
 import com.voidvvv.kz_auto_chess_n.utils.RandomGenerator;
 
@@ -17,6 +18,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * 商店系统（GDD §3.4；Q6 裁决：起始 10 金商店自购，演示名单移除）。
@@ -44,12 +46,14 @@ public final class ShopSystem {
             return buy(ctx, ((BuyUnitCommand) cmd).getSlotIndex());
         });
         manager.registerHandler(RefreshShopCommand.class, (cmd, ctx) -> {
+            int cost = refreshCost(ctx.getRunState().getModifiers());
             if (ctx.getRunState().getPhase() != GamePhase.SHOPPING
-                    || !ctx.getPlayer().canAfford(GameBalance.SHOP_REFRESH_COST)) {
+                    || !ctx.getPlayer().canAfford(cost)) {
                 return false;
             }
-            ctx.getPlayer().addGold(-GameBalance.SHOP_REFRESH_COST);
-            reroll(ctx.getRunState().getRound(), ctx.getGameData(), ctx.getRng());
+            ctx.getPlayer().addGold(-cost);
+            reroll(ctx.getRunState().getRound(), ctx.getGameData(), ctx.getRng(),
+                    ctx.getRunState().getModifiers());
             return true;
         });
         manager.registerHandler(BuyExpCommand.class, (cmd, ctx) -> {
@@ -78,19 +82,64 @@ public final class ShopSystem {
         return Collections.unmodifiableList(Arrays.asList(slots));
     }
 
-    /** 整批重掷 5 槽：每槽 = 费阶 roll + 同费池均匀抽取（RNG 恒 2/槽，共 10） */
+    /** 槽位复原（快照轨恢复唯一写入口；长度必须 = SHOP_SLOTS，null 槽原样保留） */
+    public void restoreSlots(List<UnitData> templates) {
+        Objects.requireNonNull(templates, "templates 不能为 null");
+        if (templates.size() != slots.length) {
+            throw new IllegalArgumentException("商店槽位数必须 = " + slots.length + "，实际=" + templates.size());
+        }
+        for (int i = 0; i < slots.length; i++) {
+            slots[i] = templates.get(i);
+        }
+    }
+
+    /** 整批重掷 5 槽（存量签名：无局外修正——测试路径） */
     public void reroll(int round, GameData data, RandomGenerator rng) {
+        reroll(round, data, rng, RunModifiers.EMPTY);
+    }
+
+    /**
+     * 整批重掷（带局外修正，Phase 6）：Lv.2 起 3 费概率 +5pp——仅当该轮基础 3 费概率 > 0
+     * （防 1~9 轮提前出 3 费打破新手期节奏，GDD §3.4——裁决 D5），自 1 费扣减；
+     * 池内抽取按 RunModifiers 商店池门控（场景 shopUnlocks + 本英雄传奇，裁决 D8）。
+     * RNG 消耗序与点数不变（权重是数值调整非新掷——architecture §六）。
+     */
+    public void reroll(int round, GameData data, RandomGenerator rng, RunModifiers modifiers) {
         float[] probabilities = GameBalance.shopTierProbabilities(round);
+        int bonusPp = Math.max(0, modifiers.getRareShopBonusPp());
+        if (bonusPp > 0 && probabilities[2] > 0f) {
+            probabilities[2] = Math.min(100f, probabilities[2] + bonusPp);
+            probabilities[0] = Math.max(0f, probabilities[0] - bonusPp);
+        }
         int[] tierWeights = {
                 Math.round(probabilities[0] * GameBalance.PROBABILITY_WEIGHT_SCALE),
                 Math.round(probabilities[1] * GameBalance.PROBABILITY_WEIGHT_SCALE),
                 Math.round(probabilities[2] * GameBalance.PROBABILITY_WEIGHT_SCALE)};
         for (int i = 0; i < slots.length; i++) {
             int tier = rng.weightedPick(tierWeights);                          // RNG #1（费阶 0/1/2 → cost 1/2/3）
-            List<UnitData> pool = tierPool(data, tier + 1);
+            List<UnitData> pool = allowedPool(tierPool(data, tier + 1), modifiers);
             int pick = rng.weightedPick(uniform(pool.size()));                 // RNG #2（池空也消耗）
             slots[i] = pool.isEmpty() ? null : pool.get(pick);
         }
+    }
+
+    /** 刷新实付价（GDD §3.4 基价 2 - Lv.5 折扣，下限 1 金——裁决 D4） */
+    static int refreshCost(RunModifiers modifiers) {
+        return Math.max(1, GameBalance.SHOP_REFRESH_COST - modifiers.getRefreshCostDiscount());
+    }
+
+    /** 商店池门控过滤（EMPTY 不门控——兼容路径全量非 Boss 池） */
+    private static List<UnitData> allowedPool(List<UnitData> pool, RunModifiers modifiers) {
+        if (!modifiers.isShopPoolRestricted()) {
+            return pool;
+        }
+        List<UnitData> allowed = new ArrayList<UnitData>(pool.size());
+        for (UnitData template : pool) {
+            if (modifiers.isShopAllowed(template.getId())) {
+                allowed.add(template);
+            }
+        }
+        return allowed;
     }
 
     /** 购买（architecture §5.2 校验要点）：查价不信任载荷；席满禁买，例外 = 购买即完成 3 合 1 */

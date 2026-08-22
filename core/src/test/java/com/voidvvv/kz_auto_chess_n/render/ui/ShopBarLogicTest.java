@@ -7,6 +7,7 @@ import com.voidvvv.kz_auto_chess_n.data.GameData;
 import com.voidvvv.kz_auto_chess_n.data.TargetPriority;
 import com.voidvvv.kz_auto_chess_n.data.UnitData;
 import com.voidvvv.kz_auto_chess_n.entities.Player;
+import com.voidvvv.kz_auto_chess_n.entities.RunModifiers;
 import com.voidvvv.kz_auto_chess_n.entities.RunState;
 import com.voidvvv.kz_auto_chess_n.entities.SequentialIdIssuer;
 import com.voidvvv.kz_auto_chess_n.entities.Unit;
@@ -143,5 +144,19 @@ class ShopBarLogicTest {
         assertThat(ctx.getPlayer().getGold()).isEqualTo(10);
         assertThat(ctx.getPlayer().getBench()).hasSize(2);
         assertThat(ctx.getShop().slotAt(0)).isNotNull();
+    }
+
+    // —— Phase 6：动态价签（CP9——Lv.5 折扣实付下限 1 金，裁决 D4） ——
+
+    @Test
+    @DisplayName("刷新钮价签：EMPTY → 2 金、Lv.5 折扣 1 → 1 金、折扣越界钳下限")
+    void refreshPriceTextReflectsDiscount() {
+        assertThat(ShopBar.refreshPriceText(RunModifiers.EMPTY)).isEqualTo("刷新 2金");
+        assertThat(ShopBar.refreshPriceText(new RunModifiers(0, 1, 0, 0,
+                new java.util.LinkedHashMap<String, Float>(), null,
+                new java.util.LinkedHashSet<String>(), false))).isEqualTo("刷新 1金");
+        assertThat(ShopBar.refreshPriceText(new RunModifiers(0, 9, 0, 0,
+                new java.util.LinkedHashMap<String, Float>(), null,
+                new java.util.LinkedHashSet<String>(), false))).isEqualTo("刷新 1金");
     }
 }

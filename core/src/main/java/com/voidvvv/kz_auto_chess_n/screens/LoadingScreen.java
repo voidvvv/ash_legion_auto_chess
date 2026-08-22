@@ -9,6 +9,7 @@ import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.voidvvv.kz_auto_chess_n.data.GameData;
 import com.voidvvv.kz_auto_chess_n.render.Assets;
 import com.voidvvv.kz_auto_chess_n.render.board.BoardGeometry;
+import com.voidvvv.kz_auto_chess_n.save.MetaService;
 
 /**
  * 装载屏（render §2.1 双 Viewport 同参数）：占位图集已在 Main.create 同步生成完毕，
@@ -19,15 +20,17 @@ public final class LoadingScreen implements Screen {
     private final Game game;
     private final Assets assets;
     private final GameData data;
+    private final MetaService metaService;
     private final OrthographicCamera camera = new OrthographicCamera();
     private final FitViewport viewport;
     private final SpriteBatch batch;
     private int framesDrawn;
 
-    public LoadingScreen(Game game, Assets assets, GameData data) {
+    public LoadingScreen(Game game, Assets assets, GameData data, MetaService metaService) {
         this.game = game;
         this.assets = assets;
         this.data = data;
+        this.metaService = metaService;
         this.viewport = new FitViewport(BoardGeometry.VIRTUAL_W, BoardGeometry.VIRTUAL_H, camera);
         this.batch = new SpriteBatch();
     }
@@ -48,7 +51,7 @@ public final class LoadingScreen implements Screen {
         batch.end();
         framesDrawn++;
         if (framesDrawn >= 2) { // 首帧已上屏 → 装载完成
-            game.setScreen(new MainMenuScreen(game, assets, data));
+            game.setScreen(new MainMenuScreen(game, assets, data, metaService));
         }
     }
 

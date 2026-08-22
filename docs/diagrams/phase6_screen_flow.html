@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Phase 6 Screen 导航与存档触发流转图</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.3/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true });</script>
+<style>body{font-family:"Microsoft YaHei",sans-serif;max-width:1100px;margin:24px auto;padding:0 12px;} table{border-collapse:collapse;} th,td{border:1px solid #999;padding:4px 10px;font-size:14px;} th{background:#eee;}</style>
+</head>
+<body>
+<h1>Phase 6 Screen 导航与存档触发流转图</h1>
+<p>依据 architecture §七/§八、GDD §2.1；Phase 5 遗留 Q3/Q5 销账（RunResultScreen 独立演出屏推 Phase 7，裁决 D6）。</p>
+<pre class="mermaid">
+flowchart TB
+    LD["LoadingScreen&lt;br/&gt;（不变：数据加载 → 首帧切菜单；新增 MetaService 透传）"]
+    MM["MainMenuScreen（本期扩展）&lt;br/&gt;① 开始远征 → RunSetupScreen&lt;br/&gt;② 继续远征（存在 run_snapshot.json 时可见）&lt;br/&gt;③ 图鉴 → CodexScreen"]
+    RS["RunSetupScreen（本期新建）&lt;br/&gt;英雄 3 卡（名/被动/熟练度 Lv·经验）&lt;br/&gt;场景 3 卡（未解锁灰置 + 前置提示）&lt;br/&gt;开始 → BattleScreen(seed, sceneId, heroId)"]
+    CX["CodexScreen（本期新建，只读）&lt;br/&gt;英雄熟练度页 + 场景解锁页 + 返回"]
+    BS["BattleScreen（本期扩展装配）&lt;br/&gt;newContext：sceneId/heroId/RunModifiers（起始金含加成）&lt;br/&gt;show：StartRun(seed, sceneId, heroId) 入队&lt;br/&gt;RUN_END 首帧：MetaService.settleRun + 清快照&lt;br/&gt;返回主菜单按钮"]
+    RE["RunEndPanel（本期扩展）&lt;br/&gt;成因 + 轮次 + 结算行（熟练度 +N / Lv.a→Lv.b / 解锁场景）&lt;br/&gt;RESTART（同英雄同场景新 seed）/ 返回主菜单"]
+    SNAP[("save/run_snapshot.json（快照轨）&lt;br/&gt;进入 SHOPPING 即写 · pause/hide 补写（仅备战期）&lt;br/&gt;RUN_END 删除 · 引用悬空删档不炸")]
+
+    LD --> MM
+    MM -->|"开始远征"| RS
+    MM -->|"图鉴"| CX
+    RS -->|"开始（域边界事件）"| BS
+    MM -->|"继续远征 = loadRunSnapshot → restoreRunContext&lt;br/&gt;（跳过 StartRun，round/敌阵/商店/名单/RNG 流全复原）"| BS
+    RS -->|"返回"| MM
+    CX -->|"返回"| MM
+    BS -->|"第 25 轮领箱 / AbandonRun → RUN_END"| RE
+    RE -->|"RESTART：新 seed 复入 startRun"| BS
+    RE -->|"返回主菜单"| MM
+    BS <-->|"进入 SHOPPING 写 / RUN_END 清"| SNAP
+    MM -.->|"hasRunSnapshot() 决定「继续远征」可见性"| SNAP
+</pre>
+<h2>快照轨触发点（存档点仅备战阶段，决策 2026-08-20 沿用）</h2>
+<table>
+<tr><th>触发</th><th>时机</th><th>条件</th><th>动作</th></tr>
+<tr><td>轮次快照</td><td>BattleScreen 观察到 phase 进入 SHOPPING（新轮/重试回备战/开局）</td><td><code>runStarted == true</code></td><td><code>MetaService.saveRunSnapshot</code></td></tr>
+<tr><td>挂起快照</td><td><code>pause()</code> / <code>hide()</code>（Android 挂起、切窗、退出）</td><td><code>phase == SHOPPING &amp;&amp; runStarted</code></td><td>同上</td></tr>
+<tr><td>删档</td><td>RUN_END 首帧（结算同拍）</td><td>—</td><td><code>MetaService.clearRunSnapshot</code></td></tr>
+<tr><td>读档</td><td>主菜单「继续远征」</td><td>快照存在且引用完整</td><td><code>restore</code>：Player/RunState/商店槽/敌阵/装备背包/<b>RNG 消耗计数</b>（burn 恢复）全复原</td></tr>
+</table>
+<h2>恢复保真清单（SnapshotCodec.restore）</h2>
+<ul>
+<li>seed / sceneId / heroId / round / 怜悯双计数 / runStarted</li>
+<li>RNG：<code>new RandomGenerator(seed, consumedCount)</code> 重放 nextFloat 对齐底层流（全消耗点均为单次 nextFloat，architecture §六）</li>
+<li>id 发号器：<code>SequentialIdIssuer(next)</code> 续号（单一 id 空间不断档）</li>
+<li>名单：备战席入席序 + 部署表 18 格（单位 id/模板/星级/spend/已穿装备）</li>
+<li>背包：装备 id/模板；商店 5 槽模板（含空槽）；敌阵 WaveSpec（模板/星级/强度/坐标——保「轮内敌阵不变」不变量）</li>
+<li>不持久化：logicTick（命令历史不保，恢复后清空）、notices（瞬态）</li>
+</ul>
+</body>
+</html>

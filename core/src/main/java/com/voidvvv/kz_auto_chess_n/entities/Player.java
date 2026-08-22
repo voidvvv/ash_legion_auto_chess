@@ -28,6 +28,34 @@ public class Player {
         this.gold = Math.max(0, startGold);
     }
 
+    /** 复原构造（快照轨唯一入口；不变量由 SnapshotCodec 保证，此处防御校验） */
+    public Player(int startGold, int level, int currentExp) {
+        this.gold = Math.max(0, startGold);
+        if (level < 1 || level > GameBalance.MAX_PLAYER_LEVEL) {
+            throw new IllegalArgumentException(
+                    "棋手等级必须在 1~" + GameBalance.MAX_PLAYER_LEVEL + "，实际=" + level);
+        }
+        this.level = level;
+        this.currentExp = Math.max(0, currentExp);
+    }
+
+    /** 名单复原：整体替换备战席（≤ BENCH_SIZE）与部署表（长度恒 18，元素可 null） */
+    public void restoreRoster(List<Unit> benchUnits, Unit[] deploymentGrid) {
+        Objects.requireNonNull(benchUnits, "benchUnits 不能为 null");
+        Objects.requireNonNull(deploymentGrid, "deploymentGrid 不能为 null");
+        if (benchUnits.size() > GameBalance.BENCH_SIZE) {
+            throw new IllegalArgumentException(
+                    "备战席超过 " + GameBalance.BENCH_SIZE + " 格，实际=" + benchUnits.size());
+        }
+        if (deploymentGrid.length != deployment.length) {
+            throw new IllegalArgumentException(
+                    "部署表长度必须 = " + deployment.length + "，实际=" + deploymentGrid.length);
+        }
+        bench.clear();
+        bench.addAll(benchUnits);
+        System.arraycopy(deploymentGrid, 0, deployment, 0, deployment.length);
+    }
+
     public int getGold() { return gold; }
     public int getLevel() { return level; }
     public int getCurrentExp() { return currentExp; }

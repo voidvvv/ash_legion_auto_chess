@@ -55,6 +55,24 @@ public final class GameBalance {
     public static final int MERCY_START_LOSS = 3;
     public static final int MERCY_CAP_PER_ROUND = 3;
 
+    // —— 局外成长（GDD §8.1；Lv.1 解锁 = 全英雄基础权益，与英雄被动同通道叠加——裁决 D2）——
+    /** 熟练度等级上限（GDD §8.1「等级上限 Lv.5」） */
+    public static final int MASTERY_MAX_LEVEL = 5;
+    /** Lv.1 解锁：初始金币 +2（全英雄，随开局即生效） */
+    public static final int MASTERY_LV1_START_GOLD_BONUS = 2;
+    /** Lv.2 解锁：商店 3 费概率加成（百分点；仅基础 3 费概率 > 0 的轮次生效——裁决 D5） */
+    public static final int MASTERY_LV2_RARE_SHOP_BONUS_PP = 5;
+    /** Lv.4 解锁：开局金币额外加成（工作值待调——GDD §8.1「更多待设计」裁决 D4） */
+    public static final int MASTERY_LV4_START_GOLD_BONUS = 3;
+    /** Lv.5 解锁：商店刷新费减免（工作值待调；实付下限 1 金——裁决 D4） */
+    public static final int MASTERY_LV5_REFRESH_DISCOUNT = 1;
+    /** 通关一次性熟练度经验（GDD §8.1「通关 +60」——裁决 D3） */
+    public static final int MASTERY_COMPLETE_BONUS = 60;
+    /** 每已达 1 轮熟练度经验（GDD §8.1「每通过 1 轮 +3」；AbandonRun 同口径 GDD §2.1） */
+    public static final int MASTERY_EXP_PER_ROUND = 3;
+    /** 熟练度升级经验表：Lv.1→2 起 50/100/150/200；Lv.5 封顶 0（GDD §8.1） */
+    private static final int[] MASTERY_EXP_TO_NEXT = {50, 100, 150, 200, 0};
+
     // —— 宝箱三选一（Q2 裁决 A：最小可玩规则，数值待调）——
     /** 槽2 经验书固定经验值（对齐"4 金 = 4 经验"购买价比，待调） */
     public static final int CHEST_EXP_BOOK_GAIN = 4;
@@ -154,6 +172,12 @@ public final class GameBalance {
         return EXP_TO_NEXT_LEVEL[level - 1];
     }
 
+    /** 熟练度等级 → 升到下一级所需经验；Lv.5 封顶返回 0（GDD §8.1） */
+    public static int masteryExpToNext(int level) {
+        checkMasteryLevel(level);
+        return MASTERY_EXP_TO_NEXT[level - 1];
+    }
+
     /** Boss 轮判定（固定第 7/15/25 轮） */
     public static boolean isBossRound(int round) {
         checkRound(round);
@@ -180,6 +204,13 @@ public final class GameBalance {
     private static void checkLevel(int level) {
         if (level < 1 || level > MAX_PLAYER_LEVEL) {
             throw new IllegalArgumentException("棋手等级必须在 1~" + MAX_PLAYER_LEVEL + "，实际=" + level);
+        }
+    }
+
+    private static void checkMasteryLevel(int level) {
+        if (level < 1 || level > MASTERY_MAX_LEVEL) {
+            throw new IllegalArgumentException(
+                    "熟练度等级必须在 1~" + MASTERY_MAX_LEVEL + "，实际=" + level);
         }
     }
 }

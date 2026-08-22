@@ -65,6 +65,9 @@ class SynergySystemTest {
                         threshold(2, stat(StatKey.ARMOR, EffectOp.ADD, 20f)),
                         threshold(4, stat(StatKey.ARMOR, EffectOp.ADD, 50f), stat(StatKey.ATTACK, EffectOp.PCT, 15f)),
                         threshold(6, stat(StatKey.ARMOR, EffectOp.ADD, 100f)))));
+        synergies.put("syn_beast", new SynergyData("syn_beast", "野兽", SynergySource.RACE, "野兽",
+                Arrays.asList(
+                        threshold(2, stat(StatKey.ATTACK_SPEED, EffectOp.PCT, 15f)))));
         return new GameData(new LinkedHashMap<String, UnitData>(), new LinkedHashMap<String, com.voidvvv.kz_auto_chess_n.data.SkillData>(),
                 synergies, new LinkedHashMap<String, com.voidvvv.kz_auto_chess_n.data.SceneData>(),
                 new ArrayList<String>());
@@ -172,5 +175,77 @@ class SynergySystemTest {
                 .isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> SYSTEM.resolve(new ArrayList<UnitData>(), null))
                 .isInstanceOf(NullPointerException.class);
+    }
+
+    // —— 增幅重载（Phase 6 CP10，裁决 D12：「荆语」当档全效果 ×1.25） ——
+
+    @Test
+    @DisplayName("2 参重载回归锚：与 3 参空映射输出全等（actives/修正块/开局效果）")
+    void twoArgOverloadMatchesEmptyAmp() {
+        List<UnitData> four = new ArrayList<UnitData>();
+        for (int i = 0; i < 4; i++) {
+            four.add(unit("w" + i, "兽人", "战士"));
+        }
+        SynergySnapshot legacy = SYSTEM.resolve(four, data());
+        SynergySnapshot withEmptyAmp = SYSTEM.resolve(four, data(),
+                new java.util.LinkedHashMap<String, Float>());
+        assertThat(withEmptyAmp.getActives()).hasSameSizeAs(legacy.getActives());
+        assertThat(withEmptyAmp.modifiers().addOf(StatKey.HP)).isEqualTo(legacy.modifiers().addOf(StatKey.HP));
+        assertThat(withEmptyAmp.modifiers().pctOf(StatKey.ATTACK)).isEqualTo(legacy.modifiers().pctOf(StatKey.ATTACK));
+        assertThat(withEmptyAmp.getOpeningEffects()).hasSameSizeAs(legacy.getOpeningEffects());
+    }
+
+    @Test
+    @DisplayName("增幅三通道：ADD 四舍五入（150→188）/ PCT 浮点（20→25、15→18.75）/ effect 浮点（SHIELD 0.3→0.375）")
+    void ampScalesAllChannels() {
+        java.util.Map<String, Float> amp = new java.util.LinkedHashMap<String, Float>();
+        amp.put("syn_orc", 0.25f);
+
+        // 兽人 (2) 档：hp ADD 150 → Math.round(150×1.25)=188
+        SynergySnapshot two = SYSTEM.resolve(Arrays.asList(
+                unit("a", "兽人", "法师"), unit("b", "兽人", "法师")), data(), amp);
+        assertThat(two.modifiers().addOf(StatKey.HP)).isEqualTo(188f);
+
+        // 兽人 (4) 档：hp ADD 400 → 500；attack PCT 20 → 25
+        List<UnitData> four = new ArrayList<UnitData>();
+        for (int i = 0; i < 4; i++) {
+            four.add(unit("o" + i, "兽人", "法师"));
+        }
+        SynergySnapshot fourSnapshot = SYSTEM.resolve(four, data(), amp);
+        assertThat(fourSnapshot.modifiers().addOf(StatKey.HP)).isEqualTo(500f);
+        assertThat(fourSnapshot.modifiers().pctOf(StatKey.ATTACK)).isEqualTo(25f);
+
+        // 兽人 (6) 档：SHIELD 0.3 → 0.375（effect 通道浮点）；lifesteal ADD 20 → 25
+        List<UnitData> six = new ArrayList<UnitData>();
+        for (int i = 0; i < 6; i++) {
+            six.add(unit("s" + i, "兽人", "游侠"));
+        }
+        SynergySnapshot sixSnapshot = SYSTEM.resolve(six, data(), amp);
+        assertThat(sixSnapshot.getOpeningEffects().get(0).getValue()).isEqualTo(0.375f);
+        assertThat(sixSnapshot.modifiers().addOf(StatKey.LIFESTEAL)).isEqualTo(25f);
+
+        // 野兽 (2) 档：attackSpeed PCT 15 → 18.75（「荆语」主目标形态）
+        java.util.Map<String, Float> beastAmp = new java.util.LinkedHashMap<String, Float>();
+        beastAmp.put("syn_beast", 0.25f);
+        SynergySnapshot beasts = SYSTEM.resolve(Arrays.asList(
+                unit("b1", "野兽", "刺客"), unit("b2", "野兽", "刺客")), data(), beastAmp);
+        assertThat(beasts.modifiers().pctOf(StatKey.ATTACK_SPEED)).isEqualTo(18.75f);
+    }
+
+    @Test
+    @DisplayName("未列入 amp 的羁绊零影响（战士档原值）；空阵容仍 EMPTY")
+    void unlistedSynergyUnaffected() {
+        java.util.Map<String, Float> amp = new java.util.LinkedHashMap<String, Float>();
+        amp.put("syn_beast", 0.25f); // 只增幅野兽，兽人/战士不受影响
+        List<UnitData> four = new ArrayList<UnitData>();
+        for (int i = 0; i < 4; i++) {
+            four.add(unit("w" + i, "兽人", "战士"));
+        }
+        SynergySnapshot snapshot = SYSTEM.resolve(four, data(), amp);
+        assertThat(snapshot.modifiers().addOf(StatKey.HP)).isEqualTo(400f); // 兽人 (4) 原值
+        assertThat(snapshot.modifiers().addOf(StatKey.ARMOR)).isEqualTo(50f); // 战士 (4) 原值
+
+        assertThat(SYSTEM.resolve(new ArrayList<UnitData>(), data(), amp))
+                .isSameAs(SynergySnapshot.EMPTY);
     }
 }

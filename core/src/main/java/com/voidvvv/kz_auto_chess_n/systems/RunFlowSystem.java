@@ -60,8 +60,9 @@ public final class RunFlowSystem {
             if (runState.isRunStarted() || runState.getRound() != 1
                     || runState.getPhase() != GamePhase.SHOPPING
                     || start.getSeed() != runState.getSeed()
-                    || !start.getSceneId().equals(runState.getSceneId())) {
-                return false; // 非新鲜上下文或装配点错位（口径 #11，静默防线）
+                    || !start.getSceneId().equals(runState.getSceneId())
+                    || !Objects.equals(start.getHeroId(), runState.getHeroId())) {
+                return false; // 非新鲜上下文或装配点错位（口径 #11，静默防线；heroId 同款校验 Phase 6）
             }
             startRun(ctx);
             return true;
@@ -72,7 +73,8 @@ public final class RunFlowSystem {
                 return false;
             }
             BattleState state = battleSystem.startBattle(ctx.getPlayer(), runState.getEnemyWave(),
-                    ctx.getGameData(), ctx.getRng(), runState.getIdIssuer()); // 零棋子允许开战
+                    ctx.getGameData(), ctx.getRng(), runState.getIdIssuer(),
+                    runState.getModifiers()); // 零棋子允许开战；局外修正透传（Phase 6）
             ctx.setBattleState(state);
             runState.setPhase(GamePhase.BATTLE);
             return true;
@@ -120,7 +122,8 @@ public final class RunFlowSystem {
         runState.setPhase(GamePhase.SHOPPING);
         ctx.setBattleState(null);
         beginRound(ctx);
-        ctx.getShop().reroll(runState.getRound(), ctx.getGameData(), ctx.getRng());
+        ctx.getShop().reroll(runState.getRound(), ctx.getGameData(), ctx.getRng(),
+                runState.getModifiers()); // 免费刷新同吃概率加成与池门控（Phase 6，口径与 RefreshShop 一致）
         runState.addNotice("第 " + runState.getRound() + " 轮开始（商店免费刷新）");
     }
 
@@ -193,7 +196,8 @@ public final class RunFlowSystem {
         runState.setMercyGoldThisRound(0);
         runState.setPhase(GamePhase.SHOPPING);
         beginRound(ctx);
-        ctx.getShop().reroll(runState.getRound(), ctx.getGameData(), ctx.getRng());
+        ctx.getShop().reroll(runState.getRound(), ctx.getGameData(), ctx.getRng(),
+                runState.getModifiers()); // 新轮免费刷新同吃加成与门控（Phase 6）
         runState.addNotice("第 " + runState.getRound() + " 轮开始（商店免费刷新）");
     }
 

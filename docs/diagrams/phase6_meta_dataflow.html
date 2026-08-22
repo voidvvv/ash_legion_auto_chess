@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Phase 6 局外成长数据流图（档案域 ↔ 局内模拟域）</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.3/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true });</script>
+<style>body{font-family:"Microsoft YaHei",sans-serif;max-width:1100px;margin:24px auto;padding:0 12px;} table{border-collapse:collapse;} th,td{border:1px solid #999;padding:4px 10px;font-size:14px;} th{background:#eee;}</style>
+</head>
+<body>
+<h1>Phase 6 局外成长数据流图（档案域 ↔ 局内模拟域）</h1>
+<p>依据 GDD §八/§7.4、architecture §一/§三/§八；Phase 5 遗留项（Q3 英雄选择 / Q5 终局三屏与存档 / heroes.json / MasteryCalculator stub）本期销账。</p>
+<pre class="mermaid">
+flowchart TB
+    subgraph STATIC["静态数据域（加载一次终身只读，JsonLoader fail-fast）"]
+        HEROES["heroes.json（本期新增，3 英雄）&lt;br/&gt;id / name / desc / passive(type+value+synergyIds) / legendaryUnitId"]
+        SCENES["scenes.json（本期扩展 shopUnlocks + 增至 3 场景）&lt;br/&gt;unlockAfter 前置链 + enemyPool + bosses + shopUnlocks"]
+        UNITS["units.json（本期增补：场景棋子 6 + 英雄传奇 3 + 新 Boss 6）"]
+        SYNERGIES["synergies.json（本期增补：亡灵 / 巨人，工作值待调）"]
+    end
+
+    subgraph PROFILE["档案域（方案 A：轻量语义调用，无命令队列）"]
+        PF[("save/profile.json&lt;br/&gt;version / heroProgress{exp,level} / completedScenes")]
+        PS["ProfileService（纯函数，零 Gdx）&lt;br/&gt;settle()：熟练度升级 + 通关场景登记 + 新解锁派生&lt;br/&gt;runModifiers()：英雄被动 × 熟练度等级 × 场景解锁 → RunModifiers&lt;br/&gt;unlockedSceneIds()：unlockAfter ∈ completedScenes 派生（不存解锁位，防漂移）"]
+        MS["MetaService（Screen 唯一门面）&lt;br/&gt;settleRun / resolveRunModifiers / isSceneUnlocked / 快照读写"]
+    end
+
+    subgraph RUN["局内模拟域（确定性，命令流不变）"]
+        RS["RunState（本期扩展）&lt;br/&gt;+ heroId（StartRun 参数，回放第 0 条记录）&lt;br/&gt;+ modifiers（RunModifiers，装配期算好即冻结）"]
+        SHOP["ShopSystem.reroll / RefreshShop&lt;br/&gt;3 费概率 +5pp（Lv.2，基础 p3&gt;0 轮次）/ 刷新费 -1（Lv.5）&lt;br/&gt;商店池门控：场景 shopUnlocks + 本英雄传奇（Lv.3）"]
+        BATTLE["BattleSystem.startBattle&lt;br/&gt;奥兰多「战歌」：全队 energyGainRate +15（修正源列表第 3 源）&lt;br/&gt;薇拉「荆语」：野兽/游侠羁绊效果 ×1.25（SynergySystem 增幅重载）"]
+        FLOW["RunFlowSystem.endRun&lt;br/&gt;masteryAwarded = MasteryCalculator.settle(cause, round)&lt;br/&gt;COMPLETED = 60 + 轮数×3 / ABANDONED = 轮数×3"]
+    end
+
+    SETUP["RunSetupScreen（Screen 装配点）&lt;br/&gt;英雄 3 卡（含熟练度 Lv/经验）+ 场景 3 卡（未解锁灰置）&lt;br/&gt;开始 → seed + sceneId + heroId"]
+    END["RUN_END（BattleScreen 观察首批触发，Screen 点火器原则）&lt;br/&gt;MetaService.settleRun → Settlement{expGained, levelFrom→To, 新解锁场景}&lt;br/&gt;ProfileStore.save → RunEndPanel 结算行展示 + 清快照"]
+
+    HEROES --> PS
+    SCENES --> PS
+    UNITS --> SHOP
+    SYNERGIES --> BATTLE
+    PF --> PS
+    PS --> MS
+    SETUP -->|"resolveRunModifiers(heroId)"| MS
+    MS -->|"RunModifiers（不可变值对象）"| RS
+    RS --> SHOP
+    RS --> BATTLE
+    RS --> FLOW
+    FLOW -->|"masteryAwarded（纯模拟态）"| END
+    END -->|"settle + persist"| PF
+    END -.->|"新解锁场景 → 下局 RunSetup 可选"| SETUP
+</pre>
+<h2>关键边界（architecture §一 三态域）</h2>
+<table>
+<tr><th>边界事件</th><th>归宿</th><th>说明</th></tr>
+<tr><td>RunSetup「开始远征」</td><td>域边界事件</td><td>UI 态结算为 <code>StartRun(seed, sceneId, heroId)</code> 参数（heroId 扩展位本期启用）</td></tr>
+<tr><td>RUN_END 首帧观察</td><td>档案语义调用</td><td>BattleScreen 调 <code>MetaService.settleRun</code>；模拟域（RunFlowSystem）不触碰档案 IO，回放性保持</td></tr>
+<tr><td>进入 SHOPPING / pause / hide</td><td>快照轨写入</td><td>存档点仅备战阶段（决策 2026-08-20）；RUN_END 删档</td></tr>
+<tr><td>商店 reroll / 开战派生</td><td>确定性系统反应</td><td>RunModifiers 在装配期冻结进 RunState，同 seed + 同 heroId + 同命令流 → 同结果</td></tr>
+</table>
+<h2>熟练度等级解锁表（GDD §8.1 + 本期工作值）</h2>
+<table>
+<tr><th>等级</th><th>解锁内容</th><th>代码承载</th></tr>
+<tr><td>Lv.1</td><td>初始金币 +2（全英雄基础权益）</td><td><code>RunModifiers.startGoldBonus</code></td></tr>
+<tr><td>Lv.2</td><td>商店 3 费概率 +5pp（仅该英雄）</td><td><code>RunModifiers.rareShopBonusPp</code>（ShopSystem 权重调整，RNG 消耗不变）</td></tr>
+<tr><td>Lv.3</td><td>解锁该英雄专属传奇棋子（进商店池）</td><td><code>RunModifiers.legendaryUnitId</code>（池门控）</td></tr>
+<tr><td>Lv.4</td><td>开局金币额外 +3（<b>工作值待调</b>，GDD「更多待设计」）</td><td><code>RunModifiers.startGoldBonus</code> 叠加</td></tr>
+<tr><td>Lv.5</td><td>商店刷新费 -1，最低实付 1 金（<b>工作值待调</b>）</td><td><code>RunModifiers.refreshCostDiscount</code></td></tr>
+</table>
+</body>
+</html>
