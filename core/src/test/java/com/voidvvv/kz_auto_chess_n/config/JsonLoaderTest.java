@@ -13,7 +13,11 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -31,9 +35,9 @@ class JsonLoaderTest {
     }
 
     @Test
-    @DisplayName("种子规模：6 棋子 / 11 技能 / 6 羁绊 / 1 场景")
+    @DisplayName("种子规模：12 棋子（9 可购 + 3 Boss，CP31 铺量）/ 11 技能 / 6 羁绊 / 1 场景")
     void seedCounts() {
-        assertThat(data.getUnits()).hasSize(6);
+        assertThat(data.getUnits()).hasSize(12);
         assertThat(data.getSkills()).hasSize(11);
         assertThat(data.getSynergies()).hasSize(6);
         assertThat(data.getScenes()).hasSize(1);
@@ -164,16 +168,18 @@ class JsonLoaderTest {
     }
 
     @Test
-    @DisplayName("软告警：5 孤儿技能 + 2 孤儿羁绊（野兽/法师无种子单位）+ 1 行风味聚合")
+    @DisplayName("软告警：2 孤儿技能（铺量后）+ 0 孤儿羁绊 + 1 行风味聚合")
     void softWarningsOnSeed() {
         List<String> warnings = data.getWarnings();
-        // 孤儿技能：rampage/mass_heal/long_snipe/starfall/poison_cloud 无单位引用
-        assertThat(warnings).anyMatch(w -> w.contains("孤儿技能") && w.contains("skill_rampage"));
+        // 孤儿技能：铺量后仅 long_snipe/starfall 无单位引用（rampage/mass_heal/poison_cloud 已被新模板引用）
+        assertThat(warnings).anyMatch(w -> w.contains("孤儿技能") && w.contains("skill_long_snipe"));
         assertThat(warnings).anyMatch(w -> w.contains("孤儿技能") && w.contains("skill_starfall"));
-        // 孤儿羁绊：种子单位无野兽种族、无法师职业
-        assertThat(warnings).anyMatch(w -> w.contains("孤儿羁绊") && w.contains("syn_beast"));
-        assertThat(warnings).anyMatch(w -> w.contains("孤儿羁绊") && w.contains("syn_mage"));
-        // 风味聚合：暗夜/精灵/植物/Boss 一行列出
+        assertThat(warnings).noneMatch(w -> w.contains("孤儿技能") && w.contains("skill_rampage"));
+        assertThat(warnings).noneMatch(w -> w.contains("孤儿技能") && w.contains("skill_mass_heal"));
+        assertThat(warnings).noneMatch(w -> w.contains("孤儿技能") && w.contains("skill_poison_cloud"));
+        // 孤儿羁绊：铺量后野兽（狼崽/兽猎手）、法师（暗夜学徒/精灵德鲁伊）均有可购模板，告警清零
+        assertThat(warnings).noneMatch(w -> w.contains("孤儿羁绊"));
+        // 风味聚合：暗夜/精灵/植物/Boss 一行列出（非新增羁绊键，既有告警口径不变）
         assertThat(warnings).anyMatch(w -> w.contains("风味") && w.contains("暗夜")
                 && w.contains("精灵") && w.contains("植物") && w.contains("Boss"));
         // 无 ALL_ENEMIES 非 Boss 引用告警（星陨未被任何单位引用，只报孤儿技能）
@@ -187,5 +193,66 @@ class JsonLoaderTest {
                 .isInstanceOf(UnsupportedOperationException.class);
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> data.getWarnings().add("x"))
                 .isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    // —— CP31 铺量断言（units.json 可购模板 3 → 9）——
+
+    @Test
+    @DisplayName("铺量模板落位：6 新模板名称/种族/职业/费阶/技能全量映射")
+    void bulkTemplatesMapped() {
+        assertBulkTemplate("unit_boar_rider", "野猪骑士", "兽人", "战士", 1, "skill_rampage");
+        assertBulkTemplate("unit_wolf_pup", "狼崽", "野兽", "刺客", 1, "skill_execute");
+        assertBulkTemplate("unit_mage_apprentice", "暗夜学徒", "暗夜", "法师", 1, "skill_poison_cloud");
+        assertBulkTemplate("unit_fairy_druid", "精灵德鲁伊", "精灵", "法师", 2, "skill_mass_heal");
+        assertBulkTemplate("unit_beast_archer", "兽猎手", "野兽", "游侠", 2, "skill_pierce");
+        assertBulkTemplate("unit_shadow_blade", "暗影之刃", "暗夜", "刺客", 3, "skill_execute");
+        // 暗影之刃：3 费刺客切入后排（沿刺客 specialPriority 口径）
+        assertThat(data.getUnit("unit_shadow_blade").getSpecialPriority().jsonName()).isEqualTo("BACKLINE");
+    }
+
+    /** 铺量模板共性断言：非 Boss、升星倍率缺省 1.8（防手误漏写/错写关键字段） */
+    private static void assertBulkTemplate(String id, String name, String race, String unitClass,
+                                           int cost, String skillId) {
+        UnitData unit = data.getUnit(id);
+        assertThat(unit).as("模板 %s 存在", id).isNotNull();
+        assertThat(unit.getName()).isEqualTo(name);
+        assertThat(unit.getRace()).isEqualTo(race);
+        assertThat(unit.getUnitClass()).isEqualTo(unitClass);
+        assertThat(unit.getCost()).isEqualTo(cost);
+        assertThat(unit.getSkillId()).isEqualTo(skillId);
+        assertThat(unit.isBoss()).isFalse();
+        assertThat(unit.getUpgradeMultiplier()).isEqualTo(1.8f);
+    }
+
+    @Test
+    @DisplayName("铺量后费阶池分布：非 Boss 可购 1 费 4 / 2 费 3 / 3 费 2（商店 tierPool 同口径）")
+    void purchasableTierDistribution() {
+        Map<Integer, List<String>> byCost = new LinkedHashMap<Integer, List<String>>();
+        for (UnitData unit : data.getUnits().values()) {
+            if (!unit.isBoss()) {
+                byCost.computeIfAbsent(unit.getCost(), c -> new ArrayList<String>()).add(unit.getId());
+            }
+        }
+        assertThat(byCost.get(1)).containsExactly("unit_warrior_01", "unit_boar_rider",
+                "unit_wolf_pup", "unit_mage_apprentice");
+        assertThat(byCost.get(2)).containsExactly("unit_ranger_01", "unit_fairy_druid", "unit_beast_archer");
+        assertThat(byCost.get(3)).containsExactly("unit_assassin_01", "unit_shadow_blade");
+    }
+
+    @Test
+    @DisplayName("铺量后羁绊覆盖：6 首发羁绊各有 ≥2 个可购模板（(2) 档预演可达）")
+    void synergyCoverageAtLeastTwo() {
+        Map<String, Integer> counts = new HashMap<String, Integer>();
+        for (UnitData unit : data.getUnits().values()) {
+            if (!unit.isBoss()) { // 双通道各计 1（SynergySystem 同口径）
+                counts.merge(unit.getRace(), 1, Integer::sum);
+                counts.merge(unit.getUnitClass(), 1, Integer::sum);
+            }
+        }
+        for (SynergyData synergy : data.getSynergies().values()) {
+            assertThat(counts.getOrDefault(synergy.getKey(), 0))
+                    .as("羁绊 %s（key=%s）可购模板数", synergy.getId(), synergy.getKey())
+                    .isGreaterThanOrEqualTo(2);
+        }
     }
 }
