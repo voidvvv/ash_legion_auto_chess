@@ -24,9 +24,53 @@ public final class BoardGeometry {
     public static final int BENCH_W = 108;
     public static final int BENCH_H = 120;
 
+    /** ③ 装备背包 3×2（UI 域 InventoryPanel 定位同源；槽 36×36）。
+     *  render §九原表值 (20,140,108,100) 与 ② 备战席底边 168 压叠 28px——feedback01 修正：
+     *  下移至 172 起、槽高 36（2×36=72），底边 244 与 ⑨ 顶边相接。 */
+    public static final int INVENTORY_X = 20;
+    public static final int INVENTORY_Y = 172;
+    public static final int INVENTORY_W = 108;
+    public static final int INVENTORY_H = 72;
+    /** ⑤ 羁绊面板（UI 域） */
+    public static final int SYNERGY_X = 508;
+    public static final int SYNERGY_Y = 48;
+    public static final int SYNERGY_W = 112;
+    public static final int SYNERGY_H = 144;
+    /** ⑦ 出售区（棋盘域拖拽终点，仅 SHOPPING） */
+    public static final int SELL_ZONE_X = 564;
+    public static final int SELL_ZONE_Y = 246;
+    public static final int SELL_ZONE_W = 56;
+    public static final int SELL_ZONE_H = 46;
+    /** ⑧ 商店栏（UI 域 ShopBar，全宽 640） */
+    public static final int SHOP_BAR_Y = 296;
+    public static final int SHOP_BAR_H = 64;
+    /** ⑨ 事件通知小窗（render §九原值 y=230 与 ③ 底边 240 重叠 10px——差异声明 #4，改 244 起） */
+    public static final int NOTIFY_X = 20;
+    public static final int NOTIFY_Y = 244;
+    public static final int NOTIFY_W = 128;
+    public static final int NOTIFY_H = 46;
+
+    // —— Phase 5.1 R1：悬停预览卡固定锚点（裁决 A；防遮挡论证见计划 §5.3-1） ——
+
+    /** 棋盘域悬停卡：②③（右缘 128）与 ④ 棋盘（左缘 224）之间的左侧空带；底边 240 避开 ⑨（y 244 起）。
+     *  瞬态覆盖 ⑥ 开战按钮（x134~198, y88~128）：指针移向按钮即离开棋子命中域 → 卡立即隐藏，无点击阻塞（§5.3-1） */
+    public static final int BOARD_HOVER_X = 128;
+    public static final int BOARD_HOVER_Y = 48;
+    public static final int BOARD_HOVER_W = 94;
+    public static final int BOARD_HOVER_H = 192;
+    /** 商店卡悬停卡：精确覆盖 ⑤ 羁绊面板区（瞬态覆盖，移开即恢复；⑥ 实际在左侧——差异声明 #2） */
+    public static final int SHOP_HOVER_X = 508;
+    public static final int SHOP_HOVER_Y = 48;
+    public static final int SHOP_HOVER_W = 112;
+    public static final int SHOP_HOVER_H = 192;
+
     public static final int CELL = 32;
     public static final int BENCH_SLOT_W = 36;
     public static final int BENCH_SLOT_H = 40;
+    public static final int INVENTORY_SLOT_W = 36;
+    public static final int INVENTORY_SLOT_H = 36;
+    /** 备战期引导文案基线（feedback01 修正：原 y=24 落在 ⑧ 商店栏带内被半透明卡牌遮挡——移到 ④ 棋盘上边 274 之上） */
+    public static final int SHOP_HINT_Y = 280;
 
     private BoardGeometry() {
     }
@@ -86,5 +130,21 @@ public final class BoardGeometry {
         int col = (px - BENCH_X) / BENCH_SLOT_W;
         int row = (py - BENCH_Y) / BENCH_SLOT_H;
         return col * 3 + row;
+    }
+
+    // —— Phase 5 CP17：⑦ 出售区命中 / ③ 背包槽定位 ——
+
+    /** 像素点是否在 ⑦ 出售区内（boardProcessor 拖拽终点判定） */
+    public static boolean isInSellZone(int px, int py) {
+        return px >= SELL_ZONE_X && px < SELL_ZONE_X + SELL_ZONE_W
+                && py >= SELL_ZONE_Y && py < SELL_ZONE_Y + SELL_ZONE_H;
+    }
+
+    /** ③ 背包槽中心（3 列 × 2 行；row 0 在下——scene2d y 向上） */
+    public static int[] inventorySlotCenter(int slotIndex) {
+        int col = slotIndex / 2;
+        int row = slotIndex % 2;
+        return new int[]{INVENTORY_X + col * INVENTORY_SLOT_W + INVENTORY_SLOT_W / 2,
+                INVENTORY_Y + INVENTORY_H - row * INVENTORY_SLOT_H - INVENTORY_SLOT_H / 2};
     }
 }

@@ -7,23 +7,30 @@ import com.voidvvv.kz_auto_chess_n.command.CommandManager;
 import com.voidvvv.kz_auto_chess_n.command.MoveUnitCommand;
 import com.voidvvv.kz_auto_chess_n.command.PlacementTarget;
 import com.voidvvv.kz_auto_chess_n.command.RunContext;
+import com.voidvvv.kz_auto_chess_n.command.SellUnitCommand;
 import com.voidvvv.kz_auto_chess_n.config.GameBalance;
+import com.voidvvv.kz_auto_chess_n.entities.BattleState;
+import com.voidvvv.kz_auto_chess_n.entities.BattleUnit;
 import com.voidvvv.kz_auto_chess_n.entities.GamePhase;
 import com.voidvvv.kz_auto_chess_n.entities.Unit;
+import com.voidvvv.kz_auto_chess_n.entities.WaveSpec;
 import com.voidvvv.kz_auto_chess_n.render.board.BoardGeometry;
+
+import java.util.List;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.BooleanSupplier;
+import java.util.function.IntConsumer;
 import java.util.function.Supplier;
 
 /**
- * 棋盘域输入（input §2.3/§2.4/§3）：统辖棋盘 6×7 玩家区与备战席 3×3（出售区 Phase 5）。
+ * 棋盘域输入（input §2.3/§2.4/§3）：统辖棋盘 6×7 玩家区与备战席 3×3。
  *
  * <p>unproject 用棋盘 viewport（含其 camera）——坐标陷阱防御（input §3 第四行）；
  * 每 pointer 独立 DragContext（第一陷阱：多点互不串扰，同时拖拽 ≤1 有意义）；
  * 拖拽死区 DRAG_DEAD_ZONE_PX（unproject 后虚拟坐标，§3 第三陷阱：位移未出死区不算拖拽）；
- * 模态阻断位首行吞事件（本期常 false）。松手才入队（表现层只在合法落点产生命令，
+ * 模态阻断位首行吞事件（BattleScreen 已接 UIDialogManager::isShowing）。松手才入队（表现层只在合法落点产生命令，
  * input §4.3 双层校验的输入侧；handler 侧门控归 RunFlowSystem）。
  */
 public final class BoardInputProcessor implements InputProcessor {
@@ -51,15 +58,29 @@ public final class BoardInputProcessor implements InputProcessor {
     private final CommandManager commandManager;
     private final Supplier<RunContext> context;
     private final BooleanSupplier modalBlocked;
+    /** 死区内松手 = 点击棋子的回调（Phase 5：详情面板 / 装备待定态落点；null = 无监听） */
+    private final IntConsumer unitClickListener;
+    /** 悬停指针轨迹（feedback04：mouseMoved 记虚拟坐标，查询时按当前局面重命中——
+     *  BATTLE 期单位移动/清扫/名单变化即时反映；候选抑制见 getHoverCandidate） */
+    private float hoverX;
+    private float hoverY;
+    private boolean hoverTracked;
     private final Map<Integer, DragContext> drags = new HashMap<Integer, DragContext>();
     private final Vector2 touch = new Vector2(); // 复用（unproject 输出，零分配）
 
     public BoardInputProcessor(Viewport boardViewport, CommandManager commandManager,
                                Supplier<RunContext> context, BooleanSupplier modalBlocked) {
+        this(boardViewport, commandManager, context, modalBlocked, null);
+    }
+
+    public BoardInputProcessor(Viewport boardViewport, CommandManager commandManager,
+                               Supplier<RunContext> context, BooleanSupplier modalBlocked,
+                               IntConsumer unitClickListener) {
         this.boardViewport = boardViewport;
         this.commandManager = commandManager;
         this.context = context;
         this.modalBlocked = modalBlocked;
+        this.unitClickListener = unitClickListener;
     }
 
     // —— InputProcessor ——
@@ -79,6 +100,7 @@ public final class BoardInputProcessor implements InputProcessor {
             return false; // 未命中单位：事件下传
         }
         drags.put(pointer, new DragContext(unit.getId(), placementAt(touch.x, touch.y), touch.x, touch.y));
+        hoverTracked = false; // 按下即清悬停（起手瞬间不出残卡；拖拽抑制由候选查询施加）
         return true;
     }
 
@@ -106,7 +128,14 @@ public final class BoardInputProcessor implements InputProcessor {
             return false;
         }
         if (!drag.dragging) {
-            return true; // 死区内松手 = 点击：本期无命令（Phase 5 详情面板挂点位）
+            if (unitClickListener != null) {
+                unitClickListener.accept(drag.unitId); // 死区内松手 = 点击（input §2.4：查看详情/装备落点）
+            }
+            return true;
+        }
+        if (BoardGeometry.isInSellZone((int) drag.currentX, (int) drag.currentY)) {
+            commandManager.addCommand(new SellUnitCommand(drag.unitId)); // ⑦ 出售区（GDD §3.6）
+            return true;
         }
         PlacementTarget target = dropTargetAt(drag.currentX, drag.currentY);
         if (target != null) {
@@ -138,7 +167,79 @@ public final class BoardInputProcessor implements InputProcessor {
 
     @Override
     public boolean mouseMoved(int screenX, int screenY) {
-        return false;
+        if (modalBlocked.getAsBoolean()) {
+            hoverTracked = false; // 模态期无悬停（input §3）
+            return false;
+        }
+        GamePhase phase = context.get().getRunState().getPhase();
+        if (phase != GamePhase.SHOPPING && phase != GamePhase.BATTLE) {
+            hoverTracked = false; // 悬停仅备战/战斗期（feedback04：BATTLE 敌我战斗单位）
+            return false;
+        }
+        unproject(screenX, screenY);
+        hoverX = touch.x;
+        hoverY = touch.y;
+        hoverTracked = true;
+        return false; // 悬停不消费事件（uiStage/后续处理器照常收）
+    }
+
+    /**
+     * 悬停候选（渲染帧轮询，R1 + feedback04）：拖拽中/模态/无轨迹 → NONE（抑制集中于此）。
+     * 按阶段查找：SHOPPING → 玩家名单（备战席/玩家区）+ 敌阵侦察虚影（多 spec 同格取第一个，
+     * 与 drawShopping 绘制序一致的登记口径）；BATTLE → 战斗单位（敌我，isCleaned 自行过滤
+     * ——沿 BattleRenderer 口径 #13）；RESULT/其它 → NONE。
+     */
+    public HoverCandidate getHoverCandidate() {
+        if (isDragging() || modalBlocked.getAsBoolean() || !hoverTracked) {
+            return HoverCandidate.NONE;
+        }
+        RunContext ctx = context.get();
+        GamePhase phase = ctx.getRunState().getPhase();
+        if (phase == GamePhase.SHOPPING) {
+            return shoppingCandidateAt(hoverX, hoverY, ctx);
+        }
+        if (phase == GamePhase.BATTLE) {
+            return battleCandidateAt(hoverX, hoverY, ctx);
+        }
+        return HoverCandidate.NONE;
+    }
+
+    /** SHOPPING 候选：玩家棋子优先（区域互斥——虚影仅敌区行 0~2，玩家区行 4~6 + 备战席） */
+    private HoverCandidate shoppingCandidateAt(float vx, float vy, RunContext ctx) {
+        Unit player = unitAt(vx, vy, ctx);
+        if (player != null) {
+            return HoverCandidate.ofPlayerUnit(player);
+        }
+        int[] cell = BoardGeometry.pixelToCell((int) vx, (int) vy);
+        if (cell == null) {
+            return HoverCandidate.NONE;
+        }
+        List<WaveSpec> wave = ctx.getRunState().getEnemyWave();
+        for (int i = 0; i < wave.size(); i++) {
+            WaveSpec spec = wave.get(i);
+            if (spec.getGridX() == cell[0] && spec.getGridY() == cell[1]) {
+                return HoverCandidate.ofEnemyPreview(i, spec.getTemplate());
+            }
+        }
+        return HoverCandidate.NONE;
+    }
+
+    /** BATTLE 候选：战斗单位敌我（getUnits 构造序 = id 升序，首命中即返回——确定性） */
+    private HoverCandidate battleCandidateAt(float vx, float vy, RunContext ctx) {
+        BattleState battle = ctx.getBattleState();
+        if (battle == null) {
+            return HoverCandidate.NONE;
+        }
+        int[] cell = BoardGeometry.pixelToCell((int) vx, (int) vy);
+        if (cell == null) {
+            return HoverCandidate.NONE;
+        }
+        for (BattleUnit unit : battle.getUnits()) { // 含亡者：isCleaned 自行过滤（口径 #13）
+            if (!unit.isCleaned() && unit.getGridX() == cell[0] && unit.getGridY() == cell[1]) {
+                return HoverCandidate.ofBattleUnit(unit);
+            }
+        }
+        return HoverCandidate.NONE;
     }
 
     @Override
@@ -174,6 +275,12 @@ public final class BoardInputProcessor implements InputProcessor {
             return null;
         }
         return dropTargetAt(drag.currentX, drag.currentY);
+    }
+
+    /** 拖拽悬停是否在 ⑦ 出售区（渲染金红高亮用） */
+    public boolean isDropOnSellZone() {
+        DragContext drag = dropContext();
+        return drag != null && BoardGeometry.isInSellZone((int) drag.currentX, (int) drag.currentY);
     }
 
     // —— 内部 ——

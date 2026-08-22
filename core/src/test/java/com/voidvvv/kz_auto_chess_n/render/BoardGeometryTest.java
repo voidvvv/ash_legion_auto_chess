@@ -145,4 +145,130 @@ class BoardGeometryTest {
             assertThat(c[1]).isEqualTo(BoardGeometry.BENCH_Y + row * BoardGeometry.BENCH_SLOT_H + BoardGeometry.BENCH_SLOT_H / 2);
         }
     }
+
+    // —— Phase 5 CP17：③⑤⑦⑧⑨ 区常量与命中判定（render §九 Phase 4 遗留区） ——
+
+    @Test
+    @DisplayName("③⑤⑦⑧ 区常量与 render §九坐标表逐项对照（±4px 容差；③ 为 feedback01 修正值、⑨ 差异声明 #4 例外单独断言）")
+    void phase5ZonesMatchRenderLayoutTable() {
+        // render_design.md §九：③ (20,140,108,100)——原表值与 ② 压叠 28px，feedback01 修正为 (20,172,108,72)；
+        // ⑤ (508,48,112,144)、⑦ (564,246,56,46)、⑧ (0,296,640,64)
+        assertThat(BoardGeometry.INVENTORY_X).isBetween(20 - 4, 20 + 4);
+        assertThat(BoardGeometry.INVENTORY_Y).isBetween(172 - 4, 172 + 4);
+        assertThat(BoardGeometry.INVENTORY_W).isBetween(108 - 4, 108 + 4);
+        assertThat(BoardGeometry.INVENTORY_H).isBetween(72 - 4, 72 + 4);
+        assertThat(BoardGeometry.SYNERGY_X).isBetween(508 - 4, 508 + 4);
+        assertThat(BoardGeometry.SYNERGY_Y).isBetween(48 - 4, 48 + 4);
+        assertThat(BoardGeometry.SYNERGY_W).isBetween(112 - 4, 112 + 4);
+        assertThat(BoardGeometry.SYNERGY_H).isBetween(144 - 4, 144 + 4);
+        assertThat(BoardGeometry.SELL_ZONE_X).isBetween(564 - 4, 564 + 4);
+        assertThat(BoardGeometry.SELL_ZONE_Y).isBetween(246 - 4, 246 + 4);
+        assertThat(BoardGeometry.SELL_ZONE_W).isBetween(56 - 4, 56 + 4);
+        assertThat(BoardGeometry.SELL_ZONE_H).isBetween(46 - 4, 46 + 4);
+        assertThat(BoardGeometry.SHOP_BAR_Y).isBetween(296 - 4, 296 + 4);
+        assertThat(BoardGeometry.SHOP_BAR_H).isBetween(64 - 4, 64 + 4);
+        // ⑨ render §九原值 (20,230,128,60) 与 ③ 底边 240 重叠 10px——差异声明 #4 改 (20,244,128,46)
+        assertThat(BoardGeometry.NOTIFY_X).isEqualTo(20);
+        assertThat(BoardGeometry.NOTIFY_Y).isEqualTo(244);
+        assertThat(BoardGeometry.NOTIFY_W).isEqualTo(128);
+        assertThat(BoardGeometry.NOTIFY_H).isEqualTo(46);
+    }
+
+    @Test
+    @DisplayName("布局冲突回归：②③、③⑨、⑤⑦、⑨⑧ 相邻区互不压叠（feedback01：原 ③(140) 压叠 ② 底边 168 达 28px）")
+    void notifyZoneDoesNotOverlapInventory() {
+        assertThat(BoardGeometry.INVENTORY_Y).isGreaterThanOrEqualTo(BoardGeometry.BENCH_Y + BoardGeometry.BENCH_H);
+        assertThat(BoardGeometry.NOTIFY_Y).isGreaterThanOrEqualTo(BoardGeometry.INVENTORY_Y + BoardGeometry.INVENTORY_H);
+        // 其余相邻对也自洽：⑤ 底边不侵入 ⑦、⑨ 底边不侵入 ⑧
+        assertThat(BoardGeometry.SELL_ZONE_Y).isGreaterThanOrEqualTo(BoardGeometry.SYNERGY_Y + BoardGeometry.SYNERGY_H);
+        assertThat(BoardGeometry.SHOP_BAR_Y).isGreaterThanOrEqualTo(BoardGeometry.NOTIFY_Y + BoardGeometry.NOTIFY_H);
+    }
+
+    @Test
+    @DisplayName("引导文案基线在 ⑧ 商店栏带与 ④ 棋盘之上、顶栏之下（feedback01 回归：原 y=24 落在 ⑧ 内被卡牌遮挡）")
+    void shopHintBaselineClearOfShopBarAndBoard() {
+        int shopBandTop = BoardGeometry.VIRTUAL_H - BoardGeometry.SHOP_BAR_Y;          // ⑧ 换算 y 向上 = 64
+        int boardBandTop = BoardGeometry.BOARD_Y + BoardGeometry.BOARD_H;              // ④ 上边 = 274
+        assertThat(BoardGeometry.SHOP_HINT_Y).isGreaterThanOrEqualTo(shopBandTop + 4);
+        assertThat(BoardGeometry.SHOP_HINT_Y).isGreaterThanOrEqualTo(boardBandTop + 4);
+        assertThat(BoardGeometry.SHOP_HINT_Y + 12).isLessThanOrEqualTo(BoardGeometry.VIRTUAL_H - 40); // 不侵入顶栏带
+    }
+
+    @Test
+    @DisplayName("③ 背包常量自洽：3 列 × 2 行槽位铺满区域、槽 36×36")
+    void inventoryConstantsSelfConsistent() {
+        assertThat(BoardGeometry.INVENTORY_W).isEqualTo(3 * BoardGeometry.INVENTORY_SLOT_W);
+        assertThat(BoardGeometry.INVENTORY_H).isEqualTo(2 * BoardGeometry.INVENTORY_SLOT_H);
+    }
+
+    @Test
+    @DisplayName("inventorySlotCenter：6 槽中心全在 ③ 区内且互异；row 0 在下（scene2d y 向上）")
+    void inventorySlotCentersInsideZoneAndDistinct() {
+        java.util.Set<String> seen = new java.util.HashSet<String>();
+        for (int slot = 0; slot < 6; slot++) {
+            int[] c = BoardGeometry.inventorySlotCenter(slot);
+            assertThat(c[0]).isBetween(BoardGeometry.INVENTORY_X, BoardGeometry.INVENTORY_X + BoardGeometry.INVENTORY_W - 1);
+            assertThat(c[1]).isBetween(BoardGeometry.INVENTORY_Y, BoardGeometry.INVENTORY_Y + BoardGeometry.INVENTORY_H - 1);
+            assertThat(seen.add(c[0] + "," + c[1])).isTrue();
+        }
+        // 槽 0（col 0 row 0）在底行：y 大于槽 1（col 0 row 1，顶行）
+        assertThat(BoardGeometry.inventorySlotCenter(0)[1]).isGreaterThan(BoardGeometry.inventorySlotCenter(1)[1]);
+        // 槽 2 起换列（col 1），x 步进一槽宽
+        assertThat(BoardGeometry.inventorySlotCenter(2)[0] - BoardGeometry.inventorySlotCenter(0)[0])
+                .isEqualTo(BoardGeometry.INVENTORY_SLOT_W);
+    }
+
+    // —— Phase 5.1 CP8：悬停预览卡固定锚点（裁决 A；防遮挡论证见计划 §5.3-1） ——
+
+    @Test
+    @DisplayName("棋盘域悬停卡锚点：不压 ④ 棋盘/②③ 左列/⑨ 通知、上沿沿 ② 顶")
+    void boardHoverAnchorClearOfZones() {
+        // 右缘不压 ④ 棋盘（224 起，留 ≥2px 间隙）
+        assertThat(BoardGeometry.BOARD_HOVER_X + BoardGeometry.BOARD_HOVER_W)
+                .isLessThanOrEqualTo(BoardGeometry.BOARD_X);
+        // 左缘不压 ②③（② 底边 128 = ③ 底边 128，同一右缘）
+        assertThat(BoardGeometry.BOARD_HOVER_X)
+                .isGreaterThanOrEqualTo(BoardGeometry.BENCH_X + BoardGeometry.BENCH_W);
+        assertThat(BoardGeometry.BOARD_HOVER_X)
+                .isGreaterThanOrEqualTo(BoardGeometry.INVENTORY_X + BoardGeometry.INVENTORY_W);
+        // 下缘不压 ⑨（244 起）
+        assertThat(BoardGeometry.BOARD_HOVER_Y + BoardGeometry.BOARD_HOVER_H)
+                .isLessThanOrEqualTo(BoardGeometry.NOTIFY_Y);
+        // 上沿沿 ② 备战席顶 48
+        assertThat(BoardGeometry.BOARD_HOVER_Y).isGreaterThanOrEqualTo(BoardGeometry.BENCH_Y);
+    }
+
+    @Test
+    @DisplayName("商店悬停卡锚点：与 ⑤ 羁绊面板同位、右缘不出虚拟宽、下缘避开 ⑦ 出售区")
+    void shopHoverAnchorMatchesSynergyZone() {
+        assertThat(BoardGeometry.SHOP_HOVER_X).isEqualTo(BoardGeometry.SYNERGY_X);
+        assertThat(BoardGeometry.SHOP_HOVER_Y).isEqualTo(BoardGeometry.SYNERGY_Y);
+        assertThat(BoardGeometry.SHOP_HOVER_W).isEqualTo(BoardGeometry.SYNERGY_W);
+        assertThat(BoardGeometry.SHOP_HOVER_X + BoardGeometry.SHOP_HOVER_W)
+                .isLessThanOrEqualTo(BoardGeometry.VIRTUAL_W);
+        // 下缘不压 ⑦ 出售区（246 起）
+        assertThat(BoardGeometry.SHOP_HOVER_Y + BoardGeometry.SHOP_HOVER_H)
+                .isLessThanOrEqualTo(BoardGeometry.SELL_ZONE_Y);
+    }
+
+    @Test
+    @DisplayName("isInSellZone 四角命中、界外四向不命中（半开区间）")
+    void isInSellZoneCornersAndOutside() {
+        int x0 = BoardGeometry.SELL_ZONE_X;
+        int y0 = BoardGeometry.SELL_ZONE_Y;
+        int x1 = BoardGeometry.SELL_ZONE_X + BoardGeometry.SELL_ZONE_W;
+        int y1 = BoardGeometry.SELL_ZONE_Y + BoardGeometry.SELL_ZONE_H;
+        // 左上/右下/右上/左下四角（右/下边界为开区间，取 -1）
+        assertThat(BoardGeometry.isInSellZone(x0, y0)).isTrue();
+        assertThat(BoardGeometry.isInSellZone(x1 - 1, y1 - 1)).isTrue();
+        assertThat(BoardGeometry.isInSellZone(x1 - 1, y0)).isTrue();
+        assertThat(BoardGeometry.isInSellZone(x0, y1 - 1)).isTrue();
+        // 中心
+        assertThat(BoardGeometry.isInSellZone((x0 + x1) / 2, (y0 + y1) / 2)).isTrue();
+        // 界外：左/右/上/下 + 恰在右/下边界（开区间不含）
+        assertThat(BoardGeometry.isInSellZone(x0 - 1, y0)).isFalse();
+        assertThat(BoardGeometry.isInSellZone(x1, y0)).isFalse();
+        assertThat(BoardGeometry.isInSellZone(x0, y0 - 1)).isFalse();
+        assertThat(BoardGeometry.isInSellZone(x0, y1)).isFalse();
+    }
 }

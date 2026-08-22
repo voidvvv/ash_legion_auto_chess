@@ -77,7 +77,9 @@ public final class MainMenuScreen implements Screen {
             addListener(new ClickListener() {
                 @Override
                 public void clicked(InputEvent event, float x, float y) {
-                    game.setScreen(new BattleScreen(game, assets, data));
+                    // UI 域边界事件：点击"开始远征"结算 seed → StartRun 参数（Q3 裁决；architecture §一）
+                    long runSeed = System.nanoTime();
+                    game.setScreen(new BattleScreen(game, assets, data, runSeed));
                 }
             });
         }
@@ -88,7 +90,7 @@ public final class MainMenuScreen implements Screen {
             batch.setColor(0.75f, 0.35f, 0.25f, parentAlpha);
             batch.draw(assets.region(PlaceholderKeys.PANEL_9SLICE), getX(), getY(), getWidth(), getHeight());
             batch.setColor(old);
-            assets.font().draw(batch, "START", getX() + 58f, getY() + 23f);
+            assets.font().draw(batch, "开始远征", getX() + 56f, getY() + 23f); // 4 字 ×12px 居中于 160 宽钮
         }
     }
 }

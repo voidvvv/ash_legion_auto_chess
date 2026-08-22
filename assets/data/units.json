@@ -20,6 +20,43 @@
     "skillId": "skill_pierce"
   },
   {
+    "id": "unit_boar_rider", "name": "野猪骑士", "race": "兽人", "class": "战士", "cost": 1,
+    "baseStats": { "hp": 110, "attack": 13, "armor": 12, "attackSpeed": 0.9, "range": 1, "moveSpeed": 1.2 },
+    "upgradeMultiplier": 1.8,
+    "skillId": "skill_rampage"
+  },
+  {
+    "id": "unit_wolf_pup", "name": "狼崽", "race": "野兽", "class": "刺客", "cost": 1,
+    "baseStats": { "hp": 75, "attack": 17, "armor": 3, "attackSpeed": 1.4, "range": 1, "moveSpeed": 1.6 },
+    "upgradeMultiplier": 1.8,
+    "skillId": "skill_execute"
+  },
+  {
+    "id": "unit_mage_apprentice", "name": "暗夜学徒", "race": "暗夜", "class": "法师", "cost": 1,
+    "baseStats": { "hp": 70, "attack": 10, "armor": 3, "attackSpeed": 0.8, "range": 3, "moveSpeed": 0.9 },
+    "upgradeMultiplier": 1.8,
+    "skillId": "skill_poison_cloud"
+  },
+  {
+    "id": "unit_fairy_druid", "name": "精灵德鲁伊", "race": "精灵", "class": "法师", "cost": 2,
+    "baseStats": { "hp": 95, "attack": 14, "armor": 5, "attackSpeed": 0.9, "range": 2, "moveSpeed": 1.0 },
+    "upgradeMultiplier": 1.8,
+    "skillId": "skill_mass_heal"
+  },
+  {
+    "id": "unit_beast_archer", "name": "兽猎手", "race": "野兽", "class": "游侠", "cost": 2,
+    "baseStats": { "hp": 80, "attack": 19, "armor": 4, "attackSpeed": 1.1, "range": 3, "moveSpeed": 0.9 },
+    "upgradeMultiplier": 1.8,
+    "skillId": "skill_pierce"
+  },
+  {
+    "id": "unit_shadow_blade", "name": "暗影之刃", "race": "暗夜", "class": "刺客", "cost": 3,
+    "baseStats": { "hp": 90, "attack": 28, "armor": 6, "attackSpeed": 1.5, "range": 1, "moveSpeed": 1.9 },
+    "upgradeMultiplier": 1.8,
+    "defaultPriority": "NEAREST", "specialPriority": "BACKLINE",
+    "skillId": "skill_execute"
+  },
+  {
     "id": "boss_thorn_mother", "name": "荆棘之母", "race": "植物", "class": "Boss", "cost": 0,
     "baseStats": { "hp": 1250, "attack": 42, "armor": 20, "attackSpeed": 0.8, "range": 1, "moveSpeed": 0.6 },
     "upgradeMultiplier": 1.0,

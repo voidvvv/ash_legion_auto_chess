@@ -3,16 +3,25 @@ package com.voidvvv.kz_auto_chess_n.systems;
 import com.voidvvv.kz_auto_chess_n.config.GameBalance;
 import com.voidvvv.kz_auto_chess_n.data.BaseStats;
 import com.voidvvv.kz_auto_chess_n.data.Delivery;
+import com.voidvvv.kz_auto_chess_n.data.EffectOp;
+import com.voidvvv.kz_auto_chess_n.data.EquipmentData;
+import com.voidvvv.kz_auto_chess_n.data.EquipmentEffect;
+import com.voidvvv.kz_auto_chess_n.data.EquipmentPassive;
+import com.voidvvv.kz_auto_chess_n.data.EquipmentRarity;
+import com.voidvvv.kz_auto_chess_n.data.EquipmentSlot;
 import com.voidvvv.kz_auto_chess_n.data.GameData;
 import com.voidvvv.kz_auto_chess_n.data.SkillData;
 import com.voidvvv.kz_auto_chess_n.data.SkillEffectType;
 import com.voidvvv.kz_auto_chess_n.data.SkillShape;
+import com.voidvvv.kz_auto_chess_n.data.StatusType;
 import com.voidvvv.kz_auto_chess_n.data.StatKey;
 import com.voidvvv.kz_auto_chess_n.data.SynergyData;
 import com.voidvvv.kz_auto_chess_n.data.SynergySource;
 import com.voidvvv.kz_auto_chess_n.data.TargetPriority;
 import com.voidvvv.kz_auto_chess_n.data.UnitData;
+import com.voidvvv.kz_auto_chess_n.entities.ActiveStatus;
 import com.voidvvv.kz_auto_chess_n.entities.BattleOutcome;
+import com.voidvvv.kz_auto_chess_n.entities.Equipment;
 import com.voidvvv.kz_auto_chess_n.entities.BattleState;
 import com.voidvvv.kz_auto_chess_n.entities.BattleUnit;
 import com.voidvvv.kz_auto_chess_n.entities.CombatEvent;
@@ -437,5 +446,72 @@ class BattleSystemTest {
         }
         assertThat(launches).isGreaterThan(0);
         assertThat(rng.getConsumedCount()).isEqualTo(launches); // 除暴击 roll 外零消耗
+    }
+
+    // —— CP16：装备进战斗的两条通道（stat 修正源 + passiveStatus，Q1 裁决） ——
+
+    private static Equipment sword() {
+        return new Equipment(100, new EquipmentData("eq_sword", "铁剑",
+                EquipmentSlot.WEAPON, EquipmentRarity.WHITE,
+                Arrays.asList(new EquipmentEffect(StatKey.ATTACK, EffectOp.PCT, 20f)), null));
+    }
+
+    @Test
+    @DisplayName("装备 stat 通道：铁剑 attack PCT20 → 派生攻击 = 模板 ×1.2（无羁绊）；敌方无装备路径零串扰")
+    void equipmentStatsFeedBaselineDerivation() {
+        GameData data = data();
+        Player player = deployPlayer(data, data.getUnit("orc"), 2, 4);
+        player.getDeployedUnits().get(0).equip(sword()); // 单兽人不触发羁绊阈值
+        List<WaveSpec> wave = waveOf(data.getUnit("grunt"), 1.4f, 2, 0);
+
+        BattleState state = start(data, player, wave, 42L);
+        assertThat(state.getUnits().get(0).getBaseStats().get(StatKey.ATTACK))
+                .isCloseTo(12f, within(1e-4f)); // 10 × (1 + 0.20)
+        assertThat(state.getUnits().get(1).getBaseStats().get(StatKey.ATTACK))
+                .isCloseTo(14f, within(1e-4f)); // 敌方走空装备派生：10 × 1.4 不受玩家装备影响
+    }
+
+    @Test
+    @DisplayName("龙心 passive 通道：HP +400 且常驻 REGEN（power 0.02 / interval 5s / ∞ 时长）")
+    void dragonHeartHpAndRegenPassive() {
+        GameData data = data();
+        Player player = deployPlayer(data, data.getUnit("orc"), 2, 4);
+        player.getDeployedUnits().get(0).equip(new Equipment(101, new EquipmentData("eq_heart", "龙心",
+                EquipmentSlot.ARMOR, EquipmentRarity.LEGENDARY,
+                Arrays.asList(new EquipmentEffect(StatKey.HP, EffectOp.ADD, 400f)),
+                new EquipmentPassive(StatusType.REGEN, 0.02f, 5f))));
+        List<WaveSpec> wave = waveOf(data.getUnit("grunt"), 1f, 2, 0);
+
+        BattleState state = start(data, player, wave, 42L);
+        BattleUnit derived = state.getUnits().get(0);
+        assertThat(derived.getBaseStats().get(StatKey.HP)).isCloseTo(500f, within(1e-4f));
+        assertThat(derived.getCurrentHp()).isCloseTo(500f, within(1e-4f));
+        ActiveStatus regen = null;
+        for (ActiveStatus status : derived.getStatuses()) {
+            if (status.getType() == StatusType.REGEN) {
+                regen = status;
+            }
+        }
+        assertThat(regen).isNotNull();
+        assertThat(regen.getPower()).isCloseTo(0.02f, within(1e-6f));
+        assertThat(regen.getTickInterval()).isCloseTo(5f, within(1e-6f));
+        assertThat(regen.getRemainingTime()).isEqualTo(Float.POSITIVE_INFINITY);
+    }
+
+    @Test
+    @DisplayName("穿脱影响即时性经每战重派生：卸下铁剑后重开战攻击回落模板值")
+    void unequipRestoresStatsOnNextBattle() {
+        GameData data = data();
+        Player player = deployPlayer(data, data.getUnit("orc"), 2, 4);
+        Unit wearer = player.getDeployedUnits().get(0);
+        Equipment sword = sword();
+        wearer.equip(sword);
+        List<WaveSpec> wave = waveOf(data.getUnit("grunt"), 1f, 2, 0);
+        assertThat(start(data, player, wave, 42L).getUnits().get(0)
+                .getBaseStats().get(StatKey.ATTACK)).isCloseTo(12f, within(1e-4f));
+
+        wearer.unequip(sword);
+        assertThat(start(data, player, wave, 43L).getUnits().get(0)
+                .getBaseStats().get(StatKey.ATTACK)).isCloseTo(10f, within(1e-4f));
     }
 }

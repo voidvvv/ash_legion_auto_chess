@@ -1,5 +1,6 @@
 [
-  { "id": "syn_orc", "name": "兽人", "source": "RACE", "key": "兽人",
+  { "id": "syn_orc", "name": "兽人", "desc": "焰痕部族的雇佣兵，越战越硬的正面铁壁",
+    "source": "RACE", "key": "兽人",
     "thresholds": [
       { "count": 2, "effects": [ { "stat": "hp", "op": "ADD", "value": 150 } ] },
       { "count": 4, "effects": [ { "stat": "hp", "op": "ADD", "value": 400 },
@@ -7,7 +8,8 @@
       { "count": 6, "effects": [ { "effect": "SHIELD", "value": 0.3 },
                                   { "stat": "lifesteal", "op": "ADD", "value": 20 } ] }
     ] },
-  { "id": "syn_warrior", "name": "战士", "source": "CLASS", "key": "战士",
+  { "id": "syn_warrior", "name": "战士", "desc": "执旗卫队的老兵，以纪律与护甲结阵而战",
+    "source": "CLASS", "key": "战士",
     "thresholds": [
       { "count": 2, "effects": [ { "stat": "armor", "op": "ADD", "value": 20 } ] },
       { "count": 4, "effects": [ { "stat": "armor", "op": "ADD", "value": 50 },
@@ -16,7 +18,8 @@
                                   { "stat": "attack", "op": "PCT", "value": 30 },
                                   { "stat": "lifesteal", "op": "ADD", "value": 20 } ] }
     ] },
-  { "id": "syn_mage", "name": "法师", "source": "CLASS", "key": "法师",
+  { "id": "syn_mage", "name": "法师", "desc": "研究星辉残响的学者，以危险的知识为武器",
+    "source": "CLASS", "key": "法师",
     "thresholds": [
       { "count": 2, "effects": [ { "stat": "skillPower", "op": "ADD", "value": 15 } ] },
       { "count": 4, "effects": [ { "stat": "skillPower", "op": "ADD", "value": 30 },
@@ -24,7 +27,8 @@
       { "count": 6, "effects": [ { "stat": "skillPower", "op": "ADD", "value": 50 },
                                   { "stat": "energyGainRate", "op": "ADD", "value": 30 } ] }
     ] },
-  { "id": "syn_assassin", "name": "刺客", "source": "CLASS", "key": "刺客",
+  { "id": "syn_assassin", "name": "刺客", "desc": "拾星者行会的暗巷传说，一击得手即刻撤离",
+    "source": "CLASS", "key": "刺客",
     "thresholds": [
       { "count": 2, "effects": [ { "stat": "attack", "op": "PCT", "value": 20 } ] },
       { "count": 4, "effects": [ { "stat": "attack", "op": "PCT", "value": 35 },
@@ -33,7 +37,8 @@
                                   { "stat": "attackSpeed", "op": "PCT", "value": 30 },
                                   { "stat": "moveSpeed", "op": "ADD", "value": 2.0 } ] }
     ] },
-  { "id": "syn_beast", "name": "野兽", "source": "RACE", "key": "野兽",
+  { "id": "syn_beast", "name": "野兽", "desc": "翡翠林地中觉醒的狂血之兽，凭速度与利爪撕开战线",
+    "source": "RACE", "key": "野兽",
     "thresholds": [
       { "count": 2, "effects": [ { "stat": "attackSpeed", "op": "PCT", "value": 15 } ] },
       { "count": 4, "effects": [ { "stat": "attackSpeed", "op": "PCT", "value": 25 },
@@ -42,7 +47,8 @@
                                   { "stat": "moveSpeed", "op": "ADD", "value": 2.0 },
                                   { "stat": "attack", "op": "PCT", "value": 15 } ] }
     ] },
-  { "id": "syn_ranger", "name": "游侠", "source": "CLASS", "key": "游侠",
+  { "id": "syn_ranger", "name": "游侠", "desc": "失去森林的精灵射手，箭术即乡愁",
+    "source": "CLASS", "key": "游侠",
     "thresholds": [
       { "count": 2, "effects": [ { "stat": "range", "op": "ADD", "value": 1 } ] },
       { "count": 4, "effects": [ { "stat": "range", "op": "ADD", "value": 2 },

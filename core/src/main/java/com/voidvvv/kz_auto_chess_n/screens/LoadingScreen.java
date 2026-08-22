@@ -12,8 +12,8 @@ import com.voidvvv.kz_auto_chess_n.render.board.BoardGeometry;
 
 /**
  * 装载屏（render §2.1 双 Viewport 同参数）：占位图集已在 Main.create 同步生成完毕，
- * 此处首帧绘出提示后切主菜单（"首帧完成占位生成后切 MainMenu"）。文字用内置默认字体
- * （Q4：无 CJK 字模，本期屏显文案用 ASCII，观感降级已知）。
+ * 此处首帧绘出提示后切主菜单（"首帧完成占位生成后切 MainMenu"）。字体经 Assets.font()
+ * 加载 Fusion Pixel（已入库）；缺文件回退内置默认时中文不渲染但不炸（计划 §5.3-6）。
  */
 public final class LoadingScreen implements Screen {
     private final Game game;
@@ -43,8 +43,8 @@ public final class LoadingScreen implements Screen {
         viewport.apply();
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
-        assets.font().draw(batch, "EMBER LEGION", 40f, BoardGeometry.VIRTUAL_H / 2f + 20f);
-        assets.font().draw(batch, "loading...", 60f, BoardGeometry.VIRTUAL_H / 2f - 10f);
+        assets.font().draw(batch, "余烬军团", 296f, BoardGeometry.VIRTUAL_H / 2f + 20f); // 4 字居中（lore 暂定名）
+        assets.font().draw(batch, "装载中……", 293f, BoardGeometry.VIRTUAL_H / 2f - 10f);
         batch.end();
         framesDrawn++;
         if (framesDrawn >= 2) { // 首帧已上屏 → 装载完成

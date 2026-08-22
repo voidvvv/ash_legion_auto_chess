@@ -63,6 +63,22 @@ class SynergyDataTest {
     }
 
     @Test
+    @DisplayName("6 参 canonical 构造：desc 透传（Phase 5.1 裁决 2，详情/悬停显示用）")
+    void canonicalConstructorPassesDesc() {
+        SynergyData synergy = new SynergyData("syn_d", "试作", "一句主题描述",
+                SynergySource.RACE, "试作", new ArrayList<SynergyData.Threshold>());
+        assertThat(synergy.getDesc()).isEqualTo("一句主题描述");
+    }
+
+    @Test
+    @DisplayName("5 参兼容重载：desc 置空串（存量测试构造点零改动，沿 Unit 3→4 参先例）")
+    void compatConstructorDefaultsDescToEmpty() {
+        SynergyData synergy = new SynergyData("syn_d", "试作", SynergySource.RACE, "试作",
+                new ArrayList<SynergyData.Threshold>());
+        assertThat(synergy.getDesc()).isEmpty();
+    }
+
+    @Test
     @DisplayName("3/5/7 门槛风格同样适用")
     void supports357ThresholdStyle() {
         List<SynergyData.Threshold> tiers = Arrays.asList(

@@ -54,4 +54,38 @@ class RunContextTest {
         ctx.setBattleState(null); // 回 SHOPPING 时置 null
         assertThat(ctx.getBattleState()).isNull();
     }
+
+    // —— CP14：shop 字段（经济态随上下文生命周期重建——重开即新商店） ——
+
+    @Test
+    @DisplayName("4 参兼容构造：自建默认商店非空且 5 槽全空")
+    void compatCtorBuildsEmptyShop() {
+        RunContext ctx = newContext();
+        assertThat(ctx.getShop()).isNotNull();
+        assertThat(ctx.getShop().getSlots()).hasSize(5);
+        assertThat(ctx.getShop().getSlots()).containsOnlyNulls();
+    }
+
+    @Test
+    @DisplayName("5 参构造：注入同一商店实例 getShop() 同引用")
+    void fullCtorHoldsSameShopInstance() {
+        Player player = new Player(10);
+        RunState runState = new RunState(42L, "scene_forest", new SequentialIdIssuer());
+        GameData data = BattleTestFixtures.microData(BattleTestFixtures.meleeSkill());
+        RandomGenerator rng = new RandomGenerator(42L);
+        com.voidvvv.kz_auto_chess_n.systems.ShopSystem shop =
+                new com.voidvvv.kz_auto_chess_n.systems.ShopSystem();
+        RunContext ctx = new RunContext(player, runState, data, rng, shop);
+        assertThat(ctx.getShop()).isSameAs(shop);
+    }
+
+    @Test
+    @DisplayName("5 参构造拒绝 null shop")
+    void fullCtorRejectsNullShop() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> new RunContext(
+                new Player(10), new RunState(42L, "scene_forest", new SequentialIdIssuer()),
+                BattleTestFixtures.microData(BattleTestFixtures.meleeSkill()),
+                new RandomGenerator(42L), null))
+                .isInstanceOf(NullPointerException.class);
+    }
 }

@@ -1,11 +1,18 @@
 package com.voidvvv.kz_auto_chess_n.entities;
 
 import com.voidvvv.kz_auto_chess_n.data.BaseStats;
+import com.voidvvv.kz_auto_chess_n.data.EquipmentData;
+import com.voidvvv.kz_auto_chess_n.data.EquipmentEffect;
+import com.voidvvv.kz_auto_chess_n.data.EquipmentRarity;
+import com.voidvvv.kz_auto_chess_n.data.EquipmentSlot;
+import com.voidvvv.kz_auto_chess_n.data.EffectOp;
+import com.voidvvv.kz_auto_chess_n.data.StatKey;
 import com.voidvvv.kz_auto_chess_n.data.TargetPriority;
 import com.voidvvv.kz_auto_chess_n.data.UnitData;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.Collections;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -14,6 +21,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Player（Phase 1 版：金币/经验/等级）测试——GDD §3.5 经验表驱动升级。
  * 名单（备战席/上场部署）随 Unit 实体在 Phase 3 增补（project_structure §六出生时间表）。
+ * Phase 5 CP6 增补：背包与按 id 名单操作、undeploy 席满收口。
  */
 class PlayerTest {
 
@@ -27,6 +35,15 @@ class PlayerTest {
 
     private static Unit unit(int id) {
         return new Unit(id, tpl("u" + id), 1);
+    }
+
+    private static EquipmentData eqTpl(String id, EquipmentSlot slot) {
+        return new EquipmentData(id, "夹具" + id, slot, EquipmentRarity.WHITE,
+                Collections.singletonList(new EquipmentEffect(StatKey.ATTACK, EffectOp.ADD, 1f)), null);
+    }
+
+    private static Equipment item(int id, EquipmentSlot slot) {
+        return new Equipment(id, eqTpl("eq" + id, slot));
     }
 
     @Test
@@ -259,5 +276,106 @@ class PlayerTest {
         player.deploy(u6, 4, 6);
         List<Unit> deployed = player.getDeployedUnits();
         assertThat(deployed).containsExactly(u4, u5, u6); // (4,4) → (1,5) → (4,6)
+    }
+
+    // —— Phase 5 CP6：undeploy 席满收口 + 背包与按 id 名单操作 ——
+
+    @Test
+    @DisplayName("undeploy 备战席已满抛 IllegalStateException（Phase 3 假设洞收口）")
+    void undeployThrowsWhenBenchFull() {
+        Player player = new Player(10);
+        for (int i = 1; i <= 9; i++) {
+            player.addToBench(unit(i));
+        }
+        Unit deployed = unit(9);
+        player.deploy(deployed, 0, 4);  // 席 8，腾出一格给部署
+        player.addToBench(unit(10));    // 席 9（满）
+        assertThatThrownBy(() -> player.undeploy(0, 4))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("备战席已满");
+        assertThat(player.deployedAt(0, 4)).isSameAs(deployed); // 状态未变
+    }
+
+    @Test
+    @DisplayName("背包增删与视图：入包序、不可变视图、出包不在抛 IllegalArgumentException")
+    void inventoryAddRemoveWithUnmodifiableView() {
+        Player player = new Player(10);
+        Equipment weapon = item(11, EquipmentSlot.WEAPON);
+        Equipment armor = item(12, EquipmentSlot.ARMOR);
+        player.addToInventory(weapon);
+        player.addToInventory(armor);
+        assertThat(player.getInventory()).containsExactly(weapon, armor);
+        assertThatThrownBy(() -> player.getInventory().add(item(13, EquipmentSlot.TRINKET)))
+                .isInstanceOf(UnsupportedOperationException.class);
+
+        player.removeFromInventory(weapon);
+        assertThat(player.getInventory()).containsExactly(armor);
+        assertThatThrownBy(() -> player.removeFromInventory(weapon))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("装备不在背包");
+    }
+
+    @Test
+    @DisplayName("findInventoryItem 按 id 查背包；未找到返回 null")
+    void findInventoryItemById() {
+        Player player = new Player(10);
+        Equipment weapon = item(11, EquipmentSlot.WEAPON);
+        player.addToInventory(weapon);
+        assertThat(player.findInventoryItem(11)).isSameAs(weapon);
+        assertThat(player.findInventoryItem(99)).isNull();
+    }
+
+    @Test
+    @DisplayName("getUnitById 三态：席上 / 板上 / 未找到")
+    void getUnitByIdCoversBenchAndDeployment() {
+        Player player = new Player(10);
+        Unit benchUnit = unit(1);
+        Unit boardUnit = unit(2);
+        player.addToBench(benchUnit);
+        player.addToBench(boardUnit);
+        player.deploy(boardUnit, 3, 5);
+        assertThat(player.getUnitById(1)).isSameAs(benchUnit);
+        assertThat(player.getUnitById(2)).isSameAs(boardUnit);
+        assertThat(player.getUnitById(99)).isNull();
+    }
+
+    @Test
+    @DisplayName("removeUnit 三态：席上移除 / 板上移除并释放人口 / 不在名单返回 false")
+    void removeUnitCoversBenchAndDeployment() {
+        Player player = new Player(10);
+        Unit benchUnit = unit(1);
+        Unit boardUnit = unit(2);
+        player.addToBench(benchUnit);
+        player.addToBench(boardUnit);
+        player.deploy(boardUnit, 3, 5);
+        assertThat(player.getRosterSize()).isEqualTo(2);
+
+        assertThat(player.removeUnit(benchUnit)).isTrue();
+        assertThat(player.getBench()).isEmpty();
+
+        assertThat(player.removeUnit(boardUnit)).isTrue();
+        assertThat(player.deployedAt(3, 5)).isNull();
+        assertThat(player.getRosterSize()).isZero();
+
+        assertThat(player.removeUnit(unit(9))).isFalse();
+    }
+
+    @Test
+    @DisplayName("findEquipOwner 按 id 找穿戴者：席上 / 板上 / 未找到")
+    void findEquipOwnerAcrossRoster() {
+        Player player = new Player(10);
+        Unit benchUnit = unit(1);
+        Unit boardUnit = unit(2);
+        Equipment benchItem = item(11, EquipmentSlot.WEAPON);
+        Equipment boardItem = item(12, EquipmentSlot.ARMOR);
+        benchUnit.equip(benchItem);
+        boardUnit.equip(boardItem);
+        player.addToBench(benchUnit);
+        player.addToBench(boardUnit);
+        player.deploy(boardUnit, 3, 5);
+
+        assertThat(player.findEquipOwner(11)).isSameAs(benchUnit);
+        assertThat(player.findEquipOwner(12)).isSameAs(boardUnit);
+        assertThat(player.findEquipOwner(99)).isNull();
     }
 }

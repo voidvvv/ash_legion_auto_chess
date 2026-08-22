@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Phase 5 RESULT 期与 PickChest / 判负重试状态流转图</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.3/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true });</script>
+<style>body{font-family:"Microsoft YaHei",sans-serif;max-width:1100px;margin:24px auto;padding:0 12px;} table{border-collapse:collapse;} th,td{border:1px solid #999;padding:4px 10px;font-size:14px;} th{background:#eee;}</style>
+</head>
+<body>
+<h1>Phase 5 RESULT 期与 PickChest / 判负重试状态流转图</h1>
+<p>依据 GDD §2.2/§3.2、architecture §5.1/§5.4；Phase 4 差异声明 #6 本期销账。</p>
+<pre class="mermaid">
+flowchart TB
+    SH["SHOPPING（备战期）&lt;br/&gt;商店 / 买卖 / 布阵 / 穿脱装备（门控矩阵 ✓）&lt;br/&gt;暂停菜单可开（AbandonRun 合法）"]
+    BT["BATTLE&lt;br/&gt;battleSystem.step 60Hz&lt;br/&gt;投降 Surrender → 判负"]
+    RSW["RESULT（胜局）&lt;br/&gt;onBattleOver：outcome == PLAYER_WIN&lt;br/&gt;→ roll 宝箱（RNG=2）→ RunState.pendingChest&lt;br/&gt;ChestDialog（dialogStage 模态）· 不自动推进"]
+    RSL["RESULT（败局：全灭 / 超时 / 投降）&lt;br/&gt;无宝箱 · 无 RNG 消耗&lt;br/&gt;DEFEAT 横幅（含怜悯提示行）&lt;br/&gt;点击继续或 RESULT_BANNER_SECONDS 自动推进"]
+    RE["RUN_END（终态）&lt;br/&gt;endCause = COMPLETED（第 25 轮胜局 PickChest 后）&lt;br/&gt;或 ABANDONED（AbandonRun）&lt;br/&gt;RunEndPanel：文案 / seed / 熟练度（stub）· RESTART"]
+
+    SH -->|"StartBattle（零棋子允许）"| BT
+    BT -->|"判胜 PLAYER_WIN"| RSW
+    BT -->|"判负（全灭 / TIMEOUT / Surrender）"| RSL
+    RSW -->|"PickChest(option)（唯一出口，必须领取）"| ADV
+    RSL -->|"continueAfterDefeat：点击 / 自动（tickResult 仅败局生效）"| RETRY
+    ADV{"advanceAfterVictory&lt;br/&gt;round == 25 ?"}
+    ADV -->|"否：round+1 · 怜悯清零 · beginRound（敌阵重生成）&lt;br/&gt;· 商店免费刷新 · phase=SHOPPING"| SH
+    ADV -->|"是：endCause=COMPLETED · mastery 结算（stub）"| RE
+    RETRY["重试回备战（同轮）&lt;br/&gt;round 不变 · 敌阵不变 · 商店不变&lt;br/&gt;battleState=null（战斗实例整体丢弃）&lt;br/&gt;怜悯处理：上场数>0 → mercyLossCount+1&lt;br/&gt;  第 3 败起且本轮怜悯金&lt;3 → gold+1"]
+    RETRY --> SH
+    SH & BT -.->|"AbandonRun（二次确认后）&lt;br/&gt;endCause=ABANDONED · mastery 结算（stub）"| RE
+    RE -.->|"RESTART：UI 边界新 seed → 新鲜 RunContext → StartRun（回放第 0 条记录）"| SH
+
+    subgraph MERCY["怜悯规则（GDD §3.2，architecture §5.4）"]
+        M1["mercyLossCount：同轮连败计数（RunState.java:24 字段已建）&lt;br/&gt;新轮进入清零；零棋子战败不加"]
+        M2["mercyGoldThisRound：本轮已发怜悯金（本期新增）&lt;br/&gt;mercyLossCount ≥ 3 且 &lt;3 时每次判负 +1 金"]
+    end
+</pre>
+<h2>与 Phase 4 行为的差异（销账 Phase 4 差异声明 #6）</h2>
+<table>
+<tr><th>项</th><th>Phase 4</th><th>Phase 5</th></tr>
+<tr><td>判负流转</td><td>与胜局相同：round+1 推进</td><td>同轮重试：round/敌阵/商店全不变，怜悯计数+1</td></tr>
+<tr><td>RESULT 出口</td><td>横幅点击或 3s 自动统一 round+1</td><td>胜局必须 PickChest（无自动推进）；败局保留自动推进</td></tr>
+<tr><td>第 25 轮战毕</td><td>直接 RUN_END</td><td>胜局仍先 PickChest（architecture §4.4）再 RUN_END</td></tr>
+<tr><td>RUN_END 成因</td><td>无区分</td><td>endCause：COMPLETED / ABANDONED（RunEndPanel 文案区分）</td></tr>
+<tr><td>重开 seed</td><td>同 DEMO_SEED=42（RunFlowSystem.java:31）</td><td>UI 域边界新 seed（Q3 裁决 B 配套），DEMO_SEED 常量删除</td></tr>
+</table>
+<h2>门控矩阵增量（architecture §5.2 对照）</h2>
+<table>
+<tr><th>命令</th><th>SHOPPING</th><th>BATTLE</th><th>RESULT</th><th>备注</th></tr>
+<tr><td>PickChest</td><td></td><td></td><td>✓</td><td>待 pendingChest != null 且未领取</td></tr>
+<tr><td>AbandonRun</td><td>✓</td><td>✓</td><td></td><td>RESULT 期不合法（败局走继续、胜局必须领箱）</td></tr>
+<tr><td>StartRun</td><td colspan="3">仅新鲜上下文（round==1 且未 started）</td><td>回放第 0 条记录；seed/sceneId 与上下文一致性校验</td></tr>
+</table>
+</body>
+</html>

@@ -15,15 +15,24 @@ import java.util.List;
 public final class SynergyData {
     private final String id;
     private final String name;
+    /** 一句主题描述（Phase 5.1 裁决 2：synergies.json 必填手写文案；档位数值行由结构化数据生成） */
+    private final String desc;
     private final SynergySource source;
     /** 与 units 的 race（source=RACE）或 class（source=CLASS）值精确匹配 */
     private final String key;
     private final List<Threshold> thresholds;
 
+    /** 兼容重载：无 desc（存量测试构造先例）——desc 置空串 */
     public SynergyData(String id, String name, SynergySource source, String key,
+                       List<Threshold> thresholds) {
+        this(id, name, "", source, key, thresholds);
+    }
+
+    public SynergyData(String id, String name, String desc, SynergySource source, String key,
                        List<Threshold> thresholds) {
         this.id = id;
         this.name = name;
+        this.desc = desc;
         this.source = source;
         this.key = key;
         this.thresholds = Collections.unmodifiableList(thresholds);
@@ -31,6 +40,8 @@ public final class SynergyData {
 
     public String getId() { return id; }
     public String getName() { return name; }
+    /** 一句主题描述（详情/悬停显示用；兼容重载构造为空串） */
+    public String getDesc() { return desc; }
     public SynergySource getSource() { return source; }
     public String getKey() { return key; }
     /** count 升序（加载期校验保证） */

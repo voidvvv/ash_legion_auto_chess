@@ -87,6 +87,31 @@ class GameBalanceTest {
         assertThat(GameBalance.chestGold(21, true)).isEqualTo(20);
     }
 
+    // —— 宝箱三选一与装备常量（Phase 5；Q2 裁决 A 最小可玩规则，数值待调）——
+
+    @Test
+    @DisplayName("宝箱稀有度权重：两组数组长度 3、权重和 100、Boss 箱白位为 0")
+    void chestRarityWeightsWellFormed() {
+        assertThat(GameBalance.CHEST_RARITY_WEIGHTS).hasSize(3);
+        assertThat(GameBalance.BOSS_CHEST_RARITY_WEIGHTS).hasSize(3);
+        assertThat(Arrays.stream(GameBalance.CHEST_RARITY_WEIGHTS).sum()).isEqualTo(100);
+        assertThat(Arrays.stream(GameBalance.BOSS_CHEST_RARITY_WEIGHTS).sum()).isEqualTo(100);
+        // Boss 箱白位 0 = 必含 ≥1 成装及以上（实现口径 #3）
+        assertThat(GameBalance.BOSS_CHEST_RARITY_WEIGHTS[0]).isZero();
+        // 普通箱三档均为正权重（池不退化）
+        for (int weight : GameBalance.CHEST_RARITY_WEIGHTS) {
+            assertThat(weight).isPositive();
+        }
+    }
+
+    @Test
+    @DisplayName("经验书收益为正、装备三槽、概率放大刻度 1000")
+    void phase5ScalarConstants() {
+        assertThat(GameBalance.CHEST_EXP_BOOK_GAIN).isPositive();
+        assertThat(GameBalance.EQUIP_SLOTS_PER_UNIT).isEqualTo(3);
+        assertThat(GameBalance.PROBABILITY_WEIGHT_SCALE).isEqualTo(1000);
+    }
+
     // —— 商店费阶概率（GDD §3.4 锚点，逐轮线性插值）——
 
     @Test

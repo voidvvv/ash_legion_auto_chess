@@ -34,8 +34,8 @@ import java.util.Map;
  * 只读 entities（铁律 1）。
  */
 public final class BattleRenderer {
-    /** 备战期引导文案（仅 SHOPPING 期可见，drawShopping 尾部） */
-    private static final String SHOPPING_HINT = "DRAG UNITS TO BOARD, THEN FIGHT";
+    /** 备战期引导文案（仅 SHOPPING 期可见，drawShopping 尾部；中文化——Fusion Pixel 已入库，降级口径见计划 §5.3-6） */
+    private static final String SHOPPING_HINT = "拖拽棋子布阵 · 拖至右下出售区卖出 · 点开战";
 
     private static final com.badlogic.gdx.graphics.Color ENEMY_ZONE_TINT =
             new com.badlogic.gdx.graphics.Color(0.26f, 0.14f, 0.14f, 1f); // 敌区暗红
@@ -49,6 +49,8 @@ public final class BattleRenderer {
             new com.badlogic.gdx.graphics.Color(0.3f, 1f, 0.4f, 0.35f);  // 合法落点绿
     private static final com.badlogic.gdx.graphics.Color DROP_BAD_TINT =
             new com.badlogic.gdx.graphics.Color(1f, 0.3f, 0.3f, 0.3f);   // 非法落点红
+    private static final com.badlogic.gdx.graphics.Color SELL_DROP_TINT =
+            new com.badlogic.gdx.graphics.Color(1f, 0.8f, 0.25f, 0.45f);  // 出售区悬停金
 
     private final Assets assets;
     /** 当前附着的战斗实例（null = 备战期/无战斗；变化即 rebuild/clear） */
@@ -191,16 +193,27 @@ public final class BattleRenderer {
             drawUnitFrame(batch, spec.getTemplate().getId(), PlaceholderKeys.ANIM_IDLE, 0,
                     center[0], center[1], true, SideColors.ENEMY_PREVIEW_ALPHA, SideColors.ENEMY);
         }
+        drawSellZone(batch);
         drawShoppingHint(batch);
     }
 
-    /** 备战期引导文案（ASCII——默认字体无 CJK 字模；画布底部居中，不遮挡棋盘/备战席，P1b） */
+    /** ⑦ 出售区（render §九；棋盘域自绘，仅 SHOPPING 路径可达） */
+    private void drawSellZone(SpriteBatch batch) {
+        TextureRegion panel = assets.region(PlaceholderKeys.PANEL_9SLICE);
+        batch.setColor(0.45f, 0.32f, 0.16f, 0.9f);
+        batch.draw(panel, BoardGeometry.SELL_ZONE_X, BoardGeometry.SELL_ZONE_Y,
+                BoardGeometry.SELL_ZONE_W, BoardGeometry.SELL_ZONE_H);
+        batch.setColor(com.badlogic.gdx.graphics.Color.WHITE);
+        assets.font().draw(batch, "出售", BoardGeometry.SELL_ZONE_X + 16f, BoardGeometry.SELL_ZONE_Y + 28f);
+    }
+
+    /** 备战期引导文案（棋盘上方居中，不遮挡棋盘/备战席/⑧ 商店栏，feedback01 修正；字体缺文件回退时中文不渲染但不炸——§5.3-6） */
     private void drawShoppingHint(SpriteBatch batch) {
         if (hintLayout == null) {
             hintLayout = new GlyphLayout(assets.font(), SHOPPING_HINT);
         }
         assets.font().draw(batch, SHOPPING_HINT,
-                Math.round((BoardGeometry.VIRTUAL_W - hintLayout.width) / 2f), 24f);
+                Math.round((BoardGeometry.VIRTUAL_W - hintLayout.width) / 2f), BoardGeometry.SHOP_HINT_Y);
     }
 
     // —— 战斗期：⑦ 单位视图 → ⑧ 弹道 → 特效 → 飘字 ——
@@ -322,6 +335,13 @@ public final class BattleRenderer {
             return;
         }
         TextureRegion white = assets.region(PlaceholderKeys.WHITE);
+        if (input.isDropOnSellZone()) { // ⑦ 出售区悬停：金红高亮（可卖出提示）
+            batch.setColor(SELL_DROP_TINT);
+            batch.draw(white, BoardGeometry.SELL_ZONE_X, BoardGeometry.SELL_ZONE_Y,
+                    BoardGeometry.SELL_ZONE_W, BoardGeometry.SELL_ZONE_H);
+            batch.setColor(com.badlogic.gdx.graphics.Color.WHITE);
+            return;
+        }
         com.voidvvv.kz_auto_chess_n.command.PlacementTarget preview = input.getDropPreview();
         if (preview instanceof com.voidvvv.kz_auto_chess_n.command.PlacementTarget.Cell) {
             com.voidvvv.kz_auto_chess_n.command.PlacementTarget.Cell cell =

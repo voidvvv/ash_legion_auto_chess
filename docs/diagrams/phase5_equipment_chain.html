@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Phase 5 装备实体与命令链路图</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.3/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true });</script>
+<style>body{font-family:"Microsoft YaHei",sans-serif;max-width:1100px;margin:24px auto;padding:0 12px;} table{border-collapse:collapse;} th,td{border:1px solid #999;padding:4px 10px;font-size:14px;} th{background:#eee;}</style>
+</head>
+<body>
+<h1>Phase 5 装备实体与命令链路图</h1>
+<p>依据 GDD §5.2/§3.6、data_schema §八、architecture §4.1；Phase 3 Q4 裁决（修正源列表化）；Q1 裁决 A（2026-08-22）。</p>
+<pre class="mermaid">
+flowchart TB
+    JSON["assets/data/equipments.json（本期新建，8 件种子）&lt;br/&gt;id / name / slot(WEAPON|ARMOR|TRINKET) / rarity(WHITE|RARE|LEGENDARY)&lt;br/&gt;effects[{stat,op,value}]（≤3 条）/ passiveStatus{type,power,tick}（可选）"]
+    LOADER["JsonLoader.parseEquipments（本期扩展）&lt;br/&gt;词汇校验（StatKey/EffectOp/StatusType）+ fail-fast&lt;br/&gt;passiveStatus.type 本期仅允许 REGEN（差异声明）"]
+    ED["data/EquipmentData（不可变模板）&lt;br/&gt;+ EquipmentSlot / EquipmentRarity / EquipmentEffect / EquipmentPassive"]
+    GD["GameData.getEquipment(id) / getEquipments()（声明序）"]
+
+    ENT["entities/Equipment（不可变实体）&lt;br/&gt;id（IdIssuer 单一 int 空间——棋子/装备共用，architecture §2.2）&lt;br/&gt;template 引用 · equals 按 id"]
+    INV["Player.inventory（背包：未穿戴装备列表）"]
+    UNIT["entities/Unit（本期扩展）&lt;br/&gt;equipped: List&amp;lt;Equipment&amp;gt; ≤3 · 槽位唯一（武器/盔甲/饰品各一）&lt;br/&gt;spend 累计花费（卖出/合并口径）"]
+
+    JSON --> LOADER --> ED --> GD
+    GD --> ENT
+
+    subgraph CMDS["穿脱命令（UI 域两段式点击 → 队列 → EquipmentSystem handler）"]
+        EQ["EquipItem(itemId, unitId)&lt;br/&gt;背包→棋子；槽位被占 → 拒绝（先手动卸下）"]
+        UNE["UnequipItem(itemId)&lt;br/&gt;棋子→背包（owner 由名单扫描，architecture §4.1 载荷无 unitId）"]
+    end
+    INV &lt;--&gt;|"EquipmentSystem（校验：SHOPPING 门控 · 物品在包/在身 · 槽位空闲）"| UNIT
+
+    subgraph SOURCES2["装备获取 / 流失闭环"]
+        CHESTEQ["宝箱槽3 装备选项（ChestSystem.roll）&lt;br/&gt;稀有度权重 白70/成25/传5；Boss 箱 0/80/20&lt;br/&gt;池 = equipments.json 全集"]
+        SELLEQ["卖出（SellUnit）→ 自动卸下全部装备回背包（GDD §3.6）"]
+        MERGEEQ["3 合 1 → 参与合并棋子的装备自动卸下回背包（实现口径）"]
+    end
+    CHESTEQ --> INV
+    SELLEQ --> INV
+    MERGEEQ --> INV
+
+    subgraph BATTLE["开战派生（BattleSystem.startBattle 本期改造）"]
+        SRC["修正源列表（Phase 3 Q4 预留插点，BattleSystem.java:237 现 singletonList）&lt;br/&gt;sources = [ SynergySnapshot（羁绊·侧全体）, EquipmentStats.of(equipped)（装备·单体） ]&lt;br/&gt;StatPipeline.deriveBaseline 结算器零改动"]
+        PASSIVE["passiveStatus 落地（装备入口进 StatusSystem 的第二种形态，data_schema §八）&lt;br/&gt;ActiveStatus.tickInterval（本期新增，缺省 1s 不破既有 DOT/REGEN）&lt;br/&gt;例：龙心 REGEN power=0.02 tick=5 → 每 5s 回 2% maxHp"]
+    end
+    UNIT --> SRC
+    UNIT --> PASSIVE
+</pre>
+<h2>关键裁决与口径</h2>
+<table>
+<tr><th>项</th><th>决定</th><th>出处</th></tr>
+<tr><td>装备是背包物品，随时 A↔B 转移；每棋子 3 槽（武器+盔甲+饰品）</td><td>GDD §5.2 B2</td><td>已实现为 slot 唯一性校验</td></tr>
+<tr><td>MVP 无合成；CombineEquipment 留大版本扩展</td><td>GDD §5.2</td><td>本期不做</td></tr>
+<tr><td>装备不与技能联动</td><td>GDD §6.5</td><td>修正只走 stat 通道 + passiveStatus</td></tr>
+<tr><td>槽位被占时 EquipItem</td><td>拒绝（UI 提示先卸下）——实现口径</td><td>GDD 未定，B2 哲学下取最简确定语义</td></tr>
+<tr><td>卖出自动卸下回背包，不随棋子消失</td><td>GDD §3.6</td><td>SellUnit handler 内 EquipmentSystem.unequipAll</td></tr>
+<tr><td>战歌号角"全体友军能量获取+15%"</td><td>本期实现为穿戴者自身 energyGainRate +15%（schema 无 target 字段，光环装备待 schema 扩展）</td><td>差异声明，记 §8</td></tr>
+<tr><td>passiveStatus.type</td><td>本期仅 REGEN（加载期 fail-fast），其余类型待扩展</td><td>实现口径</td></tr>
+<tr><td>背包无上限；InventoryPanel（③ 区 3×2）显示前 6 件 + 总数角标</td><td>实现口径（GDD/render 未定上限）</td><td>记 §8 WARNING</td></tr>
+</table>
+</body>
+</html>

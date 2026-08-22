@@ -80,8 +80,8 @@ public final class BattleHud extends Group {
             batch.setColor(0.35f, 0.45f, 0.6f, parentAlpha);
             batch.draw(assets.region(PlaceholderKeys.PANEL_9SLICE), getX(), getY(), getWidth(), getHeight());
             batch.setColor(old);
-            assets.font().draw(batch, speedFactor == 1f ? "SPD x1" : "SPD x2",
-                    getX() + 6f, getY() + 24f);
+            assets.font().draw(batch, speedFactor == 1f ? "速度 x1" : "速度 x2",
+                    getX() + 16f, getY() + 24f);
         }
 
         SpeedButton() {
@@ -119,7 +119,7 @@ public final class BattleHud extends Group {
             batch.setColor(0.6f, 0.25f, 0.2f, parentAlpha);
             batch.draw(assets.region(PlaceholderKeys.PANEL_9SLICE), getX(), getY(), getWidth(), getHeight());
             batch.setColor(old);
-            assets.font().draw(batch, "GIVE UP", getX() + 18f, getY() + 24f);
+            assets.font().draw(batch, "投降", getX() + 36f, getY() + 24f);
         }
     }
 }

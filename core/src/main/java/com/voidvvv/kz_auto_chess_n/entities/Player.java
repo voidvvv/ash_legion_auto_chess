@@ -22,6 +22,7 @@ public class Player {
     private int currentExp;
     private final List<Unit> bench = new ArrayList<Unit>();      // 备战席 ≤ BENCH_SIZE(9)
     private final Unit[] deployment = new Unit[GameBalance.BOARD_COLS * 3]; // 玩家区 18 格
+    private final List<Equipment> inventory = new ArrayList<Equipment>();   // 背包：未穿戴装备（无上限，实现口径 #16）
 
     public Player(int startGold) {
         this.gold = Math.max(0, startGold);
@@ -121,12 +122,16 @@ public class Player {
         deployment[idx] = unit;
     }
 
-    /** 撤下：清格并回备战席（单位本占名单一席，回席必有余位）；空格抛 IllegalStateException */
+    /** 撤下：清格并回备战席；备战席已满抛 IllegalStateException（Phase 3 假设洞收口——
+     *  理论 27 上限下的溢出路径全部前置校验后，此处为防御兜底而非静默越界） */
     public void undeploy(int gridX, int gridY) {
         int idx = playerZoneIndex(gridX, gridY);
         Unit unit = deployment[idx];
         if (unit == null) {
             throw new IllegalStateException("该格无部署单位: (" + gridX + "," + gridY + ")");
+        }
+        if (bench.size() >= GameBalance.BENCH_SIZE) {
+            throw new IllegalStateException("备战席已满（" + GameBalance.BENCH_SIZE + " 格），无法撤下: " + unit.getId());
         }
         deployment[idx] = null;
         bench.add(unit);
@@ -154,6 +159,92 @@ public class Player {
     /** 名单总数 = 备战席 + 已部署 */
     public int getRosterSize() {
         return bench.size() + getDeployedUnits().size();
+    }
+
+    // —— Phase 5 背包与按 id 名单操作（framework-internal 纪律：写方法仅供命令结算调用） ——
+
+    /** 背包（不可变视图，入包序） */
+    public List<Equipment> getInventory() {
+        return Collections.unmodifiableList(inventory);
+    }
+
+    /** 入包（背包无上限——实现口径 #16） */
+    public void addToInventory(Equipment item) {
+        inventory.add(Objects.requireNonNull(item, "item 不能为 null"));
+    }
+
+    /** 出包：不在包抛 IllegalArgumentException */
+    public void removeFromInventory(Equipment item) {
+        if (!inventory.remove(item)) {
+            throw new IllegalArgumentException("装备不在背包: " + (item == null ? "null" : item.getId()));
+        }
+    }
+
+    /** 背包按 id 查装备；未找到返回 null */
+    public Equipment findInventoryItem(int itemId) {
+        for (Equipment item : inventory) {
+            if (item.getId() == itemId) {
+                return item;
+            }
+        }
+        return null;
+    }
+
+    /** 名单按 id 查棋子（备战席 + 部署表）；未找到返回 null */
+    public Unit getUnitById(int unitId) {
+        for (Unit unit : bench) {
+            if (unit.getId() == unitId) {
+                return unit;
+            }
+        }
+        for (int y = 4; y <= 6; y++) {
+            for (int x = 0; x < GameBalance.BOARD_COLS; x++) {
+                Unit unit = deployedAt(x, y);
+                if (unit != null && unit.getId() == unitId) {
+                    return unit;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** 名单移除（席上/板上皆可；板上移除同步释放人口）；不在名单返回 false */
+    public boolean removeUnit(Unit unit) {
+        Objects.requireNonNull(unit, "unit 不能为 null");
+        if (bench.remove(unit)) {
+            return true;
+        }
+        for (int i = 0; i < deployment.length; i++) {
+            if (deployment[i] == unit) {
+                deployment[i] = null;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** 全名单装备中按 id 找穿戴者；未找到返回 null（UnequipItem 载荷无 unitId，architecture §4.1） */
+    public Unit findEquipOwner(int itemId) {
+        for (Unit unit : bench) {
+            for (Equipment item : unit.getEquipped()) {
+                if (item.getId() == itemId) {
+                    return unit;
+                }
+            }
+        }
+        for (int y = 4; y <= 6; y++) {
+            for (int x = 0; x < GameBalance.BOARD_COLS; x++) {
+                Unit unit = deployedAt(x, y);
+                if (unit != null) {
+                    for (Equipment item : unit.getEquipped()) {
+                        if (item.getId() == itemId) {
+                            return unit;
+                        }
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     /** 玩家区索引与域校验：x ∈ [0,BOARD_COLS)、y ∈ [4,6]（第 3 行为缓冲带不可部署） */

@@ -31,9 +31,15 @@ public final class StatusSystem {
         this.damagePipeline = Objects.requireNonNull(damagePipeline, "damagePipeline 不能为 null");
     }
 
-    /** 挂载或刷新一个状态（sourceId：施加者 unit id，开局效果为 -1） */
+    /** 挂载或刷新一个状态（sourceId：施加者 unit id，开局效果为 -1；心跳间隔缺省 1s） */
     public void apply(BattleState state, BattleUnit target, StatusType type,
                       float power, float duration, int sourceId) {
+        apply(state, target, type, power, duration, sourceId, GameBalance.DOT_TICK_INTERVAL);
+    }
+
+    /** 全参重载：装备 passiveStatus 落地（自定义心跳间隔，实现口径 #7） */
+    public void apply(BattleState state, BattleUnit target, StatusType type,
+                      float power, float duration, int sourceId, float tickInterval) {
         Objects.requireNonNull(state, "state 不能为 null");
         Objects.requireNonNull(target, "target 不能为 null");
         Objects.requireNonNull(type, "type 不能为 null");
@@ -42,7 +48,7 @@ public final class StatusSystem {
         if (type == StatusType.SHIELD) {
             if (existing == null) {
                 target.addStatus(new ActiveStatus(StatusType.SHIELD, sourceId, power,
-                        Float.POSITIVE_INFINITY));
+                        Float.POSITIVE_INFINITY, tickInterval));
             } else {
                 existing.setPower(Math.max(existing.getPower(), power));
                 target.invalidateStats();
@@ -53,7 +59,7 @@ public final class StatusSystem {
         }
 
         if (existing == null) {
-            target.addStatus(new ActiveStatus(type, sourceId, power, duration));
+            target.addStatus(new ActiveStatus(type, sourceId, power, duration, tickInterval));
         } else {
             existing.setPower(Math.max(existing.getPower(), power));
             existing.setRemainingTime(Math.max(existing.getRemainingTime(), duration));
@@ -88,8 +94,9 @@ public final class StatusSystem {
             return; // 非 DOT/HOT 类无心跳
         }
         status.setTickTimer(status.getTickTimer() + dt);
-        while (status.getTickTimer() >= GameBalance.DOT_TICK_INTERVAL - TIME_EPSILON) {
-            status.setTickTimer(status.getTickTimer() - GameBalance.DOT_TICK_INTERVAL);
+        float interval = status.getTickInterval();
+        while (status.getTickTimer() >= interval - TIME_EPSILON) {
+            status.setTickTimer(status.getTickTimer() - interval);
             if (status.getType() == StatusType.REGEN) {
                 damagePipeline.applyHeal(state, owner,
                         owner.getEffective(StatKey.HP) * status.getPower());

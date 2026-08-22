@@ -26,7 +26,7 @@ public final class ResultBanner extends Group {
             addListener(new ClickListener() {
                 @Override
                 public void clicked(InputEvent event, float x, float y) {
-                    flow.continueAfterResult(context.get());
+                    flow.continueAfterDefeat(context.get()); // 胜局 no-op（pendingChest 守卫，口径 #9）
                 }
             });
         }
@@ -37,6 +37,7 @@ public final class ResultBanner extends Group {
     private final Assets assets;
     private String text = "";
     private Color tint = Color.WHITE;
+    private String hint = "";
 
     public ResultBanner(RunFlowSystem flow, java.util.function.Supplier<RunContext> context, Assets assets) {
         this.flow = flow;
@@ -45,17 +46,20 @@ public final class ResultBanner extends Group {
         addActor(new ClickCatcher());
     }
 
-    /** 每帧刷新文案（RESULT 期由 Screen 调用） */
-    public void refresh(BattleOutcome outcome) {
+    /** 每帧刷新文案（RESULT 期由 Screen 调用；mercyLine 可 null——败局怜悯提示；术语见计划 §2.1） */
+    public void refresh(BattleOutcome outcome, String mercyLine) {
         if (outcome == BattleOutcome.PLAYER_WIN) {
-            text = "VICTORY";
+            text = "胜利";
             tint = Color.GREEN;
+            hint = "选择一个宝箱"; // 胜局唯一出口 = PickChest（口径 #9，无自动推进）
         } else if (outcome == BattleOutcome.ENEMY_WIN) {
-            text = "DEFEAT";
+            text = "战败";
             tint = Color.RED;
+            hint = mercyLine != null ? "点击任意处重试 · " + mercyLine : "点击任意处重试";
         } else {
-            text = "TIMEOUT";
+            text = "超时";
             tint = Color.YELLOW;
+            hint = mercyLine != null ? "点击任意处重试 · " + mercyLine : "点击任意处重试";
         }
     }
 
@@ -68,9 +72,9 @@ public final class ResultBanner extends Group {
         batch.setColor(Color.WHITE);
         assets.font().getData().setScale(2f);
         assets.font().setColor(tint);
-        assets.font().draw(batch, text, 270f, 185f);
+        assets.font().draw(batch, text, 296f, 185f); // 2 字 ×24px 居中（原 7 字 ×~24px 的 270）
         assets.font().getData().setScale(1f);
         assets.font().setColor(Color.WHITE);
-        assets.font().draw(batch, "click to continue", 258f, 150f);
+        assets.font().draw(batch, hint, 272f, 150f); // 提示行居中基准（怜悯长行手验微调）
     }
 }

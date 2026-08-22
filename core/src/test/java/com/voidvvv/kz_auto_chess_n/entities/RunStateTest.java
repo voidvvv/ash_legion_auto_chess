@@ -112,4 +112,97 @@ class RunStateTest {
         assertThatThrownBy(() -> state.setEnemyWave(null))
                 .isInstanceOf(NullPointerException.class);
     }
+
+    // —— 系统反应通知行（CP13 切片提前落地：T2 经营系统 CP10~CP12 依赖 addNotice） ——
+
+    @Test
+    @DisplayName("addNotice 追加通知行；drainNotices 取走全部并清空（二次 drain 为空）")
+    void noticeAddAndDrain() {
+        RunState state = newState();
+        state.addNotice("第一行");
+        state.addNotice("第二行");
+        assertThat(state.drainNotices()).containsExactly("第一行", "第二行");
+        assertThat(state.drainNotices()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("addNotice 忽略 null 与空白行")
+    void noticeIgnoresBlankLines() {
+        RunState state = newState();
+        state.addNotice(null);
+        state.addNotice("   ");
+        assertThat(state.drainNotices()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("addNotice 有界 32：超限 FIFO 丢最老")
+    void noticeBoundedAt32Fifo() {
+        RunState state = newState();
+        for (int i = 0; i < 40; i++) {
+            state.addNotice("行" + i);
+        }
+        List<String> drained = state.drainNotices();
+        assertThat(drained).hasSize(32);
+        assertThat(drained.get(0)).isEqualTo("行8");
+        assertThat(drained.get(31)).isEqualTo("行39");
+    }
+
+    // —— CP13：流程域字段（防重入 / 宝箱 / 终局成因 / 怜悯金 / 逻辑钟 / 熟练度） ——
+
+    @Test
+    @DisplayName("runStarted 初始 false；markRunStarted 一次性置位（重开 = 新鲜 RunState 复位）")
+    void runStartedFlag() {
+        RunState state = newState();
+        assertThat(state.isRunStarted()).isFalse();
+        state.markRunStarted();
+        assertThat(state.isRunStarted()).isTrue();
+    }
+
+    @Test
+    @DisplayName("pendingChest 默认 null；setPendingChest 置换可查（领取后置回 null）")
+    void pendingChestReplaceable() {
+        RunState state = newState();
+        assertThat(state.getPendingChest()).isNull();
+        ChestOffer offer = new ChestOffer(1, false, java.util.Arrays.asList(
+                ChestOption.gold(3), ChestOption.expBook(4), ChestOption.gold(3)));
+        state.setPendingChest(offer);
+        assertThat(state.getPendingChest()).isSameAs(offer);
+        state.setPendingChest(null);
+        assertThat(state.getPendingChest()).isNull();
+    }
+
+    @Test
+    @DisplayName("endCause 默认 null（RUN_END 期非空）；setEndCause 拒绝 null")
+    void endCauseNullableUntilEnd() {
+        RunState state = newState();
+        assertThat(state.getEndCause()).isNull();
+        state.setEndCause(RunEndCause.COMPLETED);
+        assertThat(state.getEndCause()).isEqualTo(RunEndCause.COMPLETED);
+        state.setEndCause(RunEndCause.ABANDONED);
+        assertThat(state.getEndCause()).isEqualTo(RunEndCause.ABANDONED);
+        assertThatThrownBy(() -> state.setEndCause(null))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    @DisplayName("mercyGoldThisRound / masteryAwarded 默认 0；写方法可更新可查")
+    void mercyGoldAndMasteryAwardedUpdatable() {
+        RunState state = newState();
+        assertThat(state.getMercyGoldThisRound()).isZero();
+        assertThat(state.getMasteryAwarded()).isZero();
+        state.setMercyGoldThisRound(3);
+        state.setMasteryAwarded(75);
+        assertThat(state.getMercyGoldThisRound()).isEqualTo(3);
+        assertThat(state.getMasteryAwarded()).isEqualTo(75);
+    }
+
+    @Test
+    @DisplayName("logicTick 初始 0；advanceTick 递增（CommandManager.executeAll 尾调用——唯一推进点）")
+    void logicTickAdvances() {
+        RunState state = newState();
+        assertThat(state.getLogicTick()).isZero();
+        state.advanceTick();
+        state.advanceTick();
+        assertThat(state.getLogicTick()).isEqualTo(2);
+    }
 }

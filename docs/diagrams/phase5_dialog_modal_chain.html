@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Phase 5 暂停菜单 / dialogStage 模态阻断链图</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.3/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true });</script>
+<style>body{font-family:"Microsoft YaHei",sans-serif;max-width:1100px;margin:24px auto;padding:0 12px;} table{border-collapse:collapse;} th,td{border:1px solid #999;padding:4px 10px;font-size:14px;} th{background:#eee;}</style>
+</head>
+<body>
+<h1>Phase 5 暂停菜单 / dialogStage 模态阻断链图</h1>
+<p>依据 input §2.2/§2.4/§3、render §九、architecture §七；Q5 裁决（2026-08-22）。</p>
+<pre class="mermaid">
+flowchart TB
+    subgraph MP["InputMultiplexer（input §2.2 四层定序；Phase 4 两层 → 本期四层）"]
+        direction TB
+        DS["① dialogStage（UIDialogManager 持有）&lt;br/&gt;弹窗背板 Actor 全屏收点 + 弹窗本体&lt;br/&gt;有弹窗时吞掉全部触摸，uiStage 收不到"]
+        US["② uiStage（UI 域）&lt;br/&gt;TopBar / ShopBar / InventoryPanel / SynergyPanel /&lt;br/&gt;ShoppingHud(FIGHT) / BattleHud / ResultBanner / RunEndPanel / NotificationPanel"]
+        BP["③ boardProcessor（棋盘域）&lt;br/&gt;首行查 modalBlocked（BattleScreen.java:129-134 预留位本期接真实供应者）&lt;br/&gt;= UIDialogManager::isShowing → 吞事件不动作"]
+        KP["④ GlobalKeyProcessor（本期新建）&lt;br/&gt;Escape / Android BACK：永不被模态吞（input §3 例外条款）&lt;br/&gt;有弹窗 → 关顶层；无弹窗 → 开暂停菜单&lt;br/&gt;L 键 → 通知面板大小窗切换"]
+    end
+
+    DM["UIDialogManager（render/ui/ 新建）&lt;br/&gt;dialogStage + 弹窗栈（push/closeTop/clearAll）&lt;br/&gt;isShowing() 供 modalBlocked 与模拟冻结&lt;br/&gt;act/draw/resize/dispose 委托"]
+
+    subgraph DLGS["dialogStage 弹窗族（Scene2D Group 自绘，无 Skin——Q4=B Kenney 包推后）"]
+        PAUSE["PauseMenuDialog（MVP：继续 / 放弃）&lt;br/&gt;放弃 → 二次确认子弹窗 → AbandonRunCommand 入队&lt;br/&gt;（设置 Dialog 推 Phase 7）"]
+        CHEST["ChestDialog（RESULT 胜局）&lt;br/&gt;三选一按钮 → PickChestCommand(option)&lt;br/&gt;领取后 Screen 观察.pendingChest==null 自动收起"]
+        DETAIL["UnitDetailDialog（点击棋子唤起）&lt;br/&gt;名/星/属性/已穿装备 + 每件卸下按钮 → UnequipItemCommand"]
+        CONFIRM["AbandonConfirmDialog（二次确认，GDD §2.1 防误触）"]
+    end
+
+    FREEZE["模拟冻结口径（实现层）&lt;br/&gt;frozen = paused || UIDialogManager.isShowing()&lt;br/&gt;→ accumulator 不累积（沿 Screen.pause 既有分支模式）&lt;br/&gt;RESULT 败局自动计时同被冻结——模态期间不推进，关窗恢复"]
+
+    DRAG["拖拽中弹窗打开（input §2.4 通用规则 5）&lt;br/&gt;boardProcessor 被 modalBlocked 吞 touchDragged/touchUp&lt;br/&gt;→ 拖拽自然作废回弹（DragContext 遗弃，ghost 消失）"]
+
+    DM --> DS
+    DM --> FREEZE
+    DM --> BP
+    PAUSE &amp; CHEST &amp; DETAIL &amp; CONFIRM --- DM
+    KP -->|"Escape / BACK"| DM
+</pre>
+<h2>弹窗生命周期与状态一致性</h2>
+<table>
+<tr><th>弹窗</th><th>开</th><th>关</th><th>数据一致性</th></tr>
+<tr><td>PauseMenuDialog</td><td>Escape/BACK（无弹窗时）或 TopBar 暂停按钮</td><td>继续 / Escape / BACK</td><td>只读 RunState；放弃经命令队列结算（UI 不直改状态）</td></tr>
+<tr><td>AbandonConfirmDialog</td><td>放弃按钮</td><td>确认（入队 AbandonRun）/ 取消</td><td>确认后 handler 置 RUN_END，Screen 观察切 RunEndPanel</td></tr>
+<tr><td>ChestDialog</td><td>Screen 观察 phase==RESULT 且 pendingChest!=null 时 push 一次</td><td>领取后 pendingChest==null → pop（Screen 观察）</td><td>选项内容进 RESULT 时已 roll 好（architecture §4.1），弹窗只读 offer</td></tr>
+<tr><td>UnitDetailDialog</td><td>棋盘域死区内松手（点击）且无装备待定态</td><td>关闭按钮 / Escape / BACK</td><td>展示期名单可能变化 → 每帧 refresh；卸下走命令</td></tr>
+</table>
+<h2>边界与约束</h2>
+<table>
+<tr><th>约束</th><th>出处</th></tr>
+<tr><td>弹窗/面板/对话框永不做 Screen（归 dialogStage）</td><td>architecture §七</td></tr>
+<tr><td>弹窗层级与输入优先级一致：dialogStage &gt; uiStage &gt; boardProcessor &gt; keyProcessor</td><td>render §九 / input §2.2</td></tr>
+<tr><td>Escape/BACK 是唯一穿透模态的键：有弹窗关顶层、无弹窗开暂停</td><td>input §3 模态陷阱防御</td></tr>
+<tr><td>拖拽中弹窗打开 → 立即取消拖拽回弹</td><td>input §2.4 规则 5（boardProcessor 首行吞事件自然实现）</td></tr>
+<tr><td>暂停 = 表演层（accumulator 冻结），不改逻辑状态</td><td>architecture §4.2</td></tr>
+<tr><td>AbandonRun 在 SHOPPING/BATTLE 合法；RESULT 期不合法（胜局必须领箱、败局走继续）</td><td>门控矩阵 + 本期实现口径</td></tr>
+<tr><td>设置 Dialog 推 Phase 7；暂停菜单 MVP = 继续/放弃</td><td>Q5 裁决</td></tr>
+</table>
+</body>
+</html>

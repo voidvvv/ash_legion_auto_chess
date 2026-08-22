@@ -38,9 +38,9 @@ class JsonLoaderValidationTest {
             + " \"effects\": [ { \"effect\": \"DAMAGE\", \"value\": 2.0 } ] }]";
 
     private static final String VALID_SYNERGY =
-            "[{ \"id\": \"syn1\", \"name\": \"兽人\", \"source\": \"RACE\", \"key\": \"兽人\","
+            "[{ \"id\": \"syn1\", \"name\": \"兽人\", \"desc\": \"试作\", \"source\": \"RACE\", \"key\": \"兽人\","
             + " \"thresholds\": [ { \"count\": 2, \"effects\": [ { \"stat\": \"hp\", \"op\": \"ADD\", \"value\": 10 } ] } ] },"
-            + "{ \"id\": \"syn2\", \"name\": \"战士\", \"source\": \"CLASS\", \"key\": \"战士\","
+            + "{ \"id\": \"syn2\", \"name\": \"战士\", \"desc\": \"试作\", \"source\": \"CLASS\", \"key\": \"战士\","
             + " \"thresholds\": [ { \"count\": 2, \"effects\": [ { \"stat\": \"armor\", \"op\": \"ADD\", \"value\": 10 } ] } ] }]";
 
     // —— scenes 最小合法集（Phase 2 起 loadFromDirectory 增读 scenes.json）——
@@ -76,6 +76,7 @@ class JsonLoaderValidationTest {
         write(dir, "skills.json", skills == null ? VALID_SKILL : skills);
         write(dir, "synergies.json", synergies == null ? VALID_SYNERGY : synergies);
         write(dir, "scenes.json", scenes == null ? VALID_SCENES : scenes);
+        write(dir, "equipments.json", "[]"); // Phase 5 起 loadFromDirectory 增读 equipments.json（沿 scenes.json 先例）
         return JsonLoader.loadFromDirectory(new FileHandle(dir.toString()));
     }
 
@@ -114,6 +115,7 @@ class JsonLoaderValidationTest {
         write(dir, "skills.json", VALID_SKILL);
         write(dir, "synergies.json", VALID_SYNERGY);
         write(dir, "scenes.json", VALID_SCENES);
+        write(dir, "equipments.json", "[]");
         GameData data = JsonLoader.loadFromDirectory(new FileHandle(dir.toString()));
         assertThat(data.getUnits()).hasSize(5);
     }
@@ -224,7 +226,7 @@ class JsonLoaderValidationTest {
     @Test
     @DisplayName("thresholds.count 必须严格升序唯一")
     void thresholdsMustBeStrictlyAscending() {
-        String broken = "[{ \"id\": \"syn1\", \"name\": \"兽人\", \"source\": \"RACE\", \"key\": \"兽人\","
+        String broken = "[{ \"id\": \"syn1\", \"name\": \"兽人\", \"desc\": \"试作\", \"source\": \"RACE\", \"key\": \"兽人\","
                 + " \"thresholds\": ["
                 + " { \"count\": 4, \"effects\": [ { \"stat\": \"hp\", \"op\": \"ADD\", \"value\": 10 } ] },"
                 + " { \"count\": 2, \"effects\": [ { \"stat\": \"hp\", \"op\": \"ADD\", \"value\": 10 } ] } ] }]";
@@ -238,11 +240,22 @@ class JsonLoaderValidationTest {
     @DisplayName("同 source 下 key 重复登记即死")
     void duplicateSynergyKeyRejected() {
         String broken = withExtraElement(VALID_SYNERGY,
-                "{ \"id\": \"syn_orc_dup\", \"name\": \"兽人2\", \"source\": \"RACE\", \"key\": \"兽人\","
+                "{ \"id\": \"syn_orc_dup\", \"name\": \"兽人2\", \"desc\": \"试作\", \"source\": \"RACE\", \"key\": \"兽人\","
                 + " \"thresholds\": [ { \"count\": 2, \"effects\": [ { \"stat\": \"hp\", \"op\": \"ADD\", \"value\": 10 } ] } ] }");
         assertThatThrownBy(() -> load(null, null, broken))
                 .isInstanceOf(DataValidationException.class)
                 .hasMessageContaining("key 重复登记");
+    }
+
+    @Test
+    @DisplayName("synergies desc 必填：缺失即死且报错含字段路径（与 skills.json desc 同口径，Phase 5.1 裁决 2）")
+    void missingSynergyDescIsFatal() {
+        String broken = "[{ \"id\": \"syn1\", \"name\": \"兽人\", \"source\": \"RACE\", \"key\": \"兽人\","
+                + " \"thresholds\": [ { \"count\": 2, \"effects\": [ { \"stat\": \"hp\", \"op\": \"ADD\", \"value\": 10 } ] } ] }]";
+        assertThatThrownBy(() -> load(null, null, broken))
+                .isInstanceOf(DataValidationException.class)
+                .hasMessageContaining("synergies.json#syn1/desc")
+                .hasMessageContaining("缺必填字段");
     }
 
     // —— §九.4 引用完整性 ——
