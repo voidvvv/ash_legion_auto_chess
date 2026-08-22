@@ -1,5 +1,6 @@
 package com.voidvvv.kz_auto_chess_n.render.board;
 
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.voidvvv.kz_auto_chess_n.command.RunContext;
@@ -9,6 +10,7 @@ import com.voidvvv.kz_auto_chess_n.entities.BattleUnit;
 import com.voidvvv.kz_auto_chess_n.entities.CombatEvent;
 import com.voidvvv.kz_auto_chess_n.entities.GamePhase;
 import com.voidvvv.kz_auto_chess_n.entities.Player;
+import com.voidvvv.kz_auto_chess_n.entities.Side;
 import com.voidvvv.kz_auto_chess_n.entities.Unit;
 import com.voidvvv.kz_auto_chess_n.entities.WaveSpec;
 import com.voidvvv.kz_auto_chess_n.input.BoardInputProcessor;
@@ -32,6 +34,9 @@ import java.util.Map;
  * 只读 entities（铁律 1）。
  */
 public final class BattleRenderer {
+    /** 备战期引导文案（仅 SHOPPING 期可见，drawShopping 尾部） */
+    private static final String SHOPPING_HINT = "DRAG UNITS TO BOARD, THEN FIGHT";
+
     private static final com.badlogic.gdx.graphics.Color ENEMY_ZONE_TINT =
             new com.badlogic.gdx.graphics.Color(0.26f, 0.14f, 0.14f, 1f); // 敌区暗红
     private static final com.badlogic.gdx.graphics.Color BUFFER_ZONE_TINT =
@@ -63,6 +68,8 @@ public final class BattleRenderer {
     private final List<FloatingText> floats = new ArrayList<FloatingText>();
     /** 同帧飘字错位槽位（render §5.2：同目标同帧多段错位堆叠） */
     private int floatSlot;
+    /** 引导文案排版缓存（懒建一次，零稳态分配） */
+    private GlyphLayout hintLayout;
 
     public BattleRenderer(Assets assets) {
         this.assets = assets;
@@ -93,7 +100,7 @@ public final class BattleRenderer {
         batch.end();
     }
 
-    /** 战斗作用域同步：battleState 引用变化 → 视图集合整体重建/清空 */
+    /** 战斗作用域同步：battleState 引用变化 → 视图集合整体重建/清空（P1c：起始格取备战期位置滑入） */
     private void syncBattleScope(RunContext ctx) {
         BattleState current = ctx.getBattleState();
         if (current == trackedBattle) {
@@ -106,8 +113,14 @@ public final class BattleRenderer {
         fxLayer.clear();
         inbox.detach();
         if (current != null) {
+            BattleEntryCells playerEntries = BattleEntryCells.ofDeployed(ctx.getPlayer());
+            BattleEntryCells enemyEntries = BattleEntryCells.ofEnemyWave(ctx.getRunState().getEnemyWave());
             for (BattleUnit unit : current.getUnits()) { // 含亡者：死亡淡出仍需视图
-                UnitView view = new UnitView(unit, assets);
+                BattleEntryCells entries = unit.getSide() == Side.PLAYER ? playerEntries : enemyEntries;
+                int[] start = entries.consume(unit.getTemplate().getId());
+                UnitView view = new UnitView(unit, assets,
+                        start == null ? unit.getGridX() : start[0],
+                        start == null ? unit.getGridY() : start[1]); // 无匹配落锚点（无滑入，无害）
                 unitViews.put(view.unitId(), view);
                 viewList.add(view);
             }
@@ -161,7 +174,7 @@ public final class BattleRenderer {
         for (int slot = 0; slot < bench.size(); slot++) {
             int[] center = BoardGeometry.benchSlotCenter(slot);
             drawUnitFrame(batch, bench.get(slot).getTemplate().getId(),
-                    PlaceholderKeys.ANIM_IDLE, 0, center[0], center[1], false, 1f);
+                    PlaceholderKeys.ANIM_IDLE, 0, center[0], center[1], false, 1f, SideColors.PLAYER);
         }
         for (int y = 4; y <= 6; y++) {
             for (int x = 0; x < GameBalance.BOARD_COLS; x++) {
@@ -169,15 +182,25 @@ public final class BattleRenderer {
                 if (unit != null) {
                     int[] center = BoardGeometry.cellCenter(x, y);
                     drawUnitFrame(batch, unit.getTemplate().getId(),
-                            PlaceholderKeys.ANIM_IDLE, 0, center[0], center[1], false, 1f);
+                            PlaceholderKeys.ANIM_IDLE, 0, center[0], center[1], false, 1f, SideColors.PLAYER);
                 }
             }
         }
-        for (WaveSpec spec : ctx.getRunState().getEnemyWave()) {
+        for (WaveSpec spec : ctx.getRunState().getEnemyWave()) { // 敌阵侦察虚影（红框 + 半透明，P1b）
             int[] center = BoardGeometry.cellCenter(spec.getGridX(), spec.getGridY());
             drawUnitFrame(batch, spec.getTemplate().getId(), PlaceholderKeys.ANIM_IDLE, 0,
-                    center[0], center[1], true, spec.isBoss() ? 1f : 0.85f);
+                    center[0], center[1], true, SideColors.ENEMY_PREVIEW_ALPHA, SideColors.ENEMY);
         }
+        drawShoppingHint(batch);
+    }
+
+    /** 备战期引导文案（ASCII——默认字体无 CJK 字模；画布底部居中，不遮挡棋盘/备战席，P1b） */
+    private void drawShoppingHint(SpriteBatch batch) {
+        if (hintLayout == null) {
+            hintLayout = new GlyphLayout(assets.font(), SHOPPING_HINT);
+        }
+        assets.font().draw(batch, SHOPPING_HINT,
+                Math.round((BoardGeometry.VIRTUAL_W - hintLayout.width) / 2f), 24f);
     }
 
     // —— 战斗期：⑦ 单位视图 → ⑧ 弹道 → 特效 → 飘字 ——
@@ -269,22 +292,26 @@ public final class BattleRenderer {
         fxLayer.sparkBurst(burstSkillId, x, y);
     }
 
-    /** 占位单位帧绘制（中心定位；enemyFace = 水平翻转 + 轻微暗色区分敌我） */
+    /** 占位单位帧绘制（中心定位；enemyFace = 水平翻转；border 敌我色框，null 不画；alpha 整体透明度） */
     private void drawUnitFrame(SpriteBatch batch, String unitId, String anim, int frame,
-                               int cx, int cy, boolean enemyFace, float brightness) {
+                               int cx, int cy, boolean enemyFace, float alpha,
+                               com.badlogic.gdx.graphics.Color border) {
         TextureRegion region = assets.region(PlaceholderKeys.unitFrame(unitId, anim, frame));
         boolean wasFlip = region.isFlipX();
         if (enemyFace != wasFlip) {
             region.flip(true, false); // 用后即还（region 共享，铁律：不残留状态）
         }
-        if (brightness < 1f) {
-            batch.setColor(brightness, brightness, brightness, 1f);
+        if (alpha < 1f) {
+            batch.setColor(1f, 1f, 1f, alpha);
         }
         batch.draw(region, cx - BoardGeometry.CELL / 2f, cy - BoardGeometry.CELL / 2f,
                 BoardGeometry.CELL, BoardGeometry.CELL);
         batch.setColor(com.badlogic.gdx.graphics.Color.WHITE);
         if (region.isFlipX() != wasFlip) {
             region.flip(true, false); // 还原
+        }
+        if (border != null) {
+            SideColors.drawBorder(batch, assets.region(PlaceholderKeys.WHITE), cx, cy, border);
         }
     }
 

@@ -32,13 +32,17 @@ public final class UnitView {
     private int lastGridX;
     private int lastGridY;
 
-    public UnitView(BattleUnit unit, Assets assets) {
+    /**
+     * @param startGridX 起始格 x（P1c：备战期位置——首帧 update 轮询到锚点差分即经 LerpMotion 滑入；
+     *                   无匹配备战位置时传战斗锚点，行为等同直落）
+     */
+    public UnitView(BattleUnit unit, Assets assets, int startGridX, int startGridY) {
         this.unit = unit;
         this.assets = assets;
         this.motion = new LerpMotion(Math.max(0.25f, unit.getEffective(StatKey.MOVE_SPEED)));
-        this.motion.reset(unit.getGridX(), unit.getGridY());
-        this.lastGridX = unit.getGridX();
-        this.lastGridY = unit.getGridY();
+        this.motion.reset(startGridX, startGridY);
+        this.lastGridX = startGridX;
+        this.lastGridY = startGridY;
         this.enemy = unit.getSide() == Side.ENEMY;
     }
 
@@ -104,6 +108,8 @@ public final class UnitView {
         }
         if (fade == 0f) {
             drawBars(batch, cx, cy);
+            SideColors.drawBorder(batch, assets.region(PlaceholderKeys.WHITE), cx, cy,
+                    enemy ? SideColors.ENEMY : SideColors.PLAYER); // 敌我色框（P1b，与备战期同语义）
         }
     }
 
