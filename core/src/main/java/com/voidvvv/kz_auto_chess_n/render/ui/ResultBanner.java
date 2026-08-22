@@ -26,7 +26,7 @@ public final class ResultBanner extends Group {
             addListener(new ClickListener() {
                 @Override
                 public void clicked(InputEvent event, float x, float y) {
-                    flow.continueAfterDefeat(context.get());
+                    flow.continueAfterDefeat(context.get()); // 胜局 no-op（pendingChest 守卫，口径 #9）
                 }
             });
         }
@@ -37,6 +37,7 @@ public final class ResultBanner extends Group {
     private final Assets assets;
     private String text = "";
     private Color tint = Color.WHITE;
+    private String hint = "";
 
     public ResultBanner(RunFlowSystem flow, java.util.function.Supplier<RunContext> context, Assets assets) {
         this.flow = flow;
@@ -45,17 +46,25 @@ public final class ResultBanner extends Group {
         addActor(new ClickCatcher());
     }
 
-    /** 每帧刷新文案（RESULT 期由 Screen 调用） */
+    /** 兼容桥（BattleScreen 现调用点；CP29 切双参传怜悯行） */
     public void refresh(BattleOutcome outcome) {
+        refresh(outcome, null);
+    }
+
+    /** 每帧刷新文案（RESULT 期由 Screen 调用；mercyLine 可 null——败局怜悯提示） */
+    public void refresh(BattleOutcome outcome, String mercyLine) {
         if (outcome == BattleOutcome.PLAYER_WIN) {
             text = "VICTORY";
             tint = Color.GREEN;
+            hint = "pick a chest"; // 胜局唯一出口 = PickChest（口径 #9，无自动推进）
         } else if (outcome == BattleOutcome.ENEMY_WIN) {
             text = "DEFEAT";
             tint = Color.RED;
+            hint = mercyLine != null ? "click to retry · " + mercyLine : "click to retry";
         } else {
             text = "TIMEOUT";
             tint = Color.YELLOW;
+            hint = mercyLine != null ? "click to retry · " + mercyLine : "click to retry";
         }
     }
 
@@ -71,6 +80,6 @@ public final class ResultBanner extends Group {
         assets.font().draw(batch, text, 270f, 185f);
         assets.font().getData().setScale(1f);
         assets.font().setColor(Color.WHITE);
-        assets.font().draw(batch, "click to continue", 258f, 150f);
+        assets.font().draw(batch, hint, 258f, 150f);
     }
 }
