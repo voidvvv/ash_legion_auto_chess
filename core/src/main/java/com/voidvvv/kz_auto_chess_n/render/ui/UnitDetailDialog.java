@@ -51,6 +51,9 @@ public final class UnitDetailDialog extends Group {
     private final CloseListener closeListener;
     private int unitId = -1;
     private List<String> lines = new ArrayList<String>();
+    /** 卸下按钮集的构建指纹（feedback04）：单位 id + 装备 id 序列——均未变则跳过重建 */
+    private int buttonUnitId = -1;
+    private List<Integer> buttonEquipIds = new ArrayList<Integer>();
 
     public UnitDetailDialog(CommandManager commandManager, Assets assets,
                             Supplier<RunContext> context, CloseListener closeListener) {
@@ -78,19 +81,35 @@ public final class UnitDetailDialog extends Group {
         return ctx.getPlayer().getUnitById(unitId) == null;
     }
 
-    /** 每帧刷新：文案行重建 + 三槽卸下按钮重建（名单/装备可能经命令变化——幂等轻量重建） */
+    /**
+     * 每帧刷新：文案行重建（幂等轻量重建，字符串不影响交互）；卸下按钮只在
+     * 「单位 id + 装备 id 序列」变化时重建（feedback04）——Scene2D ClickListener
+     * 要求 touchDown/touchUp 命中同一 actor 实例，每帧换实例会被 Stage 取消触摸
+     * 焦点致 clicked() 永不触发（卸下点击失效根因）。
+     */
     public void refresh() {
+        Unit unit = context.get().getPlayer().getUnitById(unitId);
+        if (unit == null) {
+            lines = new ArrayList<String>();
+            return; // 过期帧不重建（draw 对 null 单位早退，残留按钮不可见；收起由装配点 isExpired 驱动）
+        }
+        lines = UnitInfoText.detailLines(unit, context.get().getGameData());
+        List<Integer> ids = equippedIds(unit.getEquipped());
+        if (unitId == buttonUnitId && sameEquippedIds(buttonEquipIds, ids)) {
+            return; // 序列未变：保留现按钮实例
+        }
+        rebuildUnequipButtons(unit);
+        buttonUnitId = unitId;
+        buttonEquipIds = ids;
+    }
+
+    /** 移除旧卸下按钮并按当前穿着序重建（位置：EQUIP_X 自 EQUIP_Y0 下排） */
+    private void rebuildUnequipButtons(Unit unit) {
         for (int i = getChildren().size - 1; i >= 0; i--) {
             if (getChildren().get(i) instanceof UnequipButton) {
                 getChildren().get(i).remove();
             }
         }
-        Unit unit = context.get().getPlayer().getUnitById(unitId);
-        if (unit == null) {
-            lines = new ArrayList<String>();
-            return;
-        }
-        lines = UnitInfoText.detailLines(unit, context.get().getGameData());
         float y = EQUIP_Y0;
         for (Equipment item : unit.getEquipped()) {
             UnequipButton button = new UnequipButton(item);
@@ -98,6 +117,28 @@ public final class UnitDetailDialog extends Group {
             addActor(button);
             y -= EQUIP_STEP;
         }
+    }
+
+    /** 装备 id 序列（重建判定输入；Equipment 按 id 全局唯一实例，id 同即实例同） */
+    static List<Integer> equippedIds(List<Equipment> equipped) {
+        List<Integer> ids = new ArrayList<Integer>(equipped.size());
+        for (Equipment item : equipped) {
+            ids.add(item.getId());
+        }
+        return ids;
+    }
+
+    /** 序列比对（纯函数，headless 可测）：同长且逐位 id 相等 → true */
+    static boolean sameEquippedIds(List<Integer> a, List<Integer> b) {
+        if (a.size() != b.size()) {
+            return false;
+        }
+        for (int i = 0; i < a.size(); i++) {
+            if (!a.get(i).equals(b.get(i))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override
