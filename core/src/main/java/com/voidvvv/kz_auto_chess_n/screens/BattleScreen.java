@@ -17,6 +17,7 @@ import com.voidvvv.kz_auto_chess_n.config.GameBalance;
 import com.voidvvv.kz_auto_chess_n.data.GameData;
 import com.voidvvv.kz_auto_chess_n.entities.GamePhase;
 import com.voidvvv.kz_auto_chess_n.entities.Player;
+import com.voidvvv.kz_auto_chess_n.entities.RunModifiers;
 import com.voidvvv.kz_auto_chess_n.entities.RunState;
 import com.voidvvv.kz_auto_chess_n.entities.SequentialIdIssuer;
 import com.voidvvv.kz_auto_chess_n.input.BoardInputProcessor;
@@ -40,6 +41,11 @@ import com.voidvvv.kz_auto_chess_n.render.ui.SynergyPanel;
 import com.voidvvv.kz_auto_chess_n.render.ui.TopBar;
 import com.voidvvv.kz_auto_chess_n.render.ui.UIDialogManager;
 import com.voidvvv.kz_auto_chess_n.render.ui.UnitDetailDialog;
+import com.voidvvv.kz_auto_chess_n.save.MetaService;
+import com.voidvvv.kz_auto_chess_n.save.ProfileService;
+import com.voidvvv.kz_auto_chess_n.save.RunSettlementText;
+import com.voidvvv.kz_auto_chess_n.save.RunSnapshot;
+import com.voidvvv.kz_auto_chess_n.save.SnapshotCodec;
 import com.voidvvv.kz_auto_chess_n.systems.BattleSystem;
 import com.voidvvv.kz_auto_chess_n.systems.EquipmentSystem;
 import com.voidvvv.kz_auto_chess_n.systems.RosterSystem;
@@ -98,8 +104,21 @@ public final class BattleScreen implements Screen {
     private final PauseMenuDialog pauseMenuDialog;
     private BoardInputProcessor boardProcessor;
 
-    /** 本局 seed（UI 域边界给定——MainMenu START 传入；RESTART 换新，Q3 裁决） */
+    /** 本局 seed（UI 域边界给定——RunSetup 传入；RESTART 换新，Q3 裁决口径 Phase 6 落地） */
     private long seed;
+    /** 本局场景/英雄（RunSetup 选定；RESTART 沿用） */
+    private final String selectedSceneId;
+    private final String selectedHeroId;
+    /** 档案域门面（Phase 6：结算观察 + 快照触发 + 局外修正装配） */
+    private final MetaService metaService;
+    /** 续玩快照（null = 新局；非 null 时 show() 走恢复路径，不发 StartRun） */
+    private final RunSnapshot resumedSnapshot;
+    /** resumedSnapshot != null 的派生缓存（恢复失败回退路径可置 false 保证 StartRun 仍发） */
+    private boolean resumed;
+    /** RUN_END 结算观察旗标（每局一次——裁决 D11） */
+    private boolean runEndSettled;
+    /** 本轮快照已写标记（进入 SHOPPING 首帧写、离开 SHOPPING 复位——裁决 D10） */
+    private boolean snapshotCurrent;
     /** 宝箱弹窗在栈标记（防重复 push；领取/离开 RESULT 后收起，CP29） */
     private boolean chestShown;
 
@@ -109,11 +128,30 @@ public final class BattleScreen implements Screen {
     /** ×1/×2 变速（口径 #5：只乘 accumulator 消费速率，不进模拟路径） */
     private float speedFactor = 1f;
 
-    public BattleScreen(Game game, Assets assets, GameData data, long seed) {
+    /** 新局（RunSetup 域边界事件三参 + 档案门面） */
+    public BattleScreen(Game game, Assets assets, GameData data, MetaService metaService,
+                        long seed, String sceneId, String heroId) {
+        this(game, assets, data, metaService, seed, sceneId, heroId, null);
+    }
+
+    /** 续玩（主菜单「继续远征」：快照在 show() 复原，跳过 StartRun） */
+    public BattleScreen(Game game, Assets assets, GameData data, MetaService metaService,
+                        RunSnapshot snapshot) {
+        this(game, assets, data, metaService, snapshot.getSeed(), snapshot.getSceneId(),
+                snapshot.getHeroId(), snapshot);
+    }
+
+    private BattleScreen(Game game, Assets assets, GameData data, MetaService metaService,
+                         long seed, String sceneId, String heroId, RunSnapshot resumedSnapshot) {
         this.game = game;
         this.assets = assets;
         this.data = data;
+        this.metaService = metaService;
         this.seed = seed;
+        this.selectedSceneId = sceneId;
+        this.selectedHeroId = heroId;
+        this.resumedSnapshot = resumedSnapshot;
+        this.resumed = resumedSnapshot != null;
         this.batch = new SpriteBatch();
         this.worldViewport = new FitViewport(BoardGeometry.VIRTUAL_W, BoardGeometry.VIRTUAL_H, worldCamera);
         this.uiStage = new com.badlogic.gdx.scenes.scene2d.Stage(
@@ -138,6 +176,11 @@ public final class BattleScreen implements Screen {
             @Override
             public void onRestart() {
                 restartRun();
+            }
+        }, new RunEndPanel.MenuListener() {
+            @Override
+            public void onMenuRequested() {
+                game.setScreen(new MainMenuScreen(game, assets, data, metaService));
             }
         }, contextSupplier());
         this.shopBar = new ShopBar(commandManager, assets, contextSupplier());
@@ -197,13 +240,27 @@ public final class BattleScreen implements Screen {
 
     @Override
     public void show() {
-        this.runContext = newContext(seed);
+        if (resumedSnapshot != null && resumed) {
+            try {
+                this.runContext = SnapshotCodec.restore(resumedSnapshot, data,
+                        metaService.getProfile(), shopSystem);
+            } catch (RuntimeException ex) {
+                System.err.println("[BattleScreen] 快照恢复失败，回退新局: " + ex.getMessage());
+                this.resumed = false; // 回退路径仍发 StartRun（正常已被 Store 删档前置拦截）
+                this.runContext = newContext(seed);
+            }
+        } else {
+            this.runContext = newContext(seed);
+        }
         runFlowSystem.registerHandlers(commandManager);   // 流程五命令（StartRun/StartBattle/Surrender/PickChest/AbandonRun）
         shopSystem.registerHandlers(commandManager);      // BuyUnit/RefreshShop/BuyExp
         rosterSystem.registerHandlers(commandManager);    // MoveUnit/SellUnit
         equipmentSystem.registerHandlers(commandManager); // EquipItem/UnequipItem
-        commandManager.addCommand(new StartRunCommand(
-                seed, runContext.getRunState().getSceneId(), null)); // 回放第 0 条记录（Q3 裁决）
+        if (!resumed && runContext.getRunState().getRound() == 1
+                && !runContext.getRunState().isRunStarted()) {
+            commandManager.addCommand(new StartRunCommand(
+                    seed, runContext.getRunState().getSceneId(), selectedHeroId)); // 回放第 0 条记录（heroId 启用）
+        }
         accumulator = 0f;
         renderClock = 0f;
         paused = false;
@@ -254,6 +311,18 @@ public final class BattleScreen implements Screen {
         batch.setProjectionMatrix(worldCamera.combined);
         battleRenderer.draw(batch, runContext, alpha, renderClock, frozen ? 0f : delta, boardProcessor);
         GamePhase phase = runContext.getRunState().getPhase();
+        if (phase == GamePhase.RUN_END && !runEndSettled) { // 档案结算每局一次（裁决 D11）
+            runEndSettled = true;
+            ProfileService.Settlement settlement = metaService.settleRun(data, runContext);
+            runEndPanel.setSettlementLines(RunSettlementText.lines(settlement, data));
+            metaService.clearRunSnapshot(); // RUN_END 自动删档（快照轨终点）
+        }
+        if (phase != GamePhase.SHOPPING) { // 快照轨：进入备战首帧写、离开复位（裁决 D10）
+            snapshotCurrent = false;
+        } else if (runContext.getRunState().isRunStarted() && !snapshotCurrent) {
+            metaService.saveRunSnapshot(runContext);
+            snapshotCurrent = true;
+        }
         topBar.refresh(runContext);
         shoppingHud.setVisible(phase == GamePhase.SHOPPING);
         battleHud.setVisible(phase == GamePhase.BATTLE);
@@ -350,6 +419,7 @@ public final class BattleScreen implements Screen {
     @Override
     public void pause() {
         paused = true; // 冻结 accumulator（Android 挂起）
+        saveSnapshotIfShopping(); // 快照补写（仅备战期——存档点决策）
     }
 
     @Override
@@ -360,6 +430,15 @@ public final class BattleScreen implements Screen {
     @Override
     public void hide() {
         Gdx.input.setInputProcessor(null); // 防僵尸监听（input §2.3）
+        saveSnapshotIfShopping();
+    }
+
+    /** 快照补写（pause/hide；战斗/结算期不写——存档点仅备战） */
+    private void saveSnapshotIfShopping() {
+        if (runContext != null && runContext.getRunState().isRunStarted()
+                && runContext.getRunState().getPhase() == GamePhase.SHOPPING) {
+            metaService.saveRunSnapshot(runContext);
+        }
     }
 
     @Override
@@ -370,21 +449,25 @@ public final class BattleScreen implements Screen {
         // Assets 归 Main 持有，不在此弃
     }
 
-    /** 组装新鲜上下文（seed 来自 UI 域边界事件——Q3 裁决；首场景 MVP 仅森林） */
+    /** 组装新鲜上下文（seed/sceneId/heroId 来自 RunSetup 域边界；起始金含英雄加成——裁决 D2） */
     private RunContext newContext(long runSeed) {
-        String sceneId = data.getScenes().keySet().iterator().next(); // 首场景（种子仅森林）
-        return new RunContext(new Player(GameBalance.START_GOLD),
-                new RunState(runSeed, sceneId, new SequentialIdIssuer()),
+        String sceneId = selectedSceneId != null && data.getScene(selectedSceneId) != null
+                ? selectedSceneId : data.getScenes().keySet().iterator().next(); // 防御回退首场景
+        RunModifiers modifiers = metaService.resolveRunModifiers(selectedHeroId, data);
+        return new RunContext(new Player(GameBalance.START_GOLD + modifiers.getStartGoldBonus()),
+                new RunState(runSeed, sceneId, selectedHeroId, modifiers, new SequentialIdIssuer()),
                 data, new RandomGenerator(runSeed), shopSystem);
     }
 
-    /** RUN_END 重开：新 seed + 清弹窗/残留命令 + 复入 startRun（RunFlowSystem.restart 契约） */
+    /** RUN_END 重开：同英雄同场景新 seed + 清弹窗/残留命令/结算旗标 + 复入 startRun */
     private void restartRun() {
         this.seed = System.nanoTime(); // UI 边界新 seed（口径 #12）
         this.runContext = newContext(seed);
         commandManager.discardPending();       // 跨局残留命令防泄漏（口径 #12）
         dialogManager.clearAll();
         chestShown = false;
+        runEndSettled = false; // 新局重新观察结算（裁决 D11）
+        snapshotCurrent = false;
         runFlowSystem.restart(runContext);
         accumulator = 0f;
         battleHud.resetSpeed();

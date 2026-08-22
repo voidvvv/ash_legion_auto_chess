@@ -18,10 +18,11 @@ import com.voidvvv.kz_auto_chess_n.entities.Unit;
 import com.voidvvv.kz_auto_chess_n.render.Assets;
 import com.voidvvv.kz_auto_chess_n.render.PlaceholderKeys;
 
+import java.util.Objects;
 import java.util.function.Supplier;
 
 /**
- * ⑧ 商店栏（render §九；仅 SHOPPING）：5 卡 + 刷新（2 金）+ 买经验（4 金）。
+ * ⑧ 商店栏（render §九；仅 SHOPPING）：5 卡 + 刷新（2 金起，Lv.5 折扣动态价签——Phase 6）+ 买经验（4 金）。
  * 点击卡片入队 BuyUnit(slot)——查价不信任载荷（input §6.3）；灰置 = 表现层预校验
  * （金币不足/席满不立即合成/空槽/Lv.7 封顶），最终防线在 ShopSystem handler。
  *
@@ -43,6 +44,8 @@ public final class ShopBar extends Group {
     private final boolean[] affordable = new boolean[GameBalance.SHOP_SLOTS];
     /** 悬停中的商店槽位（Phase 5.1 R1：ShopCard enter/exit 维护；-1 = 无；原始暴露，归一见 HoverPreviewCard） */
     private int hoveredSlot = -1;
+    /** 刷新钮持有引用（Phase 6：价签每帧按局外折扣刷新——裁决 D4） */
+    private ActionButton refreshButton;
 
     public ShopBar(CommandManager commandManager, Assets assets, Supplier<RunContext> context) {
         this.commandManager = commandManager;
@@ -51,14 +54,14 @@ public final class ShopBar extends Group {
         for (int i = 0; i < GameBalance.SHOP_SLOTS; i++) {
             addActor(new ShopCard(i));
         }
-        Actor refresh = new ActionButton("刷新 2金") {
+        this.refreshButton = new ActionButton("刷新 2金") {
             @Override
             protected void onClicked() {
                 commandManager.addCommand(RefreshShopCommand.INSTANCE);
             }
         };
-        refresh.setPosition(BUTTON_X_REFRESH, 14f);
-        addActor(refresh);
+        refreshButton.setPosition(BUTTON_X_REFRESH, 14f);
+        addActor(refreshButton);
         Actor exp = new ActionButton("经验 4金") {
             @Override
             protected void onClicked() {
@@ -74,11 +77,18 @@ public final class ShopBar extends Group {
         return hoveredSlot;
     }
 
-    /** 每帧刷新预校验态（只读；SHOPPING 期 Screen 调用） */
+    /** 每帧刷新预校验态（只读；SHOPPING 期 Screen 调用）+ 刷新钮价签（Lv.5 折扣——裁决 D4） */
     public void refresh(RunContext ctx) {
         for (int i = 0; i < affordable.length; i++) {
             affordable[i] = canBuy(ctx, i);
         }
+        refreshButton.setText(refreshPriceText(ctx.getRunState().getModifiers()));
+    }
+
+    /** 刷新钮价签文案（纯函数，JUnit 可测；口径同 ShopSystem.refreshCost——Lv.5 折扣实付下限 1 金） */
+    static String refreshPriceText(com.voidvvv.kz_auto_chess_n.entities.RunModifiers modifiers) {
+        int cost = Math.max(1, GameBalance.SHOP_REFRESH_COST - modifiers.getRefreshCostDiscount());
+        return "刷新 " + cost + "金";
     }
 
     /**
@@ -158,7 +168,7 @@ public final class ShopBar extends Group {
 
     /** 矩形动作按钮（刷新/买经验共用壳） */
     private abstract class ActionButton extends Actor {
-        private final String text;
+        private String text;
 
         ActionButton(String text) {
             this.text = text;
@@ -172,6 +182,11 @@ public final class ShopBar extends Group {
         }
 
         protected abstract void onClicked();
+
+        /** 价签更新（刷新钮动态价——Phase 6） */
+        void setText(String text) {
+            this.text = Objects.requireNonNull(text, "text 不能为 null");
+        }
 
         @Override
         public void draw(Batch batch, float parentAlpha) {

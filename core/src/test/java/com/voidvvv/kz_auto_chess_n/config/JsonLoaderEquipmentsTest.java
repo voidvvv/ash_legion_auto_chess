@@ -87,6 +87,7 @@ class JsonLoaderEquipmentsTest {
         write(dir, "skills.json", VALID_SKILL);
         write(dir, "synergies.json", VALID_SYNERGY);
         write(dir, "scenes.json", VALID_SCENES);
+        write(dir, "heroes.json", "[]"); // Phase 6 起 loadFromDirectory 增读 heroes.json
     }
 
     private static void write(Path dir, String name, String content) throws IOException {

@@ -1,0 +1,20 @@
+[
+  {
+    "id": "hero_greg", "name": "老兵格雷克",
+    "desc": "旧王国军士，熄星之夜的幸存者，深知补给线的价值",
+    "passive": { "type": "START_GOLD", "value": 2 },
+    "legendaryUnitId": "unit_legend_quartermaster"
+  },
+  {
+    "id": "hero_vera", "name": "荆语者薇拉",
+    "desc": "翡翠林地的德鲁伊，能听懂狂化野兽的哀鸣",
+    "passive": { "type": "SYNERGY_AMP", "value": 25, "synergyIds": ["syn_beast", "syn_ranger"] },
+    "legendaryUnitId": "unit_legend_thornhart"
+  },
+  {
+    "id": "hero_orlando", "name": "灰烬诗人奥兰多",
+    "desc": "用歌谣记录远征的吟游诗人，军中的士气之源",
+    "passive": { "type": "ENERGY_GAIN", "value": 15 },
+    "legendaryUnitId": "unit_legend_warsong_singer"
+  }
+]

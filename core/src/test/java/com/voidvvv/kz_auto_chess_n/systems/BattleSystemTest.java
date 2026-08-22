@@ -26,6 +26,7 @@ import com.voidvvv.kz_auto_chess_n.entities.BattleState;
 import com.voidvvv.kz_auto_chess_n.entities.BattleUnit;
 import com.voidvvv.kz_auto_chess_n.entities.CombatEvent;
 import com.voidvvv.kz_auto_chess_n.entities.Player;
+import com.voidvvv.kz_auto_chess_n.entities.RunModifiers;
 import com.voidvvv.kz_auto_chess_n.entities.SequentialIdIssuer;
 import com.voidvvv.kz_auto_chess_n.entities.Side;
 import com.voidvvv.kz_auto_chess_n.entities.Unit;
@@ -513,5 +514,109 @@ class BattleSystemTest {
         wearer.unequip(sword);
         assertThat(start(data, player, wave, 43L).getUnits().get(0)
                 .getBaseStats().get(StatKey.ATTACK)).isCloseTo(10f, within(1e-4f));
+    }
+
+    // —— Phase 6：局外修正接入（CP10：玩家侧第 3 修正源 / 羁绊增幅 / 回归锚） ——
+
+    @Test
+    @DisplayName("「战歌」玩家侧生效敌方隔离：energyPp 15 → 玩家 115 / 敌方恒 100")
+    void energyGainPlayerSideOnly() {
+        GameData data = data();
+        Player player = deployPlayer(data, data.getUnit("orc"), 2, 4);
+        List<WaveSpec> wave = waveOf(data.getUnit("grunt"), 1f, 2, 0);
+        RunModifiers orlando = new RunModifiers(0, 0, 0, 15,
+                new LinkedHashMap<String, Float>(), null, new java.util.LinkedHashSet<String>(), false);
+        BattleState state = SYSTEM.startBattle(player, wave, data,
+                new RandomGenerator(42L), new SequentialIdIssuer(), orlando);
+        assertThat(state.getUnits().get(0).getEffective(StatKey.ENERGY_GAIN_RATE))
+                .isCloseTo(115f, within(1e-4f)); // 玩家侧第 3 修正源注入（裁决 D13）
+        assertThat(state.getUnits().get(1).getEffective(StatKey.ENERGY_GAIN_RATE))
+                .isCloseTo(100f, within(1e-4f)); // 敌方侧恒不注入
+    }
+
+    @Test
+    @DisplayName("「战歌」与法师羁绊同键叠加：energyGainRate ADD 15+15 → 130")
+    void energyGainStacksWithMageSynergy() {
+        Map<String, UnitData> units = new LinkedHashMap<String, UnitData>();
+        units.put("mage1", new UnitData("mage1", "夹具法师", "精灵", "法师", 1,
+                new BaseStats(100, 10, 0, 1f, 1, 1f, 0, 100, 0), 1.8f,
+                TargetPriority.NEAREST, null, "sk_hit", false));
+        Map<String, SkillData> skills = new LinkedHashMap<String, SkillData>();
+        skills.put("sk_hit", hitSkill());
+        Map<String, SynergyData> synergies = new LinkedHashMap<String, SynergyData>();
+        synergies.put("syn_mage", new SynergyData("syn_mage", "法师", SynergySource.CLASS, "法师",
+                Arrays.asList(new SynergyData.Threshold(4, Arrays.asList(
+                        statEffect(StatKey.ENERGY_GAIN_RATE, EffectOp.ADD, 15f))))));
+        GameData data = new GameData(units, skills, synergies,
+                new LinkedHashMap<String, com.voidvvv.kz_auto_chess_n.data.SceneData>(),
+                new ArrayList<String>());
+
+        Player player = new Player(10);
+        for (int i = 0; i < 4; i++) {
+            Unit unit = new Unit(100 + i, units.get("mage1"), 1);
+            player.addToBench(unit);
+            player.deploy(unit, i, 4);
+        }
+        RunModifiers orlando = new RunModifiers(0, 0, 0, 15,
+                new LinkedHashMap<String, Float>(), null, new java.util.LinkedHashSet<String>(), false);
+        BattleState state = SYSTEM.startBattle(player, new ArrayList<WaveSpec>(), data,
+                new RandomGenerator(42L), new SequentialIdIssuer(), orlando);
+        assertThat(state.getUnits().get(0).getEffective(StatKey.ENERGY_GAIN_RATE))
+                .isCloseTo(130f, within(1e-4f)); // 羁绊 15 + 局外 15
+    }
+
+    @Test
+    @DisplayName("「荆语」玩家侧增幅：2 兽人 hp 250 → 288（150 增幅为 188）；敌方同羁绊原值")
+    void synergyAmpPlayerSideOnly() {
+        GameData data = data();
+        Player player = deployPlayer(data, data.getUnit("orc"), 2, 4);
+        Unit second = new Unit(2, data.getUnit("orc"), 1);
+        player.addToBench(second);
+        player.deploy(second, 3, 4);
+        List<WaveSpec> wave = waveOf(data.getUnit("grunt"), 1f, 2, 0);
+
+        Map<String, Float> amp = new LinkedHashMap<String, Float>();
+        amp.put("syn_orc", 0.25f);
+        RunModifiers vera = new RunModifiers(0, 0, 0, 0, amp, null,
+                new java.util.LinkedHashSet<String>(), false);
+        BattleState state = SYSTEM.startBattle(player, wave, data,
+                new RandomGenerator(42L), new SequentialIdIssuer(), vera);
+        assertThat(state.getUnits().get(0).getBaseStats().get(StatKey.HP))
+                .isCloseTo(288f, within(1e-4f)); // (100 + 188)
+        assertThat(state.getUnits().get(2).getBaseStats().get(StatKey.HP))
+                .isCloseTo(100f, within(1e-4f)); // 敌方哥布林无兽人羁绊不受影响
+    }
+
+    @Test
+    @DisplayName("EMPTY 修正回归锚：6 参重载（EMPTY）与旧 5 参输出全等（id/位置/派生属性）")
+    void emptyOverloadMatchesLegacySignature() {
+        GameData data = data();
+        Player player = deployPlayer(data, data.getUnit("orc"), 2, 4);
+        Unit second = new Unit(2, data.getUnit("orc"), 1);
+        player.addToBench(second);
+        player.deploy(second, 3, 4);
+        List<WaveSpec> wave = waveOf(data.getUnit("grunt"), 1.4f, 2, 0);
+
+        BattleState legacy = start(data, player, wave, 42L);
+        BattleState withEmpty = SYSTEM.startBattle(player, wave, data,
+                new RandomGenerator(42L), new SequentialIdIssuer(), RunModifiers.EMPTY);
+        assertThat(withEmpty.getUnits()).extracting(BattleUnit::getId)
+                .containsExactlyElementsOf(extractIds(legacy));
+        for (int i = 0; i < legacy.getUnits().size(); i++) {
+            assertThat(withEmpty.getUnits().get(i).getBaseStats().get(StatKey.HP))
+                    .isCloseTo(legacy.getUnits().get(i).getBaseStats().get(StatKey.HP), within(1e-6f));
+            assertThat(withEmpty.getUnits().get(i).getBaseStats().get(StatKey.ATTACK))
+                    .isCloseTo(legacy.getUnits().get(i).getBaseStats().get(StatKey.ATTACK), within(1e-6f));
+            assertThat(withEmpty.getUnits().get(i).getGridX()).isEqualTo(legacy.getUnits().get(i).getGridX());
+            assertThat(withEmpty.getUnits().get(i).getGridY()).isEqualTo(legacy.getUnits().get(i).getGridY());
+        }
+    }
+
+    private static List<Integer> extractIds(BattleState state) {
+        List<Integer> ids = new ArrayList<Integer>();
+        for (BattleUnit unit : state.getUnits()) {
+            ids.add(unit.getId());
+        }
+        return ids;
     }
 }

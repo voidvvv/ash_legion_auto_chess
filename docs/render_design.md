@@ -334,6 +334,7 @@ Main.create → LoadingScreen（全量加载）→ new Assets(manager, placehold
 - RESULT 阶段：宝箱三选一弹窗（`dialogStage` 最上层），背景压暗
 - 弹窗层级与输入优先级一致（input §2.2 multiplexer：dialogStage > uiStage > boardProcessor > keyProcessor）
 - **侦察即棋盘**：共享棋盘设计使敌情侦察无需独立面板——敌区三行直接可见（GDD §4.1 的红利）
+- **悬停预览锚点（Phase 5.1 R1 + feedback07，表外补充常量）**：棋盘悬停 (128,48,94,192)、商店悬停 (508,48,112,192)、背包悬停 (132,140,90,100)——`BoardGeometry` BOARD_HOVER/SHOP_HOVER/INVENTORY_HOVER 组；源：① ShopBar 槽位（250ms 驻留）② 棋盘单位（点击候选）③ 背包槽位（BATTLE 置灰/空槽/拖拽中归一抑制）
 
 ---
 

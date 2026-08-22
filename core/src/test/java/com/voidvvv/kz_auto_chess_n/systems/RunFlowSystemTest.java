@@ -609,7 +609,7 @@ class RunFlowSystemTest {
     // —— 终局：第 25 轮经领箱通关（差异声明 #9：第 25 轮仍先领箱再 RUN_END） ——
 
     @Test
-    @DisplayName("25 轮全胜经 PickChest 流转：RUN_END + endCause=COMPLETED + 熟练度 25×3")
+    @DisplayName("25 轮全胜经 PickChest 流转：RUN_END + endCause=COMPLETED + 熟练度 60+25×3=135")
     void round25CompletionThroughPickChestLeadsToRunEnd() {
         GameData data = demoData();
         RunFlowSystem flow = new RunFlowSystem();
@@ -632,7 +632,35 @@ class RunFlowSystemTest {
         assertThat(ctx.getRunState().getRound()).isEqualTo(GameBalance.TOTAL_ROUNDS);
         assertThat(ctx.getRunState().getEndCause()).isEqualTo(RunEndCause.COMPLETED);
         assertThat(ctx.getRunState().getMasteryAwarded())
-                .isEqualTo(GameBalance.TOTAL_ROUNDS * 3); // GDD_BASIC：轮数 × 3
+                .isEqualTo(GameBalance.MASTERY_COMPLETE_BONUS
+                        + GameBalance.TOTAL_ROUNDS * GameBalance.MASTERY_EXP_PER_ROUND); // GDD_BASIC 完整口径（裁决 D3）：60 + 75
+    }
+
+    // —— StartRun heroId 一致性校验（Phase 6 CP8，沿 seed/sceneId 同款口径 #11） ——
+
+    @Test
+    @DisplayName("StartRun heroId 与上下文不一致 → false（零状态残留；null≠非 null 同拒）")
+    void startRunRejectsMismatchedHeroId() {
+        GameData data = demoData();
+        RunFlowSystem flow = new RunFlowSystem();
+        CommandManager manager = armedManager(flow);
+        RunContext ctx = new RunContext(new Player(GameBalance.START_GOLD),
+                new RunState(TEST_SEED, "scene_forest", "hero_greg",
+                        com.voidvvv.kz_auto_chess_n.entities.RunModifiers.EMPTY,
+                        new SequentialIdIssuer()),
+                data, new RandomGenerator(TEST_SEED));
+
+        manager.addCommand(new StartRunCommand(TEST_SEED, "scene_forest", "hero_vera"));
+        manager.executeAll(ctx);
+        assertThat(ctx.getRunState().isRunStarted()).isFalse(); // heroId 错位 → 拒绝
+
+        manager.addCommand(new StartRunCommand(TEST_SEED, "scene_forest", null));
+        manager.executeAll(ctx);
+        assertThat(ctx.getRunState().isRunStarted()).isFalse(); // null ≠ hero_greg → 拒绝
+
+        manager.addCommand(new StartRunCommand(TEST_SEED, "scene_forest", "hero_greg"));
+        manager.executeAll(ctx);
+        assertThat(ctx.getRunState().isRunStarted()).isTrue(); // 一致 → 放行
     }
 
     // —— AbandonRun（Q5 裁决：暂停菜单放弃 → RUN_END 放弃文案） ——
