@@ -88,6 +88,23 @@ class BoardGeometryTest {
     }
 
     @Test
+    @DisplayName("continuousCenter 与 cellCenter 等价：全 6×7 格 (grid+0.5) 逐位相等（0.5×32=16 浮点精确）")
+    void continuousCenterEquivalentToCellCenter() {
+        for (int y = 0; y < GameBalance.BOARD_ROWS; y++) {
+            for (int x = 0; x < GameBalance.BOARD_COLS; x++) {
+                assertThat(BoardGeometry.continuousCenterX(x + 0.5f))
+                        .isEqualTo((float) BoardGeometry.cellCenterX(x));
+                assertThat(BoardGeometry.continuousCenterY(y + 0.5f))
+                        .isEqualTo((float) BoardGeometry.cellCenterY(y));
+            }
+        }
+        // 抽查：格 (2,5) 中心 (304, 98)；连续坐标 y 大 → 像素 y 小（行 0 在顶）
+        assertThat(BoardGeometry.continuousCenterX(2.5f)).isEqualTo(304f);
+        assertThat(BoardGeometry.continuousCenterY(5.5f)).isEqualTo(98f);
+        assertThat(BoardGeometry.continuousCenterY(5.5f)).isGreaterThan(BoardGeometry.continuousCenterY(6.5f));
+    }
+
+    @Test
     @DisplayName("benchSlotCenter 列主序：槽 0/1/2 同列向下、槽 3 起换列")
     void benchSlotsColumnMajor() {
         int[] s0 = BoardGeometry.benchSlotCenter(0);

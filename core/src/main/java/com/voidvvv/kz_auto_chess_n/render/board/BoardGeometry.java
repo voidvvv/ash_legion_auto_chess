@@ -47,6 +47,18 @@ public final class BoardGeometry {
         return BOARD_Y + BOARD_H - (gridY + 1) * CELL + CELL / 2;
     }
 
+    // —— 连续格坐标 ↔ 像素（模拟层弹道口径：格中心 = gridX + 0.5；差异 #P0 修正） ——
+
+    /** 连续格坐标 x → 像素中心 x（0.5×32=16 浮点精确，与 cellCenterX(gridX) 等价） */
+    public static float continuousCenterX(float x) {
+        return BOARD_X + x * CELL;
+    }
+
+    /** 连续格坐标 y → 像素中心 y（行 0 在顶，翻转口径同 cellCenterY） */
+    public static float continuousCenterY(float y) {
+        return BOARD_Y + BOARD_H - y * CELL;
+    }
+
     /** 像素 → 格坐标；界外返回 null（boardProcessor 命中判定） */
     public static int[] pixelToCell(int px, int py) {
         if (px < BOARD_X || px >= BOARD_X + BOARD_W || py < BOARD_Y || py >= BOARD_Y + BOARD_H) {

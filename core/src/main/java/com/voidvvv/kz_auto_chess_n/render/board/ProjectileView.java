@@ -30,9 +30,10 @@ public final class ProjectileView {
             }
             float x = lerp(prev[0], p.getPosX(), alpha);
             float y = lerp(prev[1], p.getPosY(), alpha);
-            int px = Math.round(BoardGeometry.BOARD_X + x * BoardGeometry.CELL + BoardGeometry.CELL / 2f - SIZE / 2f);
-            int py = Math.round(BoardGeometry.BOARD_Y + BoardGeometry.BOARD_H
-                    - (y + 1f) * BoardGeometry.CELL + BoardGeometry.CELL / 2f - SIZE / 2f);
+            // 弹道 pos 为连续格坐标（格中心 = 整数 + 0.5），走 continuousCenter 换算（P0 修正：
+            // 原按整数口径多加 CELL/2，导致每弹右偏/上偏半格对角）
+            int px = Math.round(BoardGeometry.continuousCenterX(x) - SIZE / 2f);
+            int py = Math.round(BoardGeometry.continuousCenterY(y) - SIZE / 2f);
             if (p.getSkill() != null) {
                 batch.draw(assets.region(PlaceholderKeys.skillFx(p.getSkill().getId())), px, py, SIZE, SIZE);
             } else {
