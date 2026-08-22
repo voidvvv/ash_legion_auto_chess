@@ -70,6 +70,8 @@ public final class SynergyPanel extends Group {
         batch.draw(assets.region(PlaceholderKeys.PANEL_9SLICE), getX(), getY(), getWidth(), getHeight());
         batch.setColor(old);
         float y = getY() + getHeight() - 14f;
+        assets.font().draw(batch, "羁绊", getX() + 8f, y); // 标题（feedback02：空态只有 "-" 占位无从辨认面板用途）
+        y -= 18f;
         for (int i = 0; i < lastLines.size() && i < MAX_LINES; i++) {
             assets.font().draw(batch, lastLines.get(i), getX() + 8f, y);
             y -= 16f;

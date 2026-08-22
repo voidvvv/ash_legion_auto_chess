@@ -241,6 +241,8 @@ public final class BattleScreen implements Screen {
         if (!frozen) {
             stepSimulation(delta);
             renderClock += delta;
+        } else {
+            commandManager.executeAll(runContext); // 冻结的只是模拟推进（战斗步进/RESULT 计时/动画），命令照常结算——弹窗按钮链路（PickChest/AbandonRun/UnequipItem）否则死锁（feedback02 修复）
         }
         float alpha = frozen ? 0f : accumulator / GameBalance.LOGIC_STEP;
         worldViewport.apply();
