@@ -26,7 +26,7 @@ public final class ResultBanner extends Group {
             addListener(new ClickListener() {
                 @Override
                 public void clicked(InputEvent event, float x, float y) {
-                    flow.continueAfterResult(context.get());
+                    flow.continueAfterDefeat(context.get());
                 }
             });
         }

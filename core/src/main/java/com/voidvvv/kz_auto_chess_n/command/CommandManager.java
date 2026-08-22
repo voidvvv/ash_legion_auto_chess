@@ -12,13 +12,14 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 /**
  * 命令管理器（input §4.1/§5.1）：输入侧入队、固定逻辑 tick 内统一消费。
  *
- * <p>历史以 {@code (tick, cmd)} 二元组记录（口径 #11）：tick 为管理器逻辑钟计数，
- * 与 {@code BattleState.tick} 独立（Phase 5 接 RunState 时统一）；本期只记录不消费
- * （回放轨 Phase 6+）。{@code onExecuted(cmd, success)} 为通知面板数据源（Phase 5 订阅）。
+ * <p>历史以 {@code (tick, cmd)} 二元组记录：tick 为<b>执行时</b>的 {@link RunState#getLogicTick()}
+ * （唯一逻辑钟——Phase 4 口径 #11 统一销账，实现口径 #17；回放按执行序重演等价），
+ * 与 {@code BattleState.tick} 独立；本期只记录不消费（回放轨 Phase 6+）。
+ * {@code onExecuted(cmd, success)} 为通知面板数据源（Phase 5 订阅）。
  */
 public final class CommandManager {
 
-    /** (逻辑 tick, 命令) 二元组：回放轨的最小记录单位（口径 #11） */
+    /** (执行 tick, 命令) 二元组：回放轨的最小记录单位（tick 取 RunState 逻辑钟） */
     public static final class StampedCommand {
         private final int tick;
         private final GameCommand command;
@@ -42,13 +43,16 @@ public final class CommandManager {
     private final List<StampedCommand> history = new ArrayList<StampedCommand>();
     private final Map<Class<?>, CommandHandler> handlers = new HashMap<Class<?>, CommandHandler>();
     private final List<CommandExecutedListener> listeners = new ArrayList<CommandExecutedListener>();
-    private int logicTick;
 
-    /** 入队并盖当前逻辑 tick 戳入历史 */
+    /** 入队（tick 戳改在消费时盖——RunState.getLogicTick 为唯一逻辑钟，实现口径 #17） */
     public void addCommand(GameCommand cmd) {
         Objects.requireNonNull(cmd, "cmd 不能为 null");
-        history.add(new StampedCommand(logicTick, cmd));
         commandQueue.add(cmd);
+    }
+
+    /** 丢弃未消费的排队命令（重开新局前清残留——实现口径 #12；已消费历史保留） */
+    public void discardPending() {
+        commandQueue.clear();
     }
 
     public void registerHandler(Class<?> type, CommandHandler handler) {
@@ -74,6 +78,7 @@ public final class CommandManager {
         Objects.requireNonNull(ctx, "ctx 不能为 null");
         GameCommand cmd;
         while ((cmd = commandQueue.poll()) != null) {
+            history.add(new StampedCommand(ctx.getRunState().getLogicTick(), cmd)); // 消费时盖执行 tick
             CommandHandler handler = handlers.get(cmd.getClass());
             if (handler == null) {
                 System.err.println("[CommandManager] 未注册 handler，命令丢弃: " + cmd.getClass().getSimpleName());
@@ -85,7 +90,7 @@ public final class CommandManager {
                 }
             }
         }
-        logicTick++;
+        ctx.getRunState().advanceTick(); // 逻辑钟唯一归属：RunState
     }
 
     /** 历史（不可变视图；只记录不消费，回放轨 Phase 6+） */

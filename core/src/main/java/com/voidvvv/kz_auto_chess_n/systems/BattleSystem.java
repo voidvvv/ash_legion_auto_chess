@@ -2,6 +2,7 @@ package com.voidvvv.kz_auto_chess_n.systems;
 
 import com.voidvvv.kz_auto_chess_n.config.GameBalance;
 import com.voidvvv.kz_auto_chess_n.data.EffectData;
+import com.voidvvv.kz_auto_chess_n.data.EquipmentPassive;
 import com.voidvvv.kz_auto_chess_n.data.GameData;
 import com.voidvvv.kz_auto_chess_n.data.StatKey;
 import com.voidvvv.kz_auto_chess_n.data.StatusType;
@@ -11,6 +12,7 @@ import com.voidvvv.kz_auto_chess_n.entities.BattleState;
 import com.voidvvv.kz_auto_chess_n.entities.BattleStats;
 import com.voidvvv.kz_auto_chess_n.entities.BattleUnit;
 import com.voidvvv.kz_auto_chess_n.entities.CombatEvent;
+import com.voidvvv.kz_auto_chess_n.entities.Equipment;
 import com.voidvvv.kz_auto_chess_n.entities.IdIssuer;
 import com.voidvvv.kz_auto_chess_n.entities.Player;
 import com.voidvvv.kz_auto_chess_n.entities.Projectile;
@@ -21,6 +23,7 @@ import com.voidvvv.kz_auto_chess_n.entities.WaveSpec;
 import com.voidvvv.kz_auto_chess_n.utils.RandomGenerator;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -74,6 +77,7 @@ public final class BattleSystem {
         SynergySnapshot enemySynergies = synergySystem.resolve(enemyTemplates, data);
 
         List<BattleUnit> units = new ArrayList<BattleUnit>();
+        List<Unit> rosterDeployed = player.getDeployedUnits(); // 与下方扫描同序（y↑x↑，口径 #16）
         // 玩家侧：部署表扫描序 y↑x↑（= getDeployedUnits 序，坐标同源）
         for (int y = 4; y <= 6; y++) {
             for (int x = 0; x < GameBalance.BOARD_COLS; x++) {
@@ -82,20 +86,22 @@ public final class BattleSystem {
                     continue;
                 }
                 units.add(deriveUnit(idIssuer.nextId(), unit.getTemplate(), unit.getStar(),
-                        Side.PLAYER, 1.0f, playerSynergies, data, x, y));
+                        Side.PLAYER, 1.0f, playerSynergies, data, x, y, unit.getEquipped()));
             }
         }
         verifyDeployedCount(deployed.size(), units.size());
-        // 敌方：WaveSpec 列表序（杂兵抽取序 + Boss 殿后）
+        // 敌方：WaveSpec 列表序（杂兵抽取序 + Boss 殿后）；敌方无装备路径（空列表派生）
         for (WaveSpec spec : enemyWave) {
             units.add(deriveUnit(idIssuer.nextId(), spec.getTemplate(), spec.getStar(),
-                    Side.ENEMY, spec.getScale(), enemySynergies, data, spec.getGridX(), spec.getGridY()));
+                    Side.ENEMY, spec.getScale(), enemySynergies, data, spec.getGridX(), spec.getGridY(),
+                    Collections.<Equipment>emptyList()));
         }
 
         BattleState state = new BattleState(units, rng, playerSynergies, enemySynergies);
         for (BattleUnit unit : units) {
             state.placeUnit(unit, unit.getGridX(), unit.getGridY());
         }
+        applyEquipmentPassives(state, rosterDeployed); // 装备被动（龙心类）：索引对齐玩家侧前 N 个 BattleUnit
         applyOpeningEffects(state, playerSynergies, Side.PLAYER);
         applyOpeningEffects(state, enemySynergies, Side.ENEMY);
         targeting.retargetAll(state); // 按 id 序初始索敌
@@ -233,13 +239,31 @@ public final class BattleSystem {
     }
 
     private static BattleUnit deriveUnit(int id, UnitData template, int star, Side side, float scale,
-                                         SynergySnapshot synergies, GameData data, int x, int y) {
-        List<StatModifierSource> sources = Collections.<StatModifierSource>singletonList(synergies);
+                                         SynergySnapshot synergies, GameData data, int x, int y,
+                                         List<Equipment> equipped) {
+        List<StatModifierSource> sources = Arrays.asList(
+                synergies, EquipmentStats.of(equipped)); // Q4 修正源列表：羁绊（侧全体）+ 装备（单体）
         BattleStats baseStats = StatPipeline.deriveBaseline(template, star, scale, sources);
         BattleUnit unit = new BattleUnit(id, template, star, side,
                 data.getSkill(template.getSkillId()), baseStats); // 加载校验保证技能存在
         unit.setPosition(x, y);
         return unit;
+    }
+
+    /** 装备被动落地（data_schema §八：装备入口进 StatusSystem 的第二种形态）。
+     *  rosterDeployed[i] ↔ units[i]（玩家侧前 N 个，同一扫描序）；REGEN 常驻（duration=∞，sourceId=-1）。 */
+    private void applyEquipmentPassives(BattleState state, List<Unit> rosterDeployed) {
+        List<BattleUnit> units = state.getUnits();
+        for (int i = 0; i < rosterDeployed.size(); i++) {
+            for (Equipment item : rosterDeployed.get(i).getEquipped()) {
+                EquipmentPassive passive = item.getTemplate().getPassive();
+                if (passive == null) {
+                    continue;
+                }
+                statusSystem.apply(state, units.get(i), passive.getType(), passive.getPower(),
+                        Float.POSITIVE_INFINITY, -1, passive.getTickInterval());
+            }
+        }
     }
 
     /** 开局效果（口径 #17）：effect 通道对"该侧"全部单位落地；本期仅支持 SHIELD */

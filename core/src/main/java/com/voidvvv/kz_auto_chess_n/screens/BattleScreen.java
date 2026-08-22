@@ -38,6 +38,9 @@ import com.voidvvv.kz_auto_chess_n.utils.RandomGenerator;
  * 阶段推进全部委托 RunFlowSystem——本类只做点火器/观察者（architecture §七）。
  */
 public final class BattleScreen implements Screen {
+    /** T3 编译桥接（CP15 删 DEMO_SEED 后本地保留 42L）：Q3 裁决的"UI 域新 seed"装配属 CP29 */
+    private static final long DEMO_SEED = 42L;
+
     private final Game game;
     private final Assets assets;
     private final GameData data;
@@ -113,7 +116,7 @@ public final class BattleScreen implements Screen {
     public void show() {
         this.runContext = newContext();
         runFlowSystem.registerHandlers(commandManager);
-        runFlowSystem.startNewRun(runContext);
+        runFlowSystem.startRun(runContext);
         accumulator = 0f;
         renderClock = 0f;
         paused = false;
@@ -222,11 +225,11 @@ public final class BattleScreen implements Screen {
     private RunContext newContext() {
         String sceneId = data.getScenes().keySet().iterator().next(); // 首场景（种子仅森林）
         return new RunContext(new Player(GameBalance.START_GOLD),
-                new RunState(RunFlowSystem.DEMO_SEED, sceneId, new SequentialIdIssuer()),
-                data, new RandomGenerator(RunFlowSystem.DEMO_SEED));
+                new RunState(DEMO_SEED, sceneId, new SequentialIdIssuer()),
+                data, new RandomGenerator(DEMO_SEED));
     }
 
-    /** RUN_END 重开：换新鲜上下文后复入 startNewRun（RunFlowSystem.restart 契约） */
+    /** RUN_END 重开：换新鲜上下文后复入 startRun（RunFlowSystem.restart 契约） */
     private void restartRun() {
         this.runContext = newContext();
         runFlowSystem.restart(runContext);

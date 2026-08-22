@@ -33,31 +33,50 @@ class CommandManagerTest {
     }
 
     @Test
-    @DisplayName("addCommand 入队并入历史：执行前 tick 戳为 0，命令按序保留")
-    void enqueueStampsTickZeroBeforeFirstExecute() {
+    @DisplayName("addCommand 仅入队：执行前历史为空（tick 戳改消费时盖——实现口径 #17）")
+    void enqueueDoesNotStampHistory() {
         CommandManager manager = new CommandManager();
-        DummyA a = new DummyA();
-        DummyB b = new DummyB();
-        manager.addCommand(a);
-        manager.addCommand(b);
-        List<CommandManager.StampedCommand> history = manager.getHistory();
-        assertThat(history).hasSize(2);
-        assertThat(history.get(0).getTick()).isZero();
-        assertThat(history.get(0).getCommand()).isSameAs(a);
-        assertThat(history.get(1).getTick()).isZero();
-        assertThat(history.get(1).getCommand()).isSameAs(b);
+        manager.addCommand(new DummyA());
+        manager.addCommand(new DummyB());
+        assertThat(manager.getHistory()).isEmpty();
     }
 
     @Test
-    @DisplayName("executeAll 后逻辑钟 +1：其后入队的命令盖新 tick 戳（口径 #11）")
-    void logicTickAdvancesPerExecuteAll() {
+    @DisplayName("消费时盖执行 tick：首命令 0；逻辑钟归 RunState，两次 executeAll 后新命令 tick=1（口径 #17）")
+    void stampsExecutionTickFromRunStateClock() {
         CommandManager manager = new CommandManager();
+        manager.registerHandler(DummyA.class, (cmd, ctx) -> true);
+        RunContext ctx = newContext();
         manager.addCommand(new DummyA());
-        manager.executeAll(newContext());
+        manager.executeAll(ctx);
+        assertThat(ctx.getRunState().getLogicTick()).isEqualTo(1);
         manager.addCommand(new DummyA());
+        manager.executeAll(ctx);
+        assertThat(ctx.getRunState().getLogicTick()).isEqualTo(2);
         List<CommandManager.StampedCommand> history = manager.getHistory();
+        assertThat(history).hasSize(2);
         assertThat(history.get(0).getTick()).isZero();
         assertThat(history.get(1).getTick()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("discardPending 丢弃未消费队列：后续 executeAll 零执行，已消费历史保留（口径 #12）")
+    void discardPendingDropsQueuedKeepsHistory() {
+        CommandManager manager = new CommandManager();
+        List<GameCommand> seen = new ArrayList<GameCommand>();
+        manager.registerHandler(DummyA.class, (cmd, ctx) -> {
+            seen.add(cmd);
+            return true;
+        });
+        RunContext ctx = newContext();
+        manager.addCommand(new DummyA());
+        manager.executeAll(ctx);
+        manager.addCommand(new DummyA());
+        manager.addCommand(new DummyA());
+        manager.discardPending();
+        manager.executeAll(ctx);
+        assertThat(seen).hasSize(1);
+        assertThat(manager.getHistory()).hasSize(1);
     }
 
     @Test
@@ -171,15 +190,17 @@ class CommandManagerTest {
     }
 
     @Test
-    @DisplayName("clearHistory 清空历史；逻辑钟计数不受影响")
+    @DisplayName("clearHistory 清空历史；RunState 逻辑钟计数不受影响（钟已不归管理器）")
     void clearHistoryKeepsLogicTick() {
         CommandManager manager = new CommandManager();
         manager.registerHandler(DummyA.class, (cmd, ctx) -> true);
+        RunContext ctx = newContext();
         manager.addCommand(new DummyA());
-        manager.executeAll(newContext());
+        manager.executeAll(ctx);
         manager.clearHistory();
         assertThat(manager.getHistory()).isEmpty();
         manager.addCommand(new DummyA());
+        manager.executeAll(ctx);
         assertThat(manager.getHistory().get(0).getTick()).isEqualTo(1);
     }
 
