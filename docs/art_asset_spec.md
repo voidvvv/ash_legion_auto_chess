@@ -136,6 +136,7 @@ unit_warrior_01_death_0.png   unit_warrior_01_death_1.png   unit_warrior_01_deat
 | 拖拽落点高亮（绿/红/金） | 程序 tint（`BattleRenderer.java:333-369`） |
 | 伤害飘字 | **像素字体渲染**（`FloatingText.java:61-66`），非贴图 |
 | 字体 | Fusion Pixel 12px 位图字体已入库（`Assets.java:20`），非图片素材 |
+| 攻击摆动 / 受击抖动 | 纯程序化 transform 叠加层（小幅旋转 / 整数像素位移，`attack_feedback_design.md` 2026-08-23），零新增素材 |
 
 ---
 

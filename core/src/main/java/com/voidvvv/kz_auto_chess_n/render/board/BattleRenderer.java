@@ -252,6 +252,7 @@ public final class BattleRenderer {
                 UnitView attacker = unitViews.get(event.getSourceId());
                 if (attacker != null) {
                     attacker.anim().onEvent(CombatEvent.Type.ATTACK_LAUNCHED);
+                    attacker.anim().triggerAttackSwing(); // 攻击摆动叠加层（attack_feedback FP1；近战/远程统一出口）
                 }
                 break;
             case CAST:
@@ -293,6 +294,7 @@ public final class BattleRenderer {
         float y = target.virtualY(renderClock);
         if (event.getType() == CombatEvent.Type.HIT) {
             target.anim().triggerHitFlash();
+            target.anim().triggerHitShake(hitShakeAxis(event, target, (int) x, renderClock)); // 受击抖动（attack_feedback FP2）
         }
         FloatTextFormat.Spec spec = FloatTextFormat.of(event);
         if (spec != null) {
@@ -303,6 +305,16 @@ public final class BattleRenderer {
             floats.add(f);
         }
         fxLayer.sparkBurst(burstSkillId, x, y);
+    }
+
+    /** 受击抖动水平轴（attack_feedback FP2）：攻击者来向（在受击者左 → +1，首拍向受力反方向弹开）；
+     *  攻击者视图缺失（sourceId = -1，DamagePipeline.java:40-41）→ 按受击者 id 奇偶确定性回退，不引入随机源 */
+    private int hitShakeAxis(CombatEvent event, UnitView target, int targetX, float renderClock) {
+        UnitView attacker = unitViews.get(event.getSourceId());
+        if (attacker == null) {
+            return HitShakeAxis.fallback(event.getTargetId());
+        }
+        return HitShakeAxis.resolve(attacker.virtualX(renderClock), targetX, event.getTargetId());
     }
 
     /** 占位单位帧绘制（中心定位；enemyFace = 水平翻转；border 敌我色框，null 不画；alpha 整体透明度） */

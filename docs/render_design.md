@@ -1,6 +1,6 @@
 # 🖼️ 渲染架构设计文档
 
-> **版本**：V1.3（新增 §7.6 资源访问服务：注入式 Assets 门面定稿，音频口径补全）  
+> **版本**：V1.4（攻击/受击动作反馈挂链 `attack_feedback_design.md`：§5.1/§5.4；像素规则新增第三例外——攻击摆动小幅旋转，§一#7/§5.3/§八#3 同步修订）  
 > **定位**：视口与坐标系 / 双通路渲染模型 / 帧循环与插值 / 事件驱动表现 / 视图类结构 / 图集规范 / 像素规则 / HUD 布局定稿（Phase 4 渲染层开工依据）  
 > **依据**：GDD V0.9 §九（美术规格）、`architecture_design.md` V1.5（双实体 / Screen / 输入归属）、`battle_design.md` V1.1（主循环 / 跳格插值 / CombatEvent）、`user_input_design.md` V1.4 §2.5（输入归属）/§3（坐标陷阱）  
 > **配图**：`docs/diagrams/battle_screen_layout.html`（V1.0 定稿）  
@@ -18,7 +18,7 @@
 | 4 | 战斗期商店栏 | **退场**，替换为战斗 HUD（变速 / 60s 计时条 / 投降）——聚焦观战 |
 | 5 | 逻辑/表现时差 | 逻辑 60Hz 固定步 + **渲染插值**（UnitView 上一格→当前格 lerp） |
 | 6 | 一次性表现 | **CombatEvent 事件驱动**（动画 / 飘字 / 音效）——事件流的第二用途（第一是单元测试） |
-| 7 | 像素规则 | Nearest 过滤 / 整数像素吸附 / 禁旋转（死亡缩放与弹道为表现例外） |
+| 7 | 像素规则 | Nearest 过滤 / 整数像素吸附 / 禁旋转（死亡缩放、弹道、攻击摆动小幅旋转三处表现例外——第三处仅默认模式，见 `attack_feedback_design.md`） |
 | 8 | 资源策略 | LoadingScreen 全量加载、永不卸载；左右朝向用 flip 参数，不画两套 |
 | 9 | 占位资源流水线 | **运行时生成占位图集 + 逐 key 兜底加载**（§7.5）：零素材文件跑通全部界面，真素材按命名约定渐进替换、永不阻塞功能 |
 | 10 | 技能特效 | **四锚点 × 双命名空间**（§5.4）：一次性特效归 skillId、持续特效归状态类型；缺资源走通用兜底 |
@@ -121,6 +121,7 @@ public void render(float delta) {
 
 - 优先级：`Death（锁定） > Attack / Cast（可打断 Idle/Walk） > Walk > Idle`
 - `HitFlash`（受击白闪 0.1s）为**可叠加层**，不占用状态位
+- **攻击摆动 / 受击抖动**（2026-08-23）同为**可叠加层**：出手时底部中心轴小幅摆动（默认旋转 ≤8°，常量可切整数像素平移）、被 HIT 时 ±1~2 整数像素抖动——不占状态位、不改插值坐标、零素材，详见 `attack_feedback_design.md`
 - 这就是"逻辑无状态仲裁、表现有状态播放"分层的渲染侧兑现（battle_design §三）
 
 ### 5.2 飘字（FloatingText）
@@ -129,7 +130,7 @@ public void render(float delta) {
 - 同一目标同帧多段伤害：错位堆叠显示
 
 ### 5.3 弹道与特效
-- `ProjectileView`：按弹道速度连续飞行；HOMING 追踪目标当前格；LINE 允许**旋转绘制**（像素规则的唯一特例，小贴图破碎感可接受）
+- `ProjectileView`：按弹道速度连续飞行；HOMING 追踪目标当前格；LINE 允许**旋转绘制**（像素规则旋转例外之一，小贴图破碎感可接受；另一旋转例外为攻击摆动小幅旋转——`attack_feedback_design.md`）
 - 命中粒子（FxLayer）：MVP 手绘闪光帧，ParticleEffect 备选（Phase 7）
 - 音效挂钩：事件 → `Assets.sound(id)` 门面（§7.6；MVP 经 AssetManager 直取，Phase 7 升级 AudioManager 池化限声道，调用方零改动）
 
@@ -158,7 +159,7 @@ public void render(float delta) {
 - `fx_status_{type}_*` —— **持续特效归状态类型**：POISON 可能来自三个不同技能，状态的表现归状态，来源技能只决定"怎么得上"
 - `Cast` 事件含**主目标 targetId**（MELEE_INSTANT 载体的 AOE 无弹道，区域特效中心从主目标格取）
 
-**规格与纪律**：一次性 4~6 帧（0.06~0.1s/帧，总长 ≤0.5s）、状态循环 2 帧往返；尺寸 单位 32 / 区域 64 / 全屏 640×360；透明度 ≤80%（**特效永不盖过棋子本体**）；特效中性色（≤32 色调色板内），阵营可读性由飘字分色承担。**兜底**：缺 `fx_{skillId}_*` → `fx_cast_default` / `fx_hit_default`；缺 `fx_status_{type}_*` → 6×6 纯色圆点——永不 null 崩溃，美术不阻塞功能。表现层自由项：震屏、暴击飘字 ×1.2 尺寸。
+**规格与纪律**：一次性 4~6 帧（0.06~0.1s/帧，总长 ≤0.5s）、状态循环 2 帧往返；尺寸 单位 32 / 区域 64 / 全屏 640×360；透明度 ≤80%（**特效永不盖过棋子本体**）；特效中性色（≤32 色调色板内），阵营可读性由飘字分色承担。**兜底**：缺 `fx_{skillId}_*` → `fx_cast_default` / `fx_hit_default`；缺 `fx_status_{type}_*` → 6×6 纯色圆点——永不 null 崩溃，美术不阻塞功能。表现层自由项：震屏、暴击飘字 ×1.2 尺寸。棋子本体的攻击摆动/受击抖动是**绘制期 transform 叠加层**（不进 FxLayer、零素材），见 `attack_feedback_design.md`。
 
 ### 5.5 事件通知面板（NotificationPanel，2026-08-21 定稿）
 
@@ -307,7 +308,7 @@ Main.create → LoadingScreen（全量加载）→ new Assets(manager, placehold
 
 1. **全局 `TextureFilter.Nearest`**——禁止线性过滤（atlas 加载后统一设置）
 2. **绘制坐标 `Math.round` 吸附到整数虚拟像素**——防半像素抖动
-3. **禁用旋转**；例外仅两处：死亡缩放淡出（表现例外）、弹道旋转（§5.3）
+3. **禁用旋转**；例外仅三处：死亡缩放淡出（表现例外）、弹道旋转（§5.3）、攻击摆动小幅旋转（仅默认旋转模式：底部中心轴 ≤8°、~0.25s——`attack_feedback_design.md`，2026-08-23 裁决 C 方案，常量 `ATTACK_SWING_MODE` 可切平移备选）
 4. PC 窗口 1280×720（整数 2 倍）；禁止任意拉伸
 5. 调色板 ≤ 32 色（美术侧纪律，GDD §9.1）
 6. 渲染段**零对象分配**（池获取除外）——Android 低端机 GC 纪律
@@ -371,3 +372,4 @@ Main.create → LoadingScreen（全量加载）→ new Assets(manager, placehold
 | 2026-08-21 | 技能特效 | **四锚点 × 双命名空间**（§5.4）：一次性归 `fx_{skillId}`、持续归 `fx_status_{type}`（轮询差分驱动）；通用兜底永不阻塞美术 |
 | 2026-08-21 | 通知面板 | **左下常驻小窗 + L 键大窗回看**（§5.5）：CombatEvent 第三消费者 + `CommandManager.onExecuted` 经营监听，双流合并；HUD 增第 9 区 |
 | 2026-08-21 | 资源访问 | **注入式 `Assets` 门面**定稿（§7.6）：否决静态 GameContext 方案（Android 生命周期失同步 / 隐式依赖不可测 / Context 词义冲突）；音频统一 `Assets.sound()` 出口（Phase 7 平滑升级 AudioManager）；分层铁律入册 |
+| 2026-08-23 | 攻击/受击动作反馈 | **C 方案双模式**（`attack_feedback_design.md`）：攻击摆动默认「底部中心轴小幅旋转」（≤8°、~0.25s、1 来回衰减），留渲染常量 `ATTACK_SWING_MODE` 一键切换「沿朝向 ±1~2 整数像素平移探身」备选供试玩定稿；像素规则禁旋转**新增第三例外**（仅默认旋转模式，§一#7/§5.3/§八#3 同步修订）；受击抖动挂 HIT 与白闪同点叠加——纯表现层，零逻辑改动零素材 |
