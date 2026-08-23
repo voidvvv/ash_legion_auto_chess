@@ -156,6 +156,40 @@ class GameBalanceTest {
         }
     }
 
+    // —— 局外成长（Phase 6，GDD §8.1 熟练度三件套与等级解锁表）——
+
+    @Test
+    @DisplayName("熟练度升级经验表：Lv.1→2 起 50/100/150/200；Lv.5 封顶 0（GDD §8.1）")
+    void masteryExpToNextTable() {
+        int[] expected = {50, 100, 150, 200, 0};
+        for (int level = 1; level <= GameBalance.MASTERY_MAX_LEVEL; level++) {
+            assertThat(GameBalance.masteryExpToNext(level)).isEqualTo(expected[level - 1]);
+        }
+    }
+
+    @Test
+    @DisplayName("masteryExpToNext 越界（0/6）抛 IllegalArgumentException")
+    void masteryExpToNextRejectsOutOfBoundsLevel() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> GameBalance.masteryExpToNext(0))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("熟练度等级");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> GameBalance.masteryExpToNext(6))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("6");
+    }
+
+    @Test
+    @DisplayName("局外成长常量与 GDD §8.1 逐项对照（Lv.4/5 为裁决 D4 工作值）")
+    void masteryConstantsMatchGdd() {
+        assertThat(GameBalance.MASTERY_MAX_LEVEL).isEqualTo(5);
+        assertThat(GameBalance.MASTERY_LV1_START_GOLD_BONUS).isEqualTo(2);   // 裁决 D2：全英雄基础权益
+        assertThat(GameBalance.MASTERY_LV2_RARE_SHOP_BONUS_PP).isEqualTo(5); // 裁决 D5：仅 p3>0 轮生效
+        assertThat(GameBalance.MASTERY_LV4_START_GOLD_BONUS).isEqualTo(3);   // 工作值待调
+        assertThat(GameBalance.MASTERY_LV5_REFRESH_DISCOUNT).isEqualTo(1);   // 工作值待调
+        assertThat(GameBalance.MASTERY_COMPLETE_BONUS).isEqualTo(60);        // 裁决 D3：通关 +60
+        assertThat(GameBalance.MASTERY_EXP_PER_ROUND).isEqualTo(3);
+    }
+
     // —— 棋手等级与人口（GDD §3.5 表）——
 
     @Test

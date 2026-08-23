@@ -170,3 +170,6 @@ Thumbs.db
 
 ## Local playtest feedback (not tracked):
 /feedback/
+
+## Runtime save files (lwjgl3 workingDir = assets/; not tracked):
+/assets/save/

@@ -20,6 +20,7 @@ public final class GameData {
     private final Map<String, SynergyData> synergies;
     private final Map<String, SceneData> scenes;
     private final Map<String, EquipmentData> equipments;
+    private final Map<String, HeroData> heroes;
     private final List<String> warnings;
 
     /** 兼容重载：无装备表（存量测试构造先例） */
@@ -29,14 +30,24 @@ public final class GameData {
         this(units, skills, synergies, scenes, new LinkedHashMap<String, EquipmentData>(), warnings);
     }
 
+    /** 兼容重载：无英雄表（Phase 5 存量测试构造先例——heroes 为空表） */
     public GameData(Map<String, UnitData> units, Map<String, SkillData> skills,
                     Map<String, SynergyData> synergies, Map<String, SceneData> scenes,
                     Map<String, EquipmentData> equipments, List<String> warnings) {
+        this(units, skills, synergies, scenes, equipments,
+                new LinkedHashMap<String, HeroData>(), warnings);
+    }
+
+    public GameData(Map<String, UnitData> units, Map<String, SkillData> skills,
+                    Map<String, SynergyData> synergies, Map<String, SceneData> scenes,
+                    Map<String, EquipmentData> equipments, Map<String, HeroData> heroes,
+                    List<String> warnings) {
         this.units = Collections.unmodifiableMap(new LinkedHashMap<String, UnitData>(units));
         this.skills = Collections.unmodifiableMap(new LinkedHashMap<String, SkillData>(skills));
         this.synergies = Collections.unmodifiableMap(new LinkedHashMap<String, SynergyData>(synergies));
         this.scenes = Collections.unmodifiableMap(new LinkedHashMap<String, SceneData>(scenes));
         this.equipments = Collections.unmodifiableMap(new LinkedHashMap<String, EquipmentData>(equipments));
+        this.heroes = Collections.unmodifiableMap(new LinkedHashMap<String, HeroData>(heroes));
         this.warnings = Collections.unmodifiableList(warnings);
     }
 
@@ -45,12 +56,14 @@ public final class GameData {
     public SynergyData getSynergy(String id) { return synergies.get(id); }
     public SceneData getScene(String id) { return scenes.get(id); }
     public EquipmentData getEquipment(String id) { return equipments.get(id); }
+    public HeroData getHero(String id) { return heroes.get(id); }
 
     public Map<String, UnitData> getUnits() { return units; }
     public Map<String, SkillData> getSkills() { return skills; }
     public Map<String, SynergyData> getSynergies() { return synergies; }
     public Map<String, SceneData> getScenes() { return scenes; }
     public Map<String, EquipmentData> getEquipments() { return equipments; }
+    public Map<String, HeroData> getHeroes() { return heroes; }
 
     /** 加载期软告警（可能为空，永不为 null） */
     public List<String> getWarnings() { return warnings; }

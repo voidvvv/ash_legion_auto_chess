@@ -1,6 +1,7 @@
 package com.voidvvv.kz_auto_chess_n.systems;
 
 import com.voidvvv.kz_auto_chess_n.data.EffectData;
+import com.voidvvv.kz_auto_chess_n.data.EffectOp;
 import com.voidvvv.kz_auto_chess_n.data.GameData;
 import com.voidvvv.kz_auto_chess_n.data.SynergyData;
 import com.voidvvv.kz_auto_chess_n.data.SynergySource;
@@ -10,6 +11,7 @@ import com.voidvvv.kz_auto_chess_n.entities.StatModifierBlock;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -23,14 +25,25 @@ import java.util.Objects;
 public final class SynergySystem {
 
     /**
-     * 结算一侧阵容的羁绊快照。
+     * 兼容重载（敌方侧 / SynergyPanel 预演 / 存量测试）：无增幅。
      *
      * @param templates 该侧全部上场模板（玩家侧 = getDeployedUnits 映射 getTemplate；敌方侧 = WaveSpec 模板集）
      * @param data      静态数据（synergies 按 JSON 声明序遍历，结果序确定）
      */
     public SynergySnapshot resolve(Collection<UnitData> templates, GameData data) {
+        return resolve(templates, data, java.util.Collections.<String, Float>emptyMap());
+    }
+
+    /**
+     * 结算一侧阵容的羁绊快照（带增幅，Phase 6 裁决 D12）：synergyAmp = synergyId → 比例
+     * （0.25 = +25%，「荆语」）。增幅作用于该羁绊当档全部效果（档位替换制语义不变）：
+     * ADD 通道四舍五入取整（整型 stat 语义）、PCT 与 effect 通道保留浮点。
+     */
+    public SynergySnapshot resolve(Collection<UnitData> templates, GameData data,
+                                   Map<String, Float> synergyAmp) {
         Objects.requireNonNull(templates, "templates 不能为 null");
         Objects.requireNonNull(data, "data 不能为 null");
+        Objects.requireNonNull(synergyAmp, "synergyAmp 不能为 null");
 
         List<SynergySnapshot.ActiveSynergy> actives = new ArrayList<SynergySnapshot.ActiveSynergy>();
         StatModifierBlock statModifiers = StatModifierBlock.empty();
@@ -50,12 +63,14 @@ public final class SynergySystem {
                 continue; // 未达最低档
             }
             actives.add(new SynergySnapshot.ActiveSynergy(synergy.getId(), synergy.getName(), tier.getCount()));
+            Float amp = synergyAmp.get(synergy.getId());
             for (EffectData effect : tier.getEffects()) {
-                if (effect.isStatChannel()) {
+                EffectData scaled = amp == null ? effect : amplify(effect, amp);
+                if (scaled.isStatChannel()) {
                     statModifiers = statModifiers.plus(StatModifierBlock.of(
-                            effect.getStat(), effect.getOp(), effect.getValue()));
+                            scaled.getStat(), scaled.getOp(), scaled.getValue()));
                 } else {
-                    openingEffects.add(effect);
+                    openingEffects.add(scaled);
                 }
             }
         }
@@ -64,5 +79,14 @@ public final class SynergySystem {
             return SynergySnapshot.EMPTY;
         }
         return new SynergySnapshot(actives, statModifiers, openingEffects);
+    }
+
+    /** 增幅单条效果（裁决 D12）：ADD 四舍五入取整；PCT/effect 保留浮点 */
+    private static EffectData amplify(EffectData effect, float amp) {
+        float scaled = effect.getOp() == EffectOp.ADD
+                ? Math.round(effect.getValue() * (1f + amp))
+                : effect.getValue() * (1f + amp);
+        return new EffectData(effect.getStat(), effect.getEffect(), effect.getOp(), scaled,
+                effect.getTarget());
     }
 }

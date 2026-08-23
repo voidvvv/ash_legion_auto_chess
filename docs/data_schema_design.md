@@ -1,6 +1,6 @@
 # 🗃️ 数据层 Schema 设计文档
 
-> **版本**：V1.4（风味种族校验口径定稿：软告警对称双向；百分比类 stat 缺省值与百分点刻度约定）  
+> **版本**：V1.5（Phase 6 局外成长：heroes.json 落地 + scenes `shopUnlocks` 场景门控 + Rarity 词表名对齐代码 `RARE`）  
 > **定位**：静态数据 JSON 的字段终版、同名词表、校验规则——Phase 1 数据层（`data/` + `config/JsonLoader`）的开工依据  
 > **依据**：GDD V0.11 §6.5、`battle_design.md` V1.2（组合执行模型）、`architecture_design.md` V1.6、`render_design.md` V1.0（图集命名约定）  
 > **改版日**：2026-08-21
@@ -16,7 +16,7 @@
 | `synergies.json` | Phase 1 | **字段终版 + 完整示例** |
 | `scenes.json` | Phase 2 | **结构锁定**（字段终版，示例为骨架） |
 | `equipments.json` | Phase 5 | **结构锁定**（字段终版，示例为骨架） |
-| `heroes.json` | Phase 6 | **延后**——档案层系统未设计，预写必返工 |
+| `heroes.json` | Phase 6 | **字段终版 + 完整示例**（V1.5：id/name/desc/passive{type∈HeroPassiveType,value,synergyIds}/legendaryUnitId；词表三值 START_GOLD/SYNERGY_AMP/ENERGY_GAIN；交叉校验见 §九与 spec CP2） |
 
 > **waves.json 取消**：并入 `scenes.json`（场景=敌人池+Boss 映射；波次强度/人口曲线为 `GameBalance` 全局常量，见 §十）。
 
@@ -43,8 +43,9 @@
 | **EffectOp**（羁绊/装备效果运算） | `ADD` `PCT` |
 | **EffectTarget** | `ALLIES`（MVP 仅此一档；预留 `TRAITS`） |
 | **EquipSlot** | `WEAPON` `ARMOR` `ACCESSORY` |
-| **Rarity** | `WHITE`（白）`FINISHED`（成）`LEGENDARY`（传说） |
+| **Rarity**（V1.5 对齐代码 `EquipmentRarity`） | `WHITE`（白）`RARE`（成）`LEGENDARY`（传说） |
 | **SynergySource** | `RACE` `CLASS` |
+| **HeroPassiveType**（V1.5） | `START_GOLD` `SYNERGY_AMP` `ENERGY_GAIN`（heroes.json passive.type，词表三值） |
 
 > **词表即代码的铁律**：新增 Shape / 效果类型 / StatusType / statKey 都是引擎代码改动——先在此登记，再进 JSON。
 >
@@ -211,6 +212,7 @@ Boss 模板的 `baseStats` 直接写**乘好倍率的最终值**（普通 Boss �
 |------|------|------|------|
 | `id` | string | ✓ | 唯一（`syn_warrior`） |
 | `name` | string | ✓ | 显示名 |
+| `desc` | string | ✓ | 一句主题描述（手写文案；档位数值行由 thresholds 结构化生成——Phase 5.1 裁决 2） |
 | `source` | enum | ✓ | `RACE` / `CLASS` |
 | `key` | string | ✓ | 与 units 的 `race`（source=RACE）或 `class`（source=CLASS）值精确匹配 |
 | `thresholds[].count` | int | ✓ | 升序、唯一（2/4/6 或 3/5/7，终态可自选） |
@@ -295,9 +297,10 @@ Boss 模板的 `baseStats` 直接写**乘好倍率的最终值**（普通 Boss �
       { "unitId": "unit_archer_01", "weight": 2, "minRound": 4 },
       { "unitId": "unit_treant_01", "weight": 1, "minRound": 8 }
     ],
-    "bosses": { "7": "boss_thorn_mother", "15": "boss_one_eye", "25": "boss_thorn_true" }
+    "bosses": { "7": "boss_thorn_mother", "15": "boss_one_eye", "25": "boss_thorn_true" },
+    "shopUnlocks": []
   },
-  { "id": "scene_crypt", "name": "亡者墓穴", "unlockAfter": "scene_forest", "enemyPool": [ "…同上结构…" ], "bosses": { "…": "…" } }
+  { "id": "scene_crypt", "name": "亡者墓穴", "unlockAfter": "scene_forest", "enemyPool": [ "…同上结构…" ], "bosses": { "…": "…" }, "shopUnlocks": ["unit_skeleton_soldier"] }
 ]
 ```
 
@@ -308,6 +311,7 @@ Boss 模板的 `baseStats` 直接写**乘好倍率的最终值**（普通 Boss �
 | `enemyPool[].weight` | 抽取权重 |
 | `enemyPool[].minRound` | 该敌人最早出现轮次（池内费阶门控） |
 | `bosses` | 轮次 → Boss 模板 id（7/15/25 固定） |
+| `shopUnlocks`（V1.5） | 该场景解锁后进入商店池的单位 id（缺省空表；元素 ∈ units 且非 Boss；不跨场景重复；不得为任何英雄传奇——互斥）。未列入者 = 基础池恒可购 |
 
 强度系数与敌方人口曲线**不在场景文件里**——全局常量（§十）。
 
@@ -375,3 +379,4 @@ Boss 模板的 `baseStats` 直接写**乘好倍率的最终值**（普通 Boss �
 | 2026-08-21 | 羁绊种子补全（V1.3） | synergies 种子 1 → **6 条全档位**（兽人/战士/法师/刺客/野兽/游侠，工作值待调）；**`skillPower` 入 statKey**（第 9 键，法师羁绊依赖）；**档位替换制**与**风味种族**语义明文；吸血统一 `stat: lifesteal`（effect 通道废弃） |
 | 2026-08-21 | 风味校验口径（V1.4） | **未匹配 synergy 的 race/class 不报错**（运行时自然不计羁绊）；加载期末**去重聚合软告警**（防拼写，与孤儿羁绊告警对称）——消灭"登记为无羁绊"悬空条款 |
 | 2026-08-21 | 百分比刻度约定（V1.4） | `lifesteal=0 / skillPower=0 / energyGainRate=100` 缺省定稿；**百分点整数刻度 + 结算 ÷100**——ADD/PCT 语义 9 键统一，管线零特例，JSON 无小数 |
+| 2026-08-22 | 局外成长数据层（V1.5） | **heroes.json 落地**（三英雄草案 + `HeroPassiveType` 词表三值）；**scenes `shopUnlocks` 场景门控**（与英雄传奇互斥，裁决 D8）；**Rarity 词表名对齐代码 `RARE`**（销 feedback06 W2） |

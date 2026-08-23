@@ -1,7 +1,6 @@
 package com.voidvvv.kz_auto_chess_n.config;
 
 import com.badlogic.gdx.files.FileHandle;
-import com.badlogic.gdx.utils.JsonReader;
 import com.badlogic.gdx.utils.JsonValue;
 import com.voidvvv.kz_auto_chess_n.data.BaseStats;
 import com.voidvvv.kz_auto_chess_n.data.Delivery;
@@ -14,6 +13,8 @@ import com.voidvvv.kz_auto_chess_n.data.EquipmentPassive;
 import com.voidvvv.kz_auto_chess_n.data.EquipmentRarity;
 import com.voidvvv.kz_auto_chess_n.data.EquipmentSlot;
 import com.voidvvv.kz_auto_chess_n.data.GameData;
+import com.voidvvv.kz_auto_chess_n.data.HeroData;
+import com.voidvvv.kz_auto_chess_n.data.HeroPassiveType;
 import com.voidvvv.kz_auto_chess_n.data.SkillData;
 import com.voidvvv.kz_auto_chess_n.data.SkillEffect;
 import com.voidvvv.kz_auto_chess_n.data.SkillEffectType;
@@ -35,6 +36,24 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static com.voidvvv.kz_auto_chess_n.config.JsonReadUtils.checkNonNegative;
+import static com.voidvvv.kz_auto_chess_n.config.JsonReadUtils.checkUnknownKeys;
+import static com.voidvvv.kz_auto_chess_n.config.JsonReadUtils.fail;
+import static com.voidvvv.kz_auto_chess_n.config.JsonReadUtils.join;
+import static com.voidvvv.kz_auto_chess_n.config.JsonReadUtils.optionalBool;
+import static com.voidvvv.kz_auto_chess_n.config.JsonReadUtils.optionalFloat;
+import static com.voidvvv.kz_auto_chess_n.config.JsonReadUtils.optionalFloatObj;
+import static com.voidvvv.kz_auto_chess_n.config.JsonReadUtils.optionalInt;
+import static com.voidvvv.kz_auto_chess_n.config.JsonReadUtils.optionalString;
+import static com.voidvvv.kz_auto_chess_n.config.JsonReadUtils.optionalVocab;
+import static com.voidvvv.kz_auto_chess_n.config.JsonReadUtils.parseArray;
+import static com.voidvvv.kz_auto_chess_n.config.JsonReadUtils.require;
+import static com.voidvvv.kz_auto_chess_n.config.JsonReadUtils.requireFloat;
+import static com.voidvvv.kz_auto_chess_n.config.JsonReadUtils.requireInt;
+import static com.voidvvv.kz_auto_chess_n.config.JsonReadUtils.requireObject;
+import static com.voidvvv.kz_auto_chess_n.config.JsonReadUtils.requireString;
+import static com.voidvvv.kz_auto_chess_n.config.JsonReadUtils.requireVocab;
+
 /**
  * 静态数据加载器（data_schema §九 加载期校验清单的完整实现）。
  *
@@ -47,18 +66,17 @@ import java.util.Set;
  * 汇入 {@link GameData#getWarnings()} 由调用方处置；本类不调用 Gdx.*（分层约束，data/config 仅许 Json/FileHandle）。
  */
 public final class JsonLoader {
-    private static final JsonReader READER = new JsonReader();
 
     private static final float DEFAULT_UPGRADE_MULTIPLIER = 1.8f;
 
     private JsonLoader() {
     }
 
-    /** 从目录按标准文件名加载：units.json / skills.json / synergies.json / scenes.json / equipments.json */
+    /** 从目录按标准文件名加载：units / skills / synergies / scenes / equipments / heroes */
     public static GameData loadFromDirectory(FileHandle dataDir) {
         return load(dataDir.child("units.json"), dataDir.child("skills.json"),
                 dataDir.child("synergies.json"), dataDir.child("scenes.json"),
-                dataDir.child("equipments.json"));
+                dataDir.child("equipments.json"), dataDir.child("heroes.json"));
     }
 
     /** 兼容重载：无装备文件（存量测试路径）——装备表为空 */
@@ -67,18 +85,26 @@ public final class JsonLoader {
         return load(unitsFile, skillsFile, synergiesFile, scenesFile, null);
     }
 
+    /** 兼容重载：无英雄文件（Phase 5 存量测试路径）——英雄表为空 */
     public static GameData load(FileHandle unitsFile, FileHandle skillsFile,
                                 FileHandle synergiesFile, FileHandle scenesFile,
                                 FileHandle equipmentsFile) {
+        return load(unitsFile, skillsFile, synergiesFile, scenesFile, equipmentsFile, null);
+    }
+
+    public static GameData load(FileHandle unitsFile, FileHandle skillsFile,
+                                FileHandle synergiesFile, FileHandle scenesFile,
+                                FileHandle equipmentsFile, FileHandle heroesFile) {
         Map<String, UnitData> units = parseUnits(unitsFile);
         Map<String, SkillData> skills = parseSkills(skillsFile);
         Map<String, SynergyData> synergies = parseSynergies(synergiesFile);
         Map<String, SceneData> scenes = parseScenes(scenesFile);
         Map<String, EquipmentData> equipments = parseEquipments(equipmentsFile);
+        Map<String, HeroData> heroes = parseHeroes(heroesFile);
         List<String> warnings = new ArrayList<String>();
-        crossValidate(units, skills, synergies, scenes, warnings);
+        crossValidate(units, skills, synergies, scenes, heroes, warnings);
         warnEmptyRarityPools(equipments, warnings);
-        return new GameData(units, skills, synergies, scenes, equipments, warnings);
+        return new GameData(units, skills, synergies, scenes, equipments, heroes, warnings);
     }
 
     // ==================================================================
@@ -338,14 +364,15 @@ public final class JsonLoader {
             if (!ids.add(id)) {
                 fail(w, "id 全文件唯一，重复声明");
             }
-            checkUnknownKeys(e, w, "id", "name", "unlockAfter", "enemyPool", "bosses");
+            checkUnknownKeys(e, w, "id", "name", "unlockAfter", "enemyPool", "bosses", "shopUnlocks");
 
             String name = requireString(e, "name", w);
             String unlockAfter = optionalString(e, "unlockAfter", w);
             List<SceneData.EnemyPoolEntry> enemyPool = parseEnemyPool(require(e, "enemyPool", w), w);
             Map<Integer, String> bosses = parseBosses(require(e, "bosses", w), w);
+            List<String> shopUnlocks = parseShopUnlocks(e.get("shopUnlocks"), w);
 
-            result.put(id, new SceneData(id, name, unlockAfter, enemyPool, bosses));
+            result.put(id, new SceneData(id, name, unlockAfter, enemyPool, bosses, shopUnlocks));
         }
         return result;
     }
@@ -413,6 +440,29 @@ public final class JsonLoader {
             }
         }
         return bosses;
+    }
+
+    /** shopUnlocks（可选数组，缺省/null = 空表）：场景解锁后进入商店池的单位 id（裁决 D8） */
+    private static List<String> parseShopUnlocks(JsonValue node, String w) {
+        List<String> result = new ArrayList<String>();
+        if (node == null || node.isNull()) {
+            return result;
+        }
+        if (!node.isArray()) {
+            fail(w + "shopUnlocks", "必须为数组（单位 id）");
+        }
+        Set<String> seen = new HashSet<String>();
+        for (JsonValue u = node.child; u != null; u = u.next) {
+            if (!u.isString() || u.asString().trim().isEmpty()) {
+                fail(w + "shopUnlocks", "元素必须为非空字符串（单位 id）");
+            }
+            String unitId = u.asString();
+            if (!seen.add(unitId)) {
+                fail(w + "shopUnlocks", "场景内重复单位: " + unitId);
+            }
+            result.add(unitId);
+        }
+        return result;
     }
 
     // ==================================================================
@@ -507,12 +557,68 @@ public final class JsonLoader {
     }
 
     // ==================================================================
+    // heroes.json（Phase 6；裁决 D17 词表制）
+    // ==================================================================
+
+    /** heroesFile 可 null（兼容重载）：null → 空表；生产路径缺文件沿 parseArray 即死 */
+    private static Map<String, HeroData> parseHeroes(FileHandle file) {
+        Map<String, HeroData> result = new LinkedHashMap<String, HeroData>();
+        if (file == null) {
+            return result;
+        }
+        Set<String> ids = new HashSet<String>();
+        for (JsonValue e = parseArray(file).child; e != null; e = e.next) {
+            requireObject(e, file.name());
+            String id = requireString(e, "id", file.name() + "#?");
+            String w = file.name() + "#" + id + "/";
+            if (!ids.add(id)) {
+                fail(w, "id 全文件唯一，重复声明");
+            }
+            checkUnknownKeys(e, w, "id", "name", "desc", "passive", "legendaryUnitId");
+
+            String name = requireString(e, "name", w);
+            String desc = requireString(e, "desc", w);
+            JsonValue passiveNode = require(e, "passive", w);
+            String pw = w + "passive/";
+            requireObject(passiveNode, pw);
+            checkUnknownKeys(passiveNode, pw, "type", "value", "synergyIds");
+            HeroPassiveType type = requireVocab(passiveNode, "type", HeroPassiveType.class, pw);
+            float value = requireFloat(passiveNode, "value", pw);
+            if (value <= 0) {
+                fail(pw + "value", "必须 > 0，实际=" + value);
+            }
+            List<String> synergyIds = new ArrayList<String>();
+            JsonValue synergyNode = passiveNode.get("synergyIds");
+            if (synergyNode != null && !synergyNode.isNull()) {
+                if (!synergyNode.isArray()) {
+                    fail(pw + "synergyIds", "必须为数组");
+                }
+                for (JsonValue s = synergyNode.child; s != null; s = s.next) {
+                    if (!s.isString() || s.asString().trim().isEmpty()) {
+                        fail(pw + "synergyIds", "元素必须为非空字符串（羁绊 id）");
+                    }
+                    synergyIds.add(s.asString());
+                }
+            }
+            if (type == HeroPassiveType.SYNERGY_AMP && synergyIds.isEmpty()) {
+                fail(pw + "synergyIds", "SYNERGY_AMP 必须指定至少 1 个羁绊 id");
+            }
+            if (type != HeroPassiveType.SYNERGY_AMP && !synergyIds.isEmpty()) {
+                fail(pw + "synergyIds", "仅 SYNERGY_AMP 允许 synergyIds");
+            }
+            String legendaryUnitId = optionalString(e, "legendaryUnitId", w);
+            result.put(id, new HeroData(id, name, desc, type, value, synergyIds, legendaryUnitId));
+        }
+        return result;
+    }
+
+    // ==================================================================
     // 交叉校验（data_schema §九.4 / §九.6 + scenes 组 S1~S4）
     // ==================================================================
 
     private static void crossValidate(Map<String, UnitData> units, Map<String, SkillData> skills,
                                       Map<String, SynergyData> synergies, Map<String, SceneData> scenes,
-                                      List<String> warnings) {
+                                      Map<String, HeroData> heroes, List<String> warnings) {
         // 1. units 的 skillId 必 ∈ skills（悬空即死）
         Set<String> referencedSkills = new HashSet<String>();
         for (UnitData unit : units.values()) {
@@ -612,180 +718,48 @@ public final class JsonLoader {
                 cursor = scenes.get(cursor).getUnlockAfter();
             }
         }
-    }
-
-    // ==================================================================
-    // JsonValue 读取与校验工具（报错统一含 文件#条目/字段路径）
-    // ==================================================================
-
-    private static JsonValue parseArray(FileHandle file) {
-        if (!file.exists()) {
-            fail(file.name(), "文件不存在");
-        }
-        String text = file.readString("UTF-8");
-        if (!text.isEmpty() && text.charAt(0) == '﻿') {
-            text = text.substring(1); // 容错剥离 BOM（约定不用 BOM，data_schema §二.1）
-        }
-        JsonValue root = READER.parse(text);
-        if (root == null || !root.isArray()) {
-            fail(file.name(), "根节点必须是数组");
-        }
-        return root;
-    }
-
-    private static void requireObject(JsonValue v, String where) {
-        if (!v.isObject()) {
-            fail(where, "条目必须是对象");
-        }
-    }
-
-    private static JsonValue require(JsonValue obj, String field, String where) {
-        JsonValue child = obj.get(field);
-        if (child == null || child.isNull()) {
-            fail(where + field, "缺必填字段");
-        }
-        return child;
-    }
-
-    private static String requireString(JsonValue obj, String field, String where) {
-        JsonValue child = require(obj, field, where);
-        if (!child.isString() || child.asString().trim().isEmpty()) {
-            fail(where + field, "必须为非空字符串");
-        }
-        return child.asString();
-    }
-
-    /** 可选字符串：缺省或显式 null 放行返回 null；出现则必须为非空字符串 */
-    private static String optionalString(JsonValue obj, String field, String where) {
-        JsonValue child = obj.get(field);
-        if (child == null || child.isNull()) {
-            return null;
-        }
-        if (!child.isString() || child.asString().trim().isEmpty()) {
-            fail(where + field, "必须为非空字符串");
-        }
-        return child.asString();
-    }
-
-    private static int requireInt(JsonValue obj, String field, String where) {
-        JsonValue child = require(obj, field, where);
-        if (!child.isNumber()) {
-            fail(where + field, "必须为数字，实际=" + child);
-        }
-        double d = child.asDouble();
-        if (Math.rint(d) != d) {
-            fail(where + field, "必须为整数，实际=" + d);
-        }
-        return (int) d;
-    }
-
-    private static float requireFloat(JsonValue obj, String field, String where) {
-        JsonValue child = require(obj, field, where);
-        if (!child.isNumber()) {
-            fail(where + field, "必须为数字，实际=" + child);
-        }
-        return child.asFloat();
-    }
-
-    private static boolean optionalBool(JsonValue obj, String field, String where, boolean def) {
-        JsonValue child = obj.get(field);
-        if (child == null || child.isNull()) {
-            return def;
-        }
-        if (!child.isBoolean()) {
-            fail(where + field, "必须为布尔值，实际=" + child);
-        }
-        return child.asBoolean();
-    }
-
-    private static int optionalInt(JsonValue obj, String field, String where, int def) {
-        JsonValue child = obj.get(field);
-        if (child == null || child.isNull()) {
-            return def;
-        }
-        return requireInt(obj, field, where);
-    }
-
-    private static float optionalFloat(JsonValue obj, String field, String where, float def) {
-        Float v = optionalFloatObj(obj, field, where);
-        return v == null ? def : v;
-    }
-
-    private static Float optionalFloatObj(JsonValue obj, String field, String where) {
-        JsonValue child = obj.get(field);
-        if (child == null || child.isNull()) {
-            return null;
-        }
-        if (!child.isNumber()) {
-            fail(where + field, "必须为数字，实际=" + child);
-        }
-        return child.asFloat();
-    }
-
-    private static void checkNonNegative(JsonValue obj, String field, String w, int value) {
-        if (value < 0) {
-            fail(w + field, "不允许负值，实际=" + value);
-        }
-    }
-
-    /** 词表解析：按 {@link Vocab#jsonName()} 匹配，非法值报错并列出全部合法值 */
-    private static <E extends Enum<E> & Vocab> E requireVocab(JsonValue obj, String field, Class<E> type, String where) {
-        String raw = requireString(obj, field, where);
-        for (E e : type.getEnumConstants()) {
-            if (e.jsonName().equals(raw)) {
-                return e;
-            }
-        }
-        fail(where + field, "非法枚举值 \"" + raw + "\"，合法值: " + vocabNames(type));
-        return null; // 不可达
-    }
-
-    private static <E extends Enum<E> & Vocab> E optionalVocab(JsonValue obj, String field, Class<E> type, String where, E def) {
-        JsonValue child = obj.get(field);
-        if (child == null || child.isNull()) {
-            return def;
-        }
-        return requireVocab(obj, field, type, where);
-    }
-
-    private static void checkUnknownKeys(JsonValue obj, String where, String... allowed) {
-        for (JsonValue child = obj.child; child != null; child = child.next) {
-            boolean known = false;
-            for (String a : allowed) {
-                if (a.equals(child.name())) {
-                    known = true;
-                    break;
+        // 10. heroes 交叉校验（Phase 6）：synergyIds ∈ synergies；传奇 ∈ units 且非 Boss、cost=3；传奇不得共用
+        Set<String> legendaryUnits = new HashSet<String>();
+        for (HeroData hero : heroes.values()) {
+            String hw = "heroes.json#" + hero.getId() + "/";
+            for (String synergyId : hero.getPassiveSynergyIds()) {
+                if (!synergies.containsKey(synergyId)) {
+                    fail(hw + "passive/synergyIds", "引用了不存在的羁绊: " + synergyId);
                 }
             }
-            if (!known) {
-                fail(where + child.name(), "未知字段（允许: " + join(java.util.Arrays.asList(allowed), ", ") + "）");
+            String legendary = hero.getLegendaryUnitId();
+            if (legendary != null) {
+                UnitData unit = units.get(legendary);
+                if (unit == null) {
+                    fail(hw + "legendaryUnitId", "引用了不存在的单位: " + legendary);
+                }
+                if (unit != null && (unit.isBoss() || unit.getCost() != 3)) {
+                    fail(hw + "legendaryUnitId", "传奇棋子必须为非 Boss 且 cost=3: " + legendary);
+                }
+                if (!legendaryUnits.add(legendary)) {
+                    fail(hw + "legendaryUnitId", "传奇棋子被多名英雄共用: " + legendary);
+                }
             }
         }
-    }
-
-    private static <E extends Enum<E> & Vocab> String vocabNames(Class<E> type) {
-        StringBuilder sb = new StringBuilder();
-        for (E e : type.getEnumConstants()) {
-            if (sb.length() > 0) {
-                sb.append(" / ");
+        // 11. shopUnlocks 引用校验（裁决 D8）：∈ units、非 Boss、不跨场景重复、不得为英雄传奇
+        Set<String> shopUnlockAll = new HashSet<String>();
+        for (SceneData scene : scenes.values()) {
+            for (String unitId : scene.getShopUnlocks()) {
+                String sw = "scenes.json#" + scene.getId() + "/shopUnlocks";
+                UnitData unit = units.get(unitId);
+                if (unit == null) {
+                    fail(sw, "引用了不存在的单位: " + unitId);
+                }
+                if (unit != null && unit.isBoss()) {
+                    fail(sw, "Boss 模板不得进入商店池: " + unitId);
+                }
+                if (!shopUnlockAll.add(unitId)) {
+                    fail(sw, "单位被多个场景 shopUnlocks 重复登记: " + unitId);
+                }
+                if (legendaryUnits.contains(unitId)) {
+                    fail(sw, "英雄专属传奇不得登记进场景商店池（两机制互斥）: " + unitId);
+                }
             }
-            sb.append(e.jsonName());
         }
-        return sb.toString();
-    }
-
-    private static String join(Iterable<String> items, String sep) {
-        StringBuilder sb = new StringBuilder();
-        for (String item : items) {
-            if (sb.length() > 0) {
-                sb.append(sep);
-            }
-            sb.append(item);
-        }
-        return sb.toString();
-    }
-
-    private static void fail(String where, String message) {
-        throw new DataValidationException(where + ": " + message);
     }
 }

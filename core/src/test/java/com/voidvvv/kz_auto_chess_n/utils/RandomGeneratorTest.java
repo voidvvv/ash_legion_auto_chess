@@ -114,4 +114,39 @@ class RandomGeneratorTest {
         g.weightedPick(new int[]{2, 0});
         assertThat(g.getConsumedCount()).isEqualTo(6);
     }
+
+    // —— 复原构造（快照轨，Phase 6 CP16）：流重放对齐 ——
+
+    @Test
+    @DisplayName("复原构造流重放：(seed, n) 与原生消耗 n 次的实例后续 1000 个 nextFloat 逐位相同")
+    void replayConstructorAlignsStream() {
+        RandomGenerator nativeFlow = new RandomGenerator(42L);
+        for (int i = 0; i < 137; i++) {
+            nativeFlow.nextFloat(); // 模拟局内已消耗
+        }
+        RandomGenerator restored = new RandomGenerator(42L, 137);
+        assertThat(restored.getConsumedCount()).isEqualTo(137);
+        for (int i = 0; i < 1000; i++) {
+            assertThat(restored.nextFloat()).as("第 %d 个 nextFloat", i).isEqualTo(nativeFlow.nextFloat());
+        }
+        assertThat(restored.getConsumedCount()).isEqualTo(nativeFlow.getConsumedCount());
+    }
+
+    @Test
+    @DisplayName("复原构造：weightedPick 混合消耗后的重放对齐；负计数即死")
+    void replayAfterMixedConsumption() {
+        RandomGenerator nativeFlow = new RandomGenerator(7L);
+        nativeFlow.weightedPick(new int[]{3, 1});
+        nativeFlow.nextFloat();
+        nativeFlow.weightedPick(new int[]{1, 0, 2});
+        RandomGenerator restored = new RandomGenerator(7L, nativeFlow.getConsumedCount());
+        for (int i = 0; i < 100; i++) {
+            assertThat(restored.weightedPick(new int[]{2, 2})).isEqualTo(nativeFlow.weightedPick(new int[]{2, 2}));
+        }
+        assertThat(restored.getConsumedCount()).isEqualTo(nativeFlow.getConsumedCount());
+
+        assertThatThrownBy(() -> new RandomGenerator(7L, -1))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("≥ 0");
+    }
 }

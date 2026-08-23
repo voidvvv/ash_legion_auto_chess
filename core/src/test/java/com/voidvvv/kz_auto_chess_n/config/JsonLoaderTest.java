@@ -35,12 +35,13 @@ class JsonLoaderTest {
     }
 
     @Test
-    @DisplayName("种子规模：12 棋子（9 可购 + 3 Boss，CP31 铺量）/ 11 技能 / 6 羁绊 / 1 场景")
+    @DisplayName("种子规模：27 棋子（18 可购 + 9 Boss）/ 11 技能 / 8 羁绊 / 3 场景 / 3 英雄（Phase 6 铺量）")
     void seedCounts() {
-        assertThat(data.getUnits()).hasSize(12);
+        assertThat(data.getUnits()).hasSize(27);
         assertThat(data.getSkills()).hasSize(11);
-        assertThat(data.getSynergies()).hasSize(6);
-        assertThat(data.getScenes()).hasSize(1);
+        assertThat(data.getSynergies()).hasSize(8);
+        assertThat(data.getScenes()).hasSize(3);
+        assertThat(data.getHeroes()).hasSize(3);
     }
 
     @Test
@@ -131,10 +132,11 @@ class JsonLoaderTest {
     }
 
     @Test
-    @DisplayName("羁绊档位：6 羁绊 count 升序、(6) 档含 lifesteal stat 通道")
+    @DisplayName("羁绊档位：8 羁绊 count 升序、(6) 档含 lifesteal stat 通道")
     void synergyTiersLoaded() {
         assertThat(data.getSynergies().keySet())
-                .containsExactly("syn_orc", "syn_warrior", "syn_mage", "syn_assassin", "syn_beast", "syn_ranger");
+                .containsExactly("syn_orc", "syn_warrior", "syn_mage", "syn_assassin",
+                        "syn_beast", "syn_ranger", "syn_undead", "syn_giant");
 
         SynergyData warrior = data.getSynergy("syn_warrior");
         assertThat(warrior.getSource().jsonName()).isEqualTo("CLASS");
@@ -175,21 +177,24 @@ class JsonLoaderTest {
     }
 
     @Test
-    @DisplayName("软告警：2 孤儿技能（铺量后）+ 0 孤儿羁绊 + 1 行风味聚合")
+    @DisplayName("软告警：孤儿技能仅 long_snipe（starfall 已被墓穴/雪山 Boss 引用）+ 0 孤儿羁绊 + 风味聚合")
     void softWarningsOnSeed() {
         List<String> warnings = data.getWarnings();
-        // 孤儿技能：铺量后仅 long_snipe/starfall 无单位引用（rampage/mass_heal/poison_cloud 已被新模板引用）
+        // 孤儿技能：Phase 6 铺量后仅 long_snipe 无单位引用
         assertThat(warnings).anyMatch(w -> w.contains("孤儿技能") && w.contains("skill_long_snipe"));
-        assertThat(warnings).anyMatch(w -> w.contains("孤儿技能") && w.contains("skill_starfall"));
+        assertThat(warnings).noneMatch(w -> w.contains("孤儿技能") && w.contains("skill_starfall"));
         assertThat(warnings).noneMatch(w -> w.contains("孤儿技能") && w.contains("skill_rampage"));
         assertThat(warnings).noneMatch(w -> w.contains("孤儿技能") && w.contains("skill_mass_heal"));
         assertThat(warnings).noneMatch(w -> w.contains("孤儿技能") && w.contains("skill_poison_cloud"));
-        // 孤儿羁绊：铺量后野兽（狼崽/兽猎手）、法师（暗夜学徒/精灵德鲁伊）均有可购模板，告警清零
+        assertThat(warnings).noneMatch(w -> w.contains("孤儿技能") && w.contains("skill_warcry"));
+        // 孤儿羁绊：亡灵/巨人随场景棋子登记后均有可购模板，告警清零
         assertThat(warnings).noneMatch(w -> w.contains("孤儿羁绊"));
-        // 风味聚合：暗夜/精灵/植物/Boss 一行列出（非新增羁绊键，既有告警口径不变）
+        // 风味聚合：暗夜/精灵/植物/人类/构造/Boss 一行列出（亡灵/巨人已入羁绊登记脱离风味集合）
         assertThat(warnings).anyMatch(w -> w.contains("风味") && w.contains("暗夜")
                 && w.contains("精灵") && w.contains("植物") && w.contains("Boss"));
-        // 无 ALL_ENEMIES 非 Boss 引用告警（星陨未被任何单位引用，只报孤儿技能）
+        assertThat(warnings).noneMatch(w -> w.contains("风味") && w.contains("亡灵"));
+        assertThat(warnings).noneMatch(w -> w.contains("风味") && w.contains("巨人"));
+        // 无 ALL_ENEMIES 非 Boss 引用告警（星陨只被 Boss 引用）
         assertThat(warnings).noneMatch(w -> w.contains("ALL_ENEMIES 被非 Boss"));
     }
 
@@ -232,7 +237,7 @@ class JsonLoaderTest {
     }
 
     @Test
-    @DisplayName("铺量后费阶池分布：非 Boss 可购 1 费 4 / 2 费 3 / 3 费 2（商店 tierPool 同口径）")
+    @DisplayName("铺量后费阶池分布：非 Boss 可购 1 费 6 / 2 费 5 / 3 费 7（商店 tierPool 同口径）")
     void purchasableTierDistribution() {
         Map<Integer, List<String>> byCost = new LinkedHashMap<Integer, List<String>>();
         for (UnitData unit : data.getUnits().values()) {
@@ -241,9 +246,48 @@ class JsonLoaderTest {
             }
         }
         assertThat(byCost.get(1)).containsExactly("unit_warrior_01", "unit_boar_rider",
-                "unit_wolf_pup", "unit_mage_apprentice");
-        assertThat(byCost.get(2)).containsExactly("unit_ranger_01", "unit_fairy_druid", "unit_beast_archer");
-        assertThat(byCost.get(3)).containsExactly("unit_assassin_01", "unit_shadow_blade");
+                "unit_wolf_pup", "unit_mage_apprentice", "unit_skeleton_soldier", "unit_frost_imp");
+        assertThat(byCost.get(2)).containsExactly("unit_ranger_01", "unit_fairy_druid",
+                "unit_beast_archer", "unit_wraith", "unit_frost_giant");
+        assertThat(byCost.get(3)).containsExactly("unit_assassin_01", "unit_shadow_blade",
+                "unit_death_knight", "unit_glacial_giant", "unit_legend_quartermaster",
+                "unit_legend_thornhart", "unit_legend_warsong_singer");
+    }
+
+    // —— Phase 6（CP3/CP11）：三英雄与场景链 / 门控互斥 ——
+
+    @Test
+    @DisplayName("三英雄全量落位：被动三形态 / 薇拉 synergyIds 含野兽与游侠 / 传奇三件不共用")
+    void heroesFullyMapped() {
+        assertThat(data.getHeroes().keySet())
+                .containsExactly("hero_greg", "hero_vera", "hero_orlando");
+        assertThat(data.getHero("hero_greg").getName()).isEqualTo("老兵格雷克");
+        assertThat(data.getHero("hero_greg").getPassiveType().jsonName()).isEqualTo("START_GOLD");
+        assertThat(data.getHero("hero_greg").getPassiveValue()).isEqualTo(2f);
+        assertThat(data.getHero("hero_greg").getLegendaryUnitId()).isEqualTo("unit_legend_quartermaster");
+
+        assertThat(data.getHero("hero_vera").getPassiveType().jsonName()).isEqualTo("SYNERGY_AMP");
+        assertThat(data.getHero("hero_vera").getPassiveSynergyIds())
+                .containsExactly("syn_beast", "syn_ranger");
+
+        assertThat(data.getHero("hero_orlando").getPassiveType().jsonName()).isEqualTo("ENERGY_GAIN");
+        assertThat(data.getHero("hero_orlando").getLegendaryUnitId()).isEqualTo("unit_legend_warsong_singer");
+    }
+
+    @Test
+    @DisplayName("三场景解锁链 forest→crypt→snow：shopUnlocks 声明落位且与英雄传奇互斥（加载即证明）")
+    void sceneChainAndShopUnlocks() {
+        assertThat(data.getScenes().keySet())
+                .containsExactly("scene_forest", "scene_crypt", "scene_snow");
+        assertThat(data.getScene("scene_forest").getUnlockAfter()).isNull();
+        assertThat(data.getScene("scene_crypt").getUnlockAfter()).isEqualTo("scene_forest");
+        assertThat(data.getScene("scene_snow").getUnlockAfter()).isEqualTo("scene_crypt");
+        assertThat(data.getScene("scene_forest").getShopUnlocks()).isEmpty();
+        assertThat(data.getScene("scene_crypt").getShopUnlocks())
+                .containsExactly("unit_skeleton_soldier", "unit_wraith", "unit_death_knight");
+        assertThat(data.getScene("scene_snow").getShopUnlocks())
+                .containsExactly("unit_frost_imp", "unit_frost_giant", "unit_glacial_giant");
+        assertThat(data.getScene("scene_snow").getBosses()).containsEntry(25, "boss_star_warden");
     }
 
     @Test

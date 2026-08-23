@@ -56,5 +56,27 @@
       { "count": 6, "effects": [ { "stat": "range", "op": "ADD", "value": 2 },
                                   { "stat": "attack", "op": "PCT", "value": 35 },
                                   { "stat": "attackSpeed", "op": "PCT", "value": 15 } ] }
+    ] },
+
+  { "id": "syn_undead", "name": "亡灵", "desc": "不接受死亡、也不接受停战的行尸军团",
+    "source": "RACE", "key": "亡灵",
+    "thresholds": [
+      { "count": 2, "effects": [ { "stat": "lifesteal", "op": "ADD", "value": 10 } ] },
+      { "count": 4, "effects": [ { "stat": "hp", "op": "ADD", "value": 300 },
+                                  { "stat": "lifesteal", "op": "ADD", "value": 20 } ] },
+      { "count": 6, "effects": [ { "stat": "hp", "op": "ADD", "value": 500 },
+                                  { "stat": "attack", "op": "PCT", "value": 25 },
+                                  { "stat": "lifesteal", "op": "ADD", "value": 30 } ] }
+    ] },
+
+  { "id": "syn_giant", "name": "巨人", "desc": "寒峰古族的血与岩，越厚重越难撼动",
+    "source": "RACE", "key": "巨人",
+    "thresholds": [
+      { "count": 2, "effects": [ { "stat": "hp", "op": "ADD", "value": 200 } ] },
+      { "count": 4, "effects": [ { "stat": "hp", "op": "ADD", "value": 450 },
+                                  { "stat": "armor", "op": "ADD", "value": 30 } ] },
+      { "count": 6, "effects": [ { "stat": "hp", "op": "ADD", "value": 800 },
+                                  { "stat": "armor", "op": "ADD", "value": 60 },
+                                  { "stat": "attack", "op": "PCT", "value": 20 } ] }
     ] }
 ]

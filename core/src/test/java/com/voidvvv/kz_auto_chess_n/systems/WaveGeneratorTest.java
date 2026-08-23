@@ -246,4 +246,55 @@ class WaveGeneratorTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("轮次");
     }
+
+    // —— Phase 6（CP11）：墓穴/雪山场景生成与 minRound 门控 ——
+
+    private static Set<String> waveUnitIds(List<WaveSpec> wave) {
+        Set<String> ids = new java.util.LinkedHashSet<String>();
+        for (WaveSpec spec : wave) {
+            ids.add(spec.getTemplate().getId());
+        }
+        return ids;
+    }
+
+    @Test
+    @DisplayName("墓穴 minRound 门控：r1 仅骸骨士兵 / r5 加怨灵 / r10 全池（Boss 轮另加殿后 Boss）")
+    void cryptSceneMinRoundGating() {
+        Set<String> r1 = waveUnitIds(GENERATOR.generateEnemyWave(1, "scene_crypt", seedData,
+                new RandomGenerator(42L)));
+        assertThat(r1).containsExactly("unit_skeleton_soldier"); // 唯一 minRound ≤ 1 条目
+
+        Set<String> r5 = waveUnitIds(GENERATOR.generateEnemyWave(5, "scene_crypt", seedData,
+                new RandomGenerator(42L)));
+        assertThat(r5).isSubsetOf("unit_skeleton_soldier", "unit_wraith"); // 死亡骑士 minRound 10 未到
+
+        List<WaveSpec> r10 = GENERATOR.generateEnemyWave(10, "scene_crypt", seedData,
+                new RandomGenerator(42L));
+        assertThat(r10).hasSize(GameBalance.enemyCount(10));
+        assertThat(waveUnitIds(r10)).isSubsetOf("unit_skeleton_soldier", "unit_wraith", "unit_death_knight");
+
+        List<WaveSpec> r7 = GENERATOR.generateEnemyWave(7, "scene_crypt", seedData,
+                new RandomGenerator(42L));
+        assertThat(r7.get(r7.size() - 1).getTemplate().getId()).isEqualTo("boss_tomb_colossus"); // Boss 殿后
+        assertThat(r7.get(r7.size() - 1).isBoss()).isTrue();
+        assertThat(r7.get(r7.size() - 1).getScale()).isEqualTo(1.0f); // Boss 烘焙终值不二次放大
+    }
+
+    @Test
+    @DisplayName("雪山 minRound 门控：r5 仅小雪怪 / r12 全池；r25 Boss = 星骸守卫")
+    void snowSceneMinRoundGating() {
+        Set<String> r5 = waveUnitIds(GENERATOR.generateEnemyWave(5, "scene_snow", seedData,
+                new RandomGenerator(42L)));
+        assertThat(r5).containsExactly("unit_frost_imp"); // 霜巨人 minRound 6 未到
+
+        List<WaveSpec> r12 = GENERATOR.generateEnemyWave(12, "scene_snow", seedData,
+                new RandomGenerator(42L));
+        assertThat(waveUnitIds(r12)).isSubsetOf("unit_frost_imp", "unit_frost_giant", "unit_glacial_giant");
+
+        List<WaveSpec> r25 = GENERATOR.generateEnemyWave(25, "scene_snow", seedData,
+                new RandomGenerator(42L));
+        assertThat(r25.get(r25.size() - 1).getTemplate().getId()).isEqualTo("boss_star_warden");
+        assertThat(waveUnitIds(GENERATOR.generateEnemyWave(15, "scene_snow", seedData,
+                new RandomGenerator(42L)))).contains("boss_star_breaker");
+    }
 }

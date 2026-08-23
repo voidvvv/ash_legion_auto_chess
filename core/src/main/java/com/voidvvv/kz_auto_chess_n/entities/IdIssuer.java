@@ -8,4 +8,7 @@ public interface IdIssuer {
 
     /** 发出下一个唯一 id（实现保证同实例内严格不重复） */
     int nextId();
+
+    /** 下一待发号（快照捕获用；不消耗） */
+    int peekNext();
 }

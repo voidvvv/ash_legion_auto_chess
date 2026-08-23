@@ -67,6 +67,7 @@ class JsonLoaderScenesTest {
         write(dir, "synergies.json", "[]");
         write(dir, "scenes.json", scenes);
         write(dir, "equipments.json", "[]"); // Phase 5 起 loadFromDirectory 增读 equipments.json
+        write(dir, "heroes.json", "[]");    // Phase 6 起 loadFromDirectory 增读 heroes.json
         return JsonLoader.loadFromDirectory(new FileHandle(dir.toString()));
     }
 
@@ -296,5 +297,82 @@ class JsonLoaderScenesTest {
                 .isInstanceOf(DataValidationException.class)
                 .hasMessageContaining("scenes.json#sc1")
                 .hasMessageContaining("唯一");
+    }
+
+    // —— shopUnlocks（Phase 6 裁决 D8：场景门控进商店池）——
+
+    @Test
+    @DisplayName("shopUnlocks 解析：声明序透传；缺省与显式 null 均为空表")
+    void shopUnlocksParsedAndDefaultEmpty() throws IOException {
+        String withUnlocks = "[{ \"id\": \"sc1\", \"name\": \"x\", \"unlockAfter\": null,"
+                + " \"enemyPool\": " + DEFAULT_POOL + ", \"bosses\": " + DEFAULT_BOSSES
+                + ", \"shopUnlocks\": [\"u2\", \"u1\"] }]";
+        assertThat(loadScenes(withUnlocks).getScene("sc1").getShopUnlocks())
+                .containsExactly("u2", "u1");
+
+        String omitted = "[" + scene("sc1", null, DEFAULT_POOL, DEFAULT_BOSSES) + "]";
+        assertThat(loadScenes(omitted).getScene("sc1").getShopUnlocks()).isEmpty();
+
+        String explicitNull = "[{ \"id\": \"sc1\", \"name\": \"x\", \"unlockAfter\": null,"
+                + " \"enemyPool\": " + DEFAULT_POOL + ", \"bosses\": " + DEFAULT_BOSSES
+                + ", \"shopUnlocks\": null }]";
+        assertThat(loadScenes(explicitNull).getScene("sc1").getShopUnlocks()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("shopUnlocks 结构：非数组 / 元素非字符串 / 场景内重复均即死")
+    void shopUnlocksStructureValidated() {
+        String notArray = "[{ \"id\": \"sc1\", \"name\": \"x\", \"unlockAfter\": null,"
+                + " \"enemyPool\": " + DEFAULT_POOL + ", \"bosses\": " + DEFAULT_BOSSES
+                + ", \"shopUnlocks\": \"u1\" }]";
+        assertThatThrownBy(() -> loadScenes(notArray))
+                .isInstanceOf(DataValidationException.class)
+                .hasMessageContaining("scenes.json#sc1/shopUnlocks")
+                .hasMessageContaining("必须为数组");
+
+        String notString = "[{ \"id\": \"sc1\", \"name\": \"x\", \"unlockAfter\": null,"
+                + " \"enemyPool\": " + DEFAULT_POOL + ", \"bosses\": " + DEFAULT_BOSSES
+                + ", \"shopUnlocks\": [3] }]";
+        assertThatThrownBy(() -> loadScenes(notString))
+                .isInstanceOf(DataValidationException.class)
+                .hasMessageContaining("非空字符串");
+
+        String duplicated = "[{ \"id\": \"sc1\", \"name\": \"x\", \"unlockAfter\": null,"
+                + " \"enemyPool\": " + DEFAULT_POOL + ", \"bosses\": " + DEFAULT_BOSSES
+                + ", \"shopUnlocks\": [\"u1\", \"u1\"] }]";
+        assertThatThrownBy(() -> loadScenes(duplicated))
+                .isInstanceOf(DataValidationException.class)
+                .hasMessageContaining("场景内重复单位: u1");
+    }
+
+    @Test
+    @DisplayName("shopUnlocks 引用：悬空单位 / Boss 模板 / 跨场景重复登记均即死")
+    void shopUnlocksCrossValidated() {
+        String dangling = "[{ \"id\": \"sc1\", \"name\": \"x\", \"unlockAfter\": null,"
+                + " \"enemyPool\": " + DEFAULT_POOL + ", \"bosses\": " + DEFAULT_BOSSES
+                + ", \"shopUnlocks\": [\"u_missing\"] }]";
+        assertThatThrownBy(() -> loadScenes(dangling))
+                .isInstanceOf(DataValidationException.class)
+                .hasMessageContaining("scenes.json#sc1/shopUnlocks")
+                .hasMessageContaining("不存在的单位: u_missing");
+
+        String bossListed = "[{ \"id\": \"sc1\", \"name\": \"x\", \"unlockAfter\": null,"
+                + " \"enemyPool\": " + DEFAULT_POOL + ", \"bosses\": " + DEFAULT_BOSSES
+                + ", \"shopUnlocks\": [\"b1\"] }]";
+        assertThatThrownBy(() -> loadScenes(bossListed))
+                .isInstanceOf(DataValidationException.class)
+                .hasMessageContaining("Boss 模板不得进入商店池");
+
+        String shared = "[" + scene("sc1", null, DEFAULT_POOL, DEFAULT_BOSSES) + ", "
+                + "{ \"id\": \"sc2\", \"name\": \"y\", \"unlockAfter\": \"sc1\","
+                + " \"enemyPool\": " + DEFAULT_POOL + ", \"bosses\": " + DEFAULT_BOSSES
+                + ", \"shopUnlocks\": [\"u1\"] }, "
+                + "{ \"id\": \"sc3\", \"name\": \"z\", \"unlockAfter\": \"sc2\","
+                + " \"enemyPool\": " + DEFAULT_POOL + ", \"bosses\": " + DEFAULT_BOSSES
+                + ", \"shopUnlocks\": [\"u1\"] }]";
+        assertThatThrownBy(() -> loadScenes(shared))
+                .isInstanceOf(DataValidationException.class)
+                .hasMessageContaining("scenes.json#sc3/shopUnlocks")
+                .hasMessageContaining("多个场景 shopUnlocks 重复登记: u1");
     }
 }

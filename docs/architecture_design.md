@@ -171,10 +171,10 @@ SHOPPING ──StartBattle──▶ BATTLE ──判胜──▶ RESULT ──Pi
 
 | 轨道 | 模型 | 内容 | 触发 |
 |------|------|------|------|
-| **快照轨**（挂起存档） | 全量状态序列化 | RunState + 名单 + 商店 + 档案；**存档点仅备战阶段**（已定） | 玩家挂起/退出；Android `pause()` |
+| **快照轨**（挂起存档，Phase 6 落地） | 全量状态序列化 | RunState(seed/heroId/round/怜悯/idIssuer/RNG 消耗计数) + Player(名单/装备/背包) + 商店槽 + 敌阵；`save/run_snapshot.json`；**仅备战期写、RUN_END 删**（坏档删档重置，裁决 D20） | 进入 SHOPPING / pause / hide |
 | **回放轨**（录像） | 命令流重演 | `StartRun` + `(tick, command)` 流 + 种子 | 战斗录像/调试复现（Phase 7 可选） |
 
-文件格式 Phase 6 细化（JSON 起步）。
+文件格式 JSON（Phase 6 落地：`save/profile.json` 档案轨 + `save/run_snapshot.json` 快照轨，均经 `Gdx.files.local`；档案域门面 `MetaService` 为 Screen 层唯一入口）。
 
 ## 九、决策日志
 

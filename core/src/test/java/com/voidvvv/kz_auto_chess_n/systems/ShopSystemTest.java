@@ -20,6 +20,7 @@ import com.voidvvv.kz_auto_chess_n.data.UnitData;
 import com.voidvvv.kz_auto_chess_n.entities.Equipment;
 import com.voidvvv.kz_auto_chess_n.entities.GamePhase;
 import com.voidvvv.kz_auto_chess_n.entities.Player;
+import com.voidvvv.kz_auto_chess_n.entities.RunModifiers;
 import com.voidvvv.kz_auto_chess_n.entities.RunState;
 import com.voidvvv.kz_auto_chess_n.entities.SequentialIdIssuer;
 import com.voidvvv.kz_auto_chess_n.entities.Unit;
@@ -30,10 +31,13 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * 商店系统测试（CP10；Q6 裁决：起始 10 金商店自购）：reroll 确定性与 RNG 恰 10、
@@ -445,5 +449,144 @@ class ShopSystemTest {
         cappedManager.executeAll(capped);
         assertThat(cappedExecuted).isEmpty();
         assertThat(capped.getPlayer().getGold()).isEqualTo(10);
+    }
+
+    // —— Phase 6：局外修正接入（CP9：概率加成 / 池门控 / 折扣 / 槽位复原）——
+
+    /** 一费双模板 + 三费单模板（无二费——费阶 roll 命中 tier2 时槽位 null，样本只计非空槽） */
+    private static GameData tierStatsData() {
+        Map<String, UnitData> units = new LinkedHashMap<String, UnitData>();
+        units.put("u_c1a", unit("u_c1a", 1, false));
+        units.put("u_c1b", unit("u_c1b", 1, false));
+        units.put("u_c3", unit("u_c3", 3, false));
+        return new GameData(units,
+                new LinkedHashMap<String, com.voidvvv.kz_auto_chess_n.data.SkillData>(),
+                new LinkedHashMap<String, com.voidvvv.kz_auto_chess_n.data.SynergyData>(),
+                new LinkedHashMap<String, com.voidvvv.kz_auto_chess_n.data.SceneData>(),
+                new LinkedHashMap<String, EquipmentData>(), new ArrayList<String>());
+    }
+
+    /** 统计第 10 轮非空槽中三费占比（单一连续 RNG 流 4000 次重掷；条件占比：基础 10/60 vs 加成 15/60） */
+    private static double tierThreeRatio(int round, RunModifiers modifiers) {
+        GameData data = tierStatsData();
+        RandomGenerator rng = new RandomGenerator(42L); // 连续流：每次 reroll 续耗 10
+        int samples = 0;
+        int tier3 = 0;
+        for (int call = 0; call < 4000; call++) {
+            ShopSystem shop = new ShopSystem();
+            shop.reroll(round, data, rng, modifiers);
+            for (UnitData slot : shop.getSlots()) {
+                if (slot != null) {
+                    samples++;
+                    if (slot.getCost() == 3) {
+                        tier3++;
+                    }
+                }
+            }
+        }
+        return (double) tier3 / samples;
+    }
+
+    @Test
+    @DisplayName("Lv.2 加成（裁决 D5）：r10 三费占比 10% → 15%（仅 p3>0 轮生效，自 1 费扣减）")
+    void rareBonusAppliedOnlyWhenBasePositive() {
+        RunModifiers bonus = new RunModifiers(0, 0, 5, 0,
+                new LinkedHashMap<String, Float>(), null, new LinkedHashSet<String>(), false);
+        // 条件占比（无二费模板，命中 tier2 的槽为 null 不计）：基础 1/6≈0.167，加成 15/60=0.25
+        assertThat(tierThreeRatio(10, RunModifiers.EMPTY)).isBetween(0.14, 0.19);
+        assertThat(tierThreeRatio(10, bonus)).isBetween(0.22, 0.28);
+        // 1~3 轮（p3=0）：权重与无修正逐位相同（同 seed 全等）
+        GameData data = tierStatsData();
+        for (long seed = 1; seed <= 20; seed++) {
+            ShopSystem plain = new ShopSystem();
+            ShopSystem boosted = new ShopSystem();
+            plain.reroll(3, data, new RandomGenerator(seed));
+            boosted.reroll(3, data, new RandomGenerator(seed), bonus);
+            assertThat(slotIds(boosted)).as("seed=%s", seed).isEqualTo(slotIds(plain));
+            ShopSystem plain5 = new ShopSystem();
+            ShopSystem boosted5 = new ShopSystem();
+            plain5.reroll(5, data, new RandomGenerator(seed));
+            boosted5.reroll(5, data, new RandomGenerator(seed), bonus);
+            assertThat(slotIds(boosted5)).as("seed=%s", seed).isEqualTo(slotIds(plain5));
+        }
+    }
+
+    @Test
+    @DisplayName("RNG 消耗不变：带修正 reroll 恒 10（权重数值调整非新掷）")
+    void rerollWithModifiersConsumesSameRng() {
+        GameData data = shopData();
+        RunModifiers bonus = new RunModifiers(0, 0, 5, 0,
+                new LinkedHashMap<String, Float>(), null, new LinkedHashSet<String>(), false);
+        RandomGenerator rng = new RandomGenerator(11L);
+        new ShopSystem().reroll(10, data, rng, bonus);
+        assertThat(rng.getConsumedCount()).isEqualTo(10);
+    }
+
+    @Test
+    @DisplayName("池门控（裁决 D8）：restricted 池外单位（含他人传奇/未解锁场景/Boss）永不出现")
+    void gatedPoolExcludesForbiddenUnits() {
+        GameData data = shopData();
+        Set<String> allowed = new LinkedHashSet<String>();
+        allowed.add("u_cost1");
+        allowed.add("u_cost1b");
+        RunModifiers gated = new RunModifiers(0, 0, 0, 0,
+                new LinkedHashMap<String, Float>(), null, allowed, true);
+        for (long seed = 1; seed <= 100; seed++) {
+            ShopSystem shop = new ShopSystem();
+            shop.reroll(25, data, new RandomGenerator(seed), gated); // r25：三档全开
+            for (UnitData slot : shop.getSlots()) {
+                // 池外费阶（2/3 费全被门控）→ 空槽合法（spec WARNING-3 口径）；非空槽必须 ∈ 允许集
+                assertThat(slot == null ? null : slot.getId())
+                        .as("seed=%s", seed).isIn("u_cost1", "u_cost1b", null);
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("refreshCost：EMPTY=2 / 折扣 1=1 / 折扣 5=1（实付下限 1 金——裁决 D4）")
+    void refreshCostFloor() {
+        assertThat(ShopSystem.refreshCost(RunModifiers.EMPTY)).isEqualTo(2);
+        assertThat(ShopSystem.refreshCost(new RunModifiers(0, 1, 0, 0,
+                new LinkedHashMap<String, Float>(), null, new LinkedHashSet<String>(), false))).isEqualTo(1);
+        assertThat(ShopSystem.refreshCost(new RunModifiers(0, 5, 0, 0,
+                new LinkedHashMap<String, Float>(), null, new LinkedHashSet<String>(), false))).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("RefreshShop 折扣实付：Lv.5 修正下 1 金可刷（原 2 金拒绝线放行）")
+    void refreshShopWithDiscount() {
+        GameData data = shopData();
+        RunState runState = new RunState(42L, "scene_forest", null,
+                new RunModifiers(0, 1, 0, 0, new LinkedHashMap<String, Float>(), null,
+                        new LinkedHashSet<String>(), false),
+                new SequentialIdIssuer());
+        RunContext ctx = new RunContext(new Player(1), runState, data, new RandomGenerator(42L));
+        ShopSystem shop = new ShopSystem();
+        shop.reroll(1, data, ctx.getRng());
+        CommandManager manager = armed(shop);
+        List<GameCommand> executed = executedTracker(manager);
+        manager.addCommand(RefreshShopCommand.INSTANCE);
+        manager.executeAll(ctx);
+        assertThat(executed).hasSize(1);
+        assertThat(ctx.getPlayer().getGold()).isZero(); // 实付 1 金（下限）
+    }
+
+    @Test
+    @DisplayName("restoreSlots：等长整体落位（null 槽保留）；长度错抛 IllegalArgumentException")
+    void restoreSlotsValidatesLength() {
+        GameData data = shopData();
+        ShopSystem shop = new ShopSystem();
+        List<UnitData> templates = new ArrayList<UnitData>();
+        templates.add(data.getUnit("u_cost1"));
+        for (int i = 1; i < GameBalance.SHOP_SLOTS; i++) {
+            templates.add(null);
+        }
+        shop.restoreSlots(templates);
+        assertThat(shop.slotAt(0).getId()).isEqualTo("u_cost1");
+        assertThat(shop.slotAt(1)).isNull();
+
+        assertThatThrownBy(() -> shop.restoreSlots(new ArrayList<UnitData>()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("商店槽位数");
     }
 }

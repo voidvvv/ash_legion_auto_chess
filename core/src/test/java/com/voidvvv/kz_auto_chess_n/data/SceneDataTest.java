@@ -59,4 +59,39 @@ class SceneDataTest {
         assertThatThrownBy(() -> scene.getBosses().remove(7))
                 .isInstanceOf(UnsupportedOperationException.class);
     }
+
+    // —— shopUnlocks（Phase 6 裁决 D8：场景门控进商店池）——
+
+    @Test
+    @DisplayName("兼容构造：无 shopUnlocks → 空表；全参构造声明序保序")
+    void shopUnlocksCompatAndOrder() {
+        assertThat(newFixture().getShopUnlocks()).isEmpty(); // 5 参兼容构造（存量先例）
+
+        List<SceneData.EnemyPoolEntry> pool = new ArrayList<SceneData.EnemyPoolEntry>();
+        pool.add(new SceneData.EnemyPoolEntry("u1", 3, 1));
+        Map<Integer, String> bosses = new LinkedHashMap<Integer, String>();
+        bosses.put(7, "b1");
+        bosses.put(15, "b2");
+        bosses.put(25, "b3");
+        SceneData scene = new SceneData("sc2", "亡者墓穴", "sc1", pool, bosses,
+                new ArrayList<>(java.util.Arrays.asList("u9", "u8")));
+        assertThat(scene.getShopUnlocks()).containsExactly("u9", "u8");
+    }
+
+    @Test
+    @DisplayName("getShopUnlocks 不可变视图（add/remove 抛 UnsupportedOperationException）")
+    void shopUnlocksUnmodifiable() {
+        List<SceneData.EnemyPoolEntry> pool = new ArrayList<SceneData.EnemyPoolEntry>();
+        pool.add(new SceneData.EnemyPoolEntry("u1", 3, 1));
+        Map<Integer, String> bosses = new LinkedHashMap<Integer, String>();
+        bosses.put(7, "b1");
+        bosses.put(15, "b2");
+        bosses.put(25, "b3");
+        SceneData scene = new SceneData("sc2", "亡者墓穴", "sc1", pool, bosses,
+                new ArrayList<>(java.util.Arrays.asList("u9")));
+        assertThatThrownBy(() -> scene.getShopUnlocks().add("u8"))
+                .isInstanceOf(UnsupportedOperationException.class);
+        assertThatThrownBy(() -> scene.getShopUnlocks().remove(0))
+                .isInstanceOf(UnsupportedOperationException.class);
+    }
 }

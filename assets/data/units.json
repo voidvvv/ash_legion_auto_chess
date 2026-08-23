@@ -80,5 +80,65 @@
     "defaultPriority": "NEAREST", "specialPriority": null,
     "skillId": "skill_thorn_sea",
     "boss": true
-  }
+  },
+
+  { "id": "unit_skeleton_soldier", "name": "骸骨士兵", "race": "亡灵", "class": "战士", "cost": 1,
+    "baseStats": { "hp": 90, "attack": 14, "armor": 8, "attackSpeed": 1.0, "range": 1, "moveSpeed": 1.0 },
+    "upgradeMultiplier": 1.8, "skillId": "skill_warcry" },
+
+  { "id": "unit_wraith", "name": "怨灵", "race": "亡灵", "class": "法师", "cost": 2,
+    "baseStats": { "hp": 75, "attack": 16, "armor": 2, "attackSpeed": 0.9, "range": 3, "moveSpeed": 0.9 },
+    "upgradeMultiplier": 1.8, "skillId": "skill_poison_cloud" },
+
+  { "id": "unit_death_knight", "name": "死亡骑士", "race": "亡灵", "class": "战士", "cost": 3,
+    "baseStats": { "hp": 130, "attack": 24, "armor": 14, "attackSpeed": 0.9, "range": 1, "moveSpeed": 1.0 },
+    "upgradeMultiplier": 1.8, "skillId": "skill_rampage" },
+
+  { "id": "unit_frost_imp", "name": "小雪怪", "race": "巨人", "class": "刺客", "cost": 1,
+    "baseStats": { "hp": 85, "attack": 15, "armor": 5, "attackSpeed": 1.2, "range": 1, "moveSpeed": 1.4 },
+    "upgradeMultiplier": 1.8, "skillId": "skill_execute" },
+
+  { "id": "unit_frost_giant", "name": "霜巨人", "race": "巨人", "class": "战士", "cost": 2,
+    "baseStats": { "hp": 150, "attack": 18, "armor": 16, "attackSpeed": 0.7, "range": 1, "moveSpeed": 0.8 },
+    "upgradeMultiplier": 1.8, "skillId": "skill_warcry" },
+
+  { "id": "unit_glacial_giant", "name": "冰霜巨人", "race": "巨人", "class": "战士", "cost": 3,
+    "baseStats": { "hp": 170, "attack": 26, "armor": 18, "attackSpeed": 0.7, "range": 1, "moveSpeed": 0.8 },
+    "upgradeMultiplier": 1.8, "skillId": "skill_rampage" },
+
+  { "id": "unit_legend_quartermaster", "name": "王家军需官", "race": "人类", "class": "战士", "cost": 3,
+    "baseStats": { "hp": 120, "attack": 20, "armor": 12, "attackSpeed": 1.0, "range": 1, "moveSpeed": 1.0 },
+    "upgradeMultiplier": 1.8, "skillId": "skill_warcry" },
+
+  { "id": "unit_legend_thornhart", "name": "荆棘圣鹿", "race": "野兽", "class": "游侠", "cost": 3,
+    "baseStats": { "hp": 110, "attack": 22, "armor": 6, "attackSpeed": 1.1, "range": 3, "moveSpeed": 1.0 },
+    "upgradeMultiplier": 1.8, "skillId": "skill_pierce" },
+
+  { "id": "unit_legend_warsong_singer", "name": "银弦歌者", "race": "精灵", "class": "法师", "cost": 3,
+    "baseStats": { "hp": 95, "attack": 15, "armor": 5, "attackSpeed": 0.9, "range": 3, "moveSpeed": 0.9 },
+    "upgradeMultiplier": 1.8, "skillId": "skill_mass_heal" },
+
+  { "id": "boss_tomb_colossus", "name": "守陵巨像", "race": "构造", "class": "Boss", "cost": 0,
+    "baseStats": { "hp": 1250, "attack": 42, "armor": 30, "attackSpeed": 0.7, "range": 1, "moveSpeed": 0.6 },
+    "upgradeMultiplier": 1.0, "skillId": "skill_thorn_vine", "boss": true },
+
+  { "id": "boss_twin_lich", "name": "双生巫妖", "race": "亡灵", "class": "Boss", "cost": 0,
+    "baseStats": { "hp": 1250, "attack": 42, "armor": 12, "attackSpeed": 1.0, "range": 3, "moveSpeed": 0.8 },
+    "upgradeMultiplier": 1.0, "skillId": "skill_poison_cloud", "boss": true },
+
+  { "id": "boss_bone_duke", "name": "白骨大公", "race": "亡灵", "class": "Boss", "cost": 0,
+    "baseStats": { "hp": 1500, "attack": 52, "armor": 22, "attackSpeed": 0.9, "range": 1, "moveSpeed": 0.7 },
+    "upgradeMultiplier": 1.0, "skillId": "skill_starfall", "boss": true },
+
+  { "id": "boss_frost_howler", "name": "霜啸雪怪", "race": "巨人", "class": "Boss", "cost": 0,
+    "baseStats": { "hp": 1250, "attack": 40, "armor": 24, "attackSpeed": 0.8, "range": 1, "moveSpeed": 0.7 },
+    "upgradeMultiplier": 1.0, "skillId": "skill_thorn_vine", "boss": true },
+
+  { "id": "boss_star_breaker", "name": "断星者·格罗姆", "race": "巨人", "class": "Boss", "cost": 0,
+    "baseStats": { "hp": 1400, "attack": 50, "armor": 18, "attackSpeed": 0.9, "range": 1, "moveSpeed": 0.8 },
+    "upgradeMultiplier": 1.0, "skillId": "skill_pierce_sky", "boss": true },
+
+  { "id": "boss_star_warden", "name": "星骸守卫", "race": "巨人", "class": "Boss", "cost": 0,
+    "baseStats": { "hp": 1500, "attack": 52, "armor": 28, "attackSpeed": 0.8, "range": 1, "moveSpeed": 0.7 },
+    "upgradeMultiplier": 1.0, "skillId": "skill_starfall", "boss": true }
 ]

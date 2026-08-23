@@ -16,6 +16,7 @@ import com.voidvvv.kz_auto_chess_n.entities.Equipment;
 import com.voidvvv.kz_auto_chess_n.entities.IdIssuer;
 import com.voidvvv.kz_auto_chess_n.entities.Player;
 import com.voidvvv.kz_auto_chess_n.entities.Projectile;
+import com.voidvvv.kz_auto_chess_n.entities.RunModifiers;
 import com.voidvvv.kz_auto_chess_n.entities.Side;
 import com.voidvvv.kz_auto_chess_n.entities.StatModifierSource;
 import com.voidvvv.kz_auto_chess_n.entities.Unit;
@@ -23,7 +24,6 @@ import com.voidvvv.kz_auto_chess_n.entities.WaveSpec;
 import com.voidvvv.kz_auto_chess_n.utils.RandomGenerator;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -62,14 +62,27 @@ public final class BattleSystem {
      */
     public BattleState startBattle(Player player, List<WaveSpec> enemyWave,
                                    GameData data, RandomGenerator rng, IdIssuer idIssuer) {
+        return startBattle(player, enemyWave, data, rng, idIssuer, RunModifiers.EMPTY);
+    }
+
+    /**
+     * 开战（带局外修正，Phase 6）：玩家侧羁绊结算吃增幅（「荆语」——CP10）；玩家侧派生
+     * 修正源列表追加 RunModifiers（「战歌」全队回能 ADD 百分点，走 DamagePipeline 现成
+     * 管线——裁决 D13）；敌方侧恒不注入。
+     */
+    public BattleState startBattle(Player player, List<WaveSpec> enemyWave,
+                                   GameData data, RandomGenerator rng, IdIssuer idIssuer,
+                                   RunModifiers modifiers) {
         Objects.requireNonNull(player, "player 不能为 null");
         Objects.requireNonNull(enemyWave, "enemyWave 不能为 null");
         Objects.requireNonNull(data, "data 不能为 null");
         Objects.requireNonNull(rng, "rng 不能为 null");
         Objects.requireNonNull(idIssuer, "idIssuer 不能为 null");
+        Objects.requireNonNull(modifiers, "modifiers 不能为 null");
 
         List<Unit> deployed = player.getDeployedUnits();
-        SynergySnapshot playerSynergies = synergySystem.resolve(templatesOfDeployed(player), data);
+        SynergySnapshot playerSynergies = synergySystem.resolve(templatesOfDeployed(player), data,
+                modifiers.getSynergyAmp());
         List<UnitData> enemyTemplates = new ArrayList<UnitData>(enemyWave.size());
         for (WaveSpec spec : enemyWave) {
             enemyTemplates.add(spec.getTemplate());
@@ -86,7 +99,8 @@ public final class BattleSystem {
                     continue;
                 }
                 units.add(deriveUnit(idIssuer.nextId(), unit.getTemplate(), unit.getStar(),
-                        Side.PLAYER, 1.0f, playerSynergies, data, x, y, unit.getEquipped()));
+                        Side.PLAYER, 1.0f, playerSynergies, data, x, y, unit.getEquipped(),
+                        modifiers));
             }
         }
         verifyDeployedCount(deployed.size(), units.size());
@@ -94,7 +108,7 @@ public final class BattleSystem {
         for (WaveSpec spec : enemyWave) {
             units.add(deriveUnit(idIssuer.nextId(), spec.getTemplate(), spec.getStar(),
                     Side.ENEMY, spec.getScale(), enemySynergies, data, spec.getGridX(), spec.getGridY(),
-                    Collections.<Equipment>emptyList()));
+                    Collections.<Equipment>emptyList(), null));
         }
 
         BattleState state = new BattleState(units, rng, playerSynergies, enemySynergies);
@@ -240,9 +254,13 @@ public final class BattleSystem {
 
     private static BattleUnit deriveUnit(int id, UnitData template, int star, Side side, float scale,
                                          SynergySnapshot synergies, GameData data, int x, int y,
-                                         List<Equipment> equipped) {
-        List<StatModifierSource> sources = Arrays.asList(
-                synergies, EquipmentStats.of(equipped)); // Q4 修正源列表：羁绊（侧全体）+ 装备（单体）
+                                         List<Equipment> equipped, RunModifiers modifiers) {
+        List<StatModifierSource> sources = new ArrayList<StatModifierSource>(3);
+        sources.add(synergies);                     // 羁绊（侧全体）
+        sources.add(EquipmentStats.of(equipped));   // 装备（单体）
+        if (modifiers != null) {
+            sources.add(modifiers);                 // 局外修正（全队回能——Phase 6，仅玩家侧注入）
+        }
         BattleStats baseStats = StatPipeline.deriveBaseline(template, star, scale, sources);
         BattleUnit unit = new BattleUnit(id, template, star, side,
                 data.getSkill(template.getSkillId()), baseStats); // 加载校验保证技能存在
