@@ -1,6 +1,6 @@
 # 🧭 运行时架构设计文档
 
-> **版本**：V1.8（BuyUnit 校验补全：备战席满规则；statKey 口径统一入册）  
+> **版本**：V1.9（败箱 3 次机会制：判负路径三分岔 / `DEFEATED` 终局 / 怜悯删除锚点清单）  
 > **定位**：实体管理 / 命令系统 / 阶段状态机 / Screen 架构 / 持久化模型的运行时设计  
 > **依据**：GDD V0.6、`user_input_design.md` 1.1、`project_structure_design.md` V1.0、`game_lore_design.md`  
 > **配图**：`docs/diagrams/interaction_flow.md`（全交互地图，V0.2）
@@ -36,7 +36,7 @@
 
 | 持有者 | 持有内容 | 生命周期 |
 |--------|----------|----------|
-| `RunState` | 轮次、场景、**当前逻辑阶段（命令门控查询入口）**、怜悯计数、随机种子、**id 发号器**、命令历史 | 一局 |
+| `RunState` | 轮次、场景、**当前逻辑阶段（命令门控查询入口）**、本轮战败机会计数（`defeatCountPerRound`，2026-08-23 取代怜悯计数）、随机种子、**id 发号器**、命令历史 | 一局 |
 | `Player` | 金币/经验/等级 + **名单**（备战席 + 上场部署表） | 一局 |
 | `BattleState` | **战斗实例集合** + 6×7 棋盘占位 | 一场战斗 |
 | `ShopSystem` | 5 个槽位（模板引用 + 价格，**非实例**） | 一轮 |
@@ -77,7 +77,7 @@
 | 命令 | 载荷 | 语义 |
 |------|------|------|
 | `StartBattle` | — | 派生 BattleUnit + 羁绊快照（处理过程）；**零棋子允许开战**（已定） |
-| `Surrender` | — | 战斗中投降，立即判负，原地重试（已定保留） |
+| `Surrender` | — | 战斗中投降，立即判负——与普通战败同口径（计机会 / 按次数给败箱 / 第 3 次即终局，GDD §2.2；已定保留） |
 | `PickChest` | `option` | 三选一；宝箱内容进入 RESULT 时已 roll 好，本命令不消耗随机数 |
 | `AbandonRun` | — | 放弃远征，流终止；按已达波数结算部分熟练度（已定保留） |
 
@@ -88,7 +88,7 @@
 | 侦察敌阵 / 棋子 Tooltip / 宝箱浏览 | 只读，UI 态 |
 | 战斗加速 ×1/×2、暂停 | 表演层（accumulator 消费速率），不改逻辑 |
 | 键位（如 D=刷新） | 输入方式，翻译层产出同一命令 |
-| 自动 3 合 1 / 怜悯金币 / 宝箱 roll / 敌阵生成 | 确定性系统反应 |
+| 自动 3 合 1 / 宝箱 roll / 敌阵生成 / 战败机会计数与终局判定 | 确定性系统反应 |
 | 英雄/场景选择过程 | UI 态；结果成为 `StartRun` 参数 |
 | 存档 | 快照模型（§八），与命令流回放是两种持久化 |
 
@@ -97,27 +97,29 @@
 
 ### 4.4 tick 配对与回放模型
 - 命令入队时由 `CommandManager` 盖 tick 戳，历史以 `(tick, command)` 保存（tick 由管理器记录，不污染命令纯数据）；
-- **回放 = `StartRun(heroId, sceneId, seed)` + 命令流**；流终点 = 最终 Boss 轮的 `PickChest` 或 `AbandonRun`。
+- **回放 = `StartRun(heroId, sceneId, seed)` + 命令流**；流终点 = 最终 Boss 轮的 `PickChest`、`AbandonRun`，或第 3 败的系统终局（无命令产出，2026-08-23）。
 
 ## 五、阶段状态机
 
 ### 5.1 状态与转移
 
 ```
-新轮进入：轮次+1 · 生成敌阵(轮内固定) · 商店免费刷新 · 侦察就绪
-   ┌──────────────────────────────────────────────────────┐
-   ▼                                                      │
+新轮进入：轮次+1 · 生成敌阵(轮内固定) · 商店免费刷新 · 侦察就绪 · 机会计数清零
+   ┌───────────────────────────────────────────────────────┐
+   ▼                                                       │
 SHOPPING ──StartBattle──▶ BATTLE ──判胜──▶ RESULT ──PickChest─┤（非最终轮）
-   ▲                      │  │                              │
-   │      判负(全灭/超时/投降)│  └─Surrender─▶ 判负            │
-   └───────────────────────┘                               │
-   重试回备战：轮次不变 · 敌阵不变 · 商店不变 · 怜悯计数+1      │
+   ▲                        │  │                             │
+   │   判负(全灭/超时/投降)  │  └─Surrender─▶ 判负            │
+   │                        └──▶ RESULT（判负即机会计数 +1）  │
+   │       ├ 败 1~2 且上场>0：败箱二选一 ──PickChest──回备战─┤
+   │       ├ 零棋子败（无败箱）：横幅 3s / 点击 ──回备战─────┘
+   │       └ 败 3（机会耗尽，无败箱）：横幅 3s / 点击 ──▶ RUN_END(DEFEATED)
                                                     最终Boss轮 ▼
                                                  RUN_END ▶ RunResultScreen
    任意局内阶段(备战/战斗)暂停菜单 ──AbandonRun──▶ RUN_END（按波数结算熟练度）
 ```
 
-**关键区分——新轮进入 vs 重试返回**：只有前者触发轮次推进、敌阵生成、商店免费刷新；后者什么都不变，仅怜悯计数 +1。
+**关键区分——新轮进入 vs 重试返回**：只有前者触发轮次推进、敌阵生成、商店免费刷新、**战败机会计数清零**；后者轮次/敌阵/商店全不变，仅机会计数 +1 与败箱收益入账（2026-08-23 机会制修订）。
 
 ### 5.2 命令门控矩阵
 
@@ -134,15 +136,47 @@ SHOPPING ──StartBattle──▶ BATTLE ──判胜──▶ RESULT ──Pi
 ### 5.3 轮开始事件（系统行为清单）
 轮次 +1 → 按 GDD §7.3 半随机池生成敌阵（本轮重试不重掷）→ 商店免费自动刷新 → 侦察数据就绪 → 进入 SHOPPING。
 
-### 5.4 判负路径
-全灭 / 超时 60s / 投降 → 战斗态整体丢弃 → 回 SHOPPING（同轮重试）；本轮连续失败第 3 次起每次 +1 怜悯金币（**每轮至多 +3；零棋子战败不计入连败计数**——堵“空场秒投降刷保底”漏洞；计数器归 `RunState`）。
+### 5.4 判负路径（2026-08-23 机会制修订：3 次机会 + 第 3 败终局，怜悯删除）
+全灭 / 超时 60s / 投降 → **判负瞬间机会计数 +1**（`RunState.defeatCountPerRound`，不区分上场人数——零棋子败照常消耗）→ 进 RESULT，按次数三分岔：
+- **败 1~2 且上场 > 0**：公式构造败箱（二选一，零 RNG）挂 `pendingChest`，`PickChest` 为唯一出口（与胜局同律，无自动推进）→ 领取后战斗态整体丢弃 → 回 SHOPPING 同轮重试；
+- **败 1~2 且零棋子**：无败箱，横幅 3 秒自动 / 点击任意处 → 回 SHOPPING；
+- **败 3（机会耗尽）**：无败箱，战败横幅（提示“机会耗尽”）3 秒自动 / 点击 → `endRun(DEFEATED)` 失败结算进 RUN_END（重开复用现有 restart 流程：同英雄同场景新 seed，GDD §2.2）。
+
+机会计数随快照持久（D10 口径下它影响续玩语义——恢复后已耗机会不重置）；胜利推进新轮时清零。**怜悯机制整体删除**（2026-08-23 用户裁决：3 次机会制下“第 3 败起 +1 金”永远触发不了）。
+
+**修订落点（planner 锚点，2026-08-23 代码现状实读）**
+
+新增 / 改造：
+- `RunEndCause`（core/src/main/java/com/voidvvv/kz_auto_chess_n/entities/RunEndCause.java:4-9）：新增枚举值 **`DEFEATED`**（第 3 败终局；现仅 COMPLETED / ABANDONED）
+- `RunState` 新增字段 **`defeatCountPerRound`**（int，本轮已战败次数；core/src/main/java/com/voidvvv/kz_auto_chess_n/entities/RunState.java 字段区）+ getter/setter；**必须入快照**（替换原怜悯两字段——D10 口径下续玩需恢复已耗机会）
+- `SnapshotCodec` 快照键增补 `defeatCountPerRound`（core/src/main/java/com/voidvvv/kz_auto_chess_n/save/SnapshotCodec.java:326 键清单 + 写出段 :236 附近 + 读取段 :341 附近）；`RunSnapshot` 字段/构造器/getter 对应改造（core/src/main/java/com/voidvvv/kz_auto_chess_n/save/RunSnapshot.java:19-20,42,75-76）；旧档缺省 0 兼容或按 D20 坏档重置，由 planner 定
+- `GameBalance` 新增 **`DEFEAT_LIMIT_PER_ROUND = 3`**（每轮战败机会上限，工作值待调）；败箱“每轮 ≤2”不再是独立常量——由机会制推导（第 3 败直接终局无箱）
+- `RunFlowSystem.onBattleOver`（core/src/main/java/com/voidvvv/kz_auto_chess_n/systems/RunFlowSystem.java:143-153）：败局分支当前零处理——改为判负即 `defeatCountPerRound + 1` 并分岔：败 1~2 且上场 > 0 → 公式构造败箱挂 `pendingChest`（零 RNG，不改 §六消耗点数量）；败 3 → 无箱（终局路由见下条）
+- `RunFlowSystem.tickResult`（RunFlowSystem.java:156-165）：无 `pendingChest` 时的自动推进按次数分岔——机会未尽走 `continueAfterDefeat`（回 SHOPPING）；机会耗尽走 `endRun(DEFEATED)`
+- `RunFlowSystem.advanceAfterVictory`（RunFlowSystem.java:186-202）：新轮进入的怜悯双清零（:195-196）改为 `defeatCountPerRound = 0`
+- `PickChestCommand` handler（RunFlowSystem.java:89-103）：当前领取后无条件 `advanceAfterVictory`（:101）——按战局结局分岔：胜局推进 / 败局走 `continueAfterDefeat`（同轮重试；机会已在判负时计过，此处不再计）
+- `MasteryCalculator.settle` 契约（core/src/main/java/com/voidvvv/kz_auto_chess_n/systems/MasteryCalculator.java:14-26）：显式登记 **`DEFEATED` = 轮×3**（与 ABANDONED 同口径，GDD §8.1；现有 default 分支已天然返回 轮×3，补显式分支/javadoc 防未来改动破坏口径）
+- `RunEndPanel` 成因文案分流（core/src/main/java/com/voidvvv/kz_auto_chess_n/render/ui/RunEndPanel.java:76-78）：现二值“远征通关 / 远征已放弃”→ 三值 + **“远征失败”**（DEFEATED，工作值待调）
+- `ResultBanner` 败局提示行（core/src/main/java/com/voidvvv/kz_auto_chess_n/render/ui/ResultBanner.java:49-63）：`mercyLine` 参数改为剩余机会行——败 1~2 显示**「剩余机会 N」**（N = `DEFEAT_LIMIT_PER_ROUND` − 已耗，即 2/1，工作值待调）；败 3 显示「机会耗尽 · 远征失败」（工作值待调）；其点击继续调用（ResultBanner.java:29）在败 3 语境改路由终局
+- `ChestOffer` 构造器强制恰 3 选项（core/src/main/java/com/voidvvv/kz_auto_chess_n/entities/ChestOffer.java:19-21）：败箱 2 选项需放宽为 2~3 或新增败箱变体
+- `ChestDialog` 硬编码 3 选项按钮（core/src/main/java/com/voidvvv/kz_auto_chess_n/render/ui/ChestDialog.java:45）与胜箱标题（ChestDialog.java:137）：需支持 2 选项与「战败补给」标题
+- `ProfileService.settle`（core/src/main/java/com/voidvvv/kz_auto_chess_n/save/ProfileService.java:57-83）：场景解锁判定 `cause == COMPLETED`（:83）——`DEFEATED` 天然不解锁新场景，无需改动（登记防误改）
+
+删除（怜悯机制整体拆除，2026-08-23 用户裁决）：
+- `GameBalance.MERCY_START_LOSS` / `MERCY_CAP_PER_ROUND`（core/src/main/java/com/voidvvv/kz_auto_chess_n/config/GameBalance.java:55-56）
+- `RunFlowSystem.applyMercy`（RunFlowSystem.java:220-232）及 `continueAfterDefeat` 内调用点（:178）
+- `RunState.mercyLossCount` / `mercyGoldThisRound` 字段 + getter/setter（core/src/main/java/com/voidvvv/kz_auto_chess_n/entities/RunState.java:30,39,68,73,95-101）与类注释 :18 的怜悯引文
+- `RunSnapshot.mercyLossCount` / `mercyGoldThisRound`（core/src/main/java/com/voidvvv/kz_auto_chess_n/save/RunSnapshot.java:19-20,42,54-55,75-76）
+- `SnapshotCodec` 快照键 `mercyLossCount` / `mercyGoldThisRound`（写出 :236-237、键清单 :326-329、读取 :341-342/:396）——**旧档含已删键 → `checkUnknownKeys` 抛错 → 按 D20 坏档删档重置**（不做迁移）
+- `ResultBanner.refresh` 的 `mercyLine` 参数与败局行拼接（ResultBanner.java:50,58,62）
+- `BattleScreen.mercyLine()`（core/src/main/java/com/voidvvv/kz_auto_chess_n/screens/BattleScreen.java:364-368）与横幅调用点（:346）——换为剩余机会行
 
 ## 六、确定性细则
 
 **RNG 消耗点全集**（四处）：
 1. 轮开始的敌阵生成；
 2. 商店刷新（轮首免费 + `RefreshShop` 命令）；
-3. 宝箱内容 roll（进入 RESULT 时一次性）；
+3. 宝箱内容 roll（胜局进入 RESULT 时一次性；败局败箱为公式构造，**零 RNG 消耗**，不新增消耗点——2026-08-23；机会制终局路径亦零 RNG）；
 4. **战斗内暴击判定**（每次普攻 20% 概率 ×1.5，2026-08-20 评审整改拍板）——严格**按固定行动顺序**消耗。
 
 **战斗随机仅限暴击判定一点**（原“战斗过程零随机”立场据此修订）：索敌、移动、技能全部为确定函数；暴击 RNG 按固定行动顺序消耗，同种子回放仍可完整复现。未来若新增战斗内随机（如“30% 概率眩晕”），必须经 `RandomGenerator` 并在此清单登记消耗点。
@@ -171,7 +205,7 @@ SHOPPING ──StartBattle──▶ BATTLE ──判胜──▶ RESULT ──Pi
 
 | 轨道 | 模型 | 内容 | 触发 |
 |------|------|------|------|
-| **快照轨**（挂起存档，Phase 6 落地） | 全量状态序列化 | RunState(seed/heroId/round/怜悯/idIssuer/RNG 消耗计数) + Player(名单/装备/背包) + 商店槽 + 敌阵；`save/run_snapshot.json`；**仅备战期写、RUN_END 删**（坏档删档重置，裁决 D20） | 进入 SHOPPING / pause / hide |
+| **快照轨**（挂起存档，Phase 6 落地） | 全量状态序列化 | RunState(seed/heroId/round/**战败机会计数 defeatCountPerRound**/idIssuer/RNG 消耗计数) + Player(名单/装备/背包) + 商店槽 + 敌阵；`save/run_snapshot.json`；**仅备战期写、RUN_END 删**（坏档删档重置，裁决 D20；2026-08-23 起怜悯两键移除，旧档按坏档重置） | 进入 SHOPPING / pause / hide |
 | **回放轨**（录像） | 命令流重演 | `StartRun` + `(tick, command)` 流 + 种子 | 战斗录像/调试复现（Phase 7 可选） |
 
 文件格式 JSON（Phase 6 落地：`save/profile.json` 档案轨 + `save/run_snapshot.json` 快照轨，均经 `Gdx.files.local`；档案域门面 `MetaService` 为 Screen 层唯一入口）。
@@ -199,6 +233,8 @@ SHOPPING ──StartBattle──▶ BATTLE ──判胜──▶ RESULT ──Pi
 | 2026-08-21 | 通知面板 | CombatEvent **第三消费者** + `CommandManager.onExecuted` 经营事件监听；HUD 增第 9 区（左下常驻小窗 + `L` 键大窗回看，render §5.5） |
 | 2026-08-21 | BuyUnit 校验补全 | **备战席满 9 禁买**（灰置 + 提示）；**例外**：购买即完成 3 合 1 时允许（合成净释放 2 格）——GDD §3.4 / §5.2 矩阵注记 |
 | 2026-08-21 | 技能模块化 | **skills.json 独立具名技能**（组合式：shape × effects ≤ 3 × delivery），units 改 `skillId` 引用；效果词汇与羁绊/装备同源（`data_schema_design.md` §五） |
+| 2026-08-23 | 败局补给箱（手验修订一） | 判负（上场 > 0）亦经 RESULT——`PickChest`（败箱二选一）为唯一出口，回 SHOPPING 同轮重试；败箱公式构造 **零 RNG**（§六清单仅补注、不增消耗点）；每轮 ≤2【待确认】；快照仍仅 SHOPPING 期写，RESULT 期关窗未领败箱作废重打（D10 口径不变）——规则与数值见 GDD §2.2/§3.2，落点锚点见 §5.4 |
+| 2026-08-23 | 败箱 3 次机会制（用户裁决） | 判负路径三分岔（败 1~2 领败箱回备战 / 零棋子败无箱回备战 / **败 3 → RUN_END(DEFEATED)**）；`RunState` 机会计数字段 `defeatCountPerRound` **入快照**（D10 续玩语义）；新常量 `DEFEAT_LIMIT_PER_ROUND=3`（败箱"每轮 ≤2"改由机会制推导）；**怜悯全拆**（applyMercy / 两常量 / RunState 与快照怜悯键 / 横幅怜悯行——锚点清单见 §5.4）；RNG 清单不变（败箱仍零消耗）；熟练度 DEFEATED = 轮×3——规则见 GDD §2.2/§3.2/§8.1 |
 
 ## 十、文档关系
 

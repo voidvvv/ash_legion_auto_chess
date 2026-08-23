@@ -1,6 +1,6 @@
 # 🖼️ 渲染架构设计文档
 
-> **版本**：V1.3（新增 §7.6 资源访问服务：注入式 Assets 门面定稿，音频口径补全）  
+> **版本**：V1.4（RESULT 弹窗三分岔：败 1~2 败箱 / 零棋子败无箱 / 第 3 败终局；`RunEndPanel` 增 `DEFEATED` 文案位）  
 > **定位**：视口与坐标系 / 双通路渲染模型 / 帧循环与插值 / 事件驱动表现 / 视图类结构 / 图集规范 / 像素规则 / HUD 布局定稿（Phase 4 渲染层开工依据）  
 > **依据**：GDD V0.9 §九（美术规格）、`architecture_design.md` V1.5（双实体 / Screen / 输入归属）、`battle_design.md` V1.1（主循环 / 跳格插值 / CombatEvent）、`user_input_design.md` V1.4 §2.5（输入归属）/§3（坐标陷阱）  
 > **配图**：`docs/diagrams/battle_screen_layout.html`（V1.0 定稿）  
@@ -164,7 +164,7 @@ public void render(float delta) {
 
 **双数据源**：
 - 战斗事件：渲染段 drain `CombatEvent` 后分发——通知面板是**第三消费者**（特效/飘字之外）
-- 经营事件：`CommandManager.onExecuted(cmd, success)` 监听（命令执行成功即产出一条；系统行为如怜悯金币、轮首免费刷新由所属 system 直接发）
+- 经营事件：`CommandManager.onExecuted(cmd, success)` 监听（命令执行成功即产出一条；系统行为如轮首免费刷新、机会耗尽终局由所属 system 直接发）
 
 **双窗形态**：
 - **常驻小窗**（HUD 第 9 区，坐标见 §九）：半透明深底，最近 4 行，新行底部推入；**每帧最多追加 2 行**（战斗爆发期防刷屏）；备战/战斗两阶段均可见；点击或 `L` 键展开大窗
@@ -180,7 +180,7 @@ public void render(float delta) {
 | 技能 | 紫 | `荆语法师 施放【火球】→ 3 目标` |
 | 治疗 | 绿 | `圣光 +38 → 兽人战士★2` |
 | 控制/死亡 | 琥珀/深红 | `震地 眩晕 2 单位`、`兽人战士★2 阵亡` |
-| 系统 | 蓝 | `第 7 轮 · BOSS（商店免费刷新）`、`怜悯金币 +1（连败3）` |
+| 系统 | 蓝 | `第 7 轮 · BOSS（商店免费刷新）`、`战败（剩余机会 1）`、`机会耗尽 · 远征失败` |
 
 **性能纪律**：行 Label 池化（4 + 200）、StringBuilder 复用、每帧一次批量提交——渲染段零分配不破。
 
@@ -331,7 +331,8 @@ Main.create → LoadingScreen（全量加载）→ new Assets(manager, placehold
 | — | 战斗 HUD | (0, 296, 640, 64) | UI | 仅 BATTLE（替换 ⑧：变速 ×1/×2、60s 计时条、投降） |
 | ⑨ | 事件通知小窗 | (20, 230, 128, 60) | UI | 全程（点击 / `L` 键展开大窗回看，见 §5.5） |
 
-- RESULT 阶段：宝箱三选一弹窗（`dialogStage` 最上层），背景压暗
+- RESULT 阶段（2026-08-23 机会制三分岔，见 GDD §2.2）：胜局宝箱**三选一**弹窗；**败 1~2 且上场 > 0**——**战败补给箱二选一**弹窗（复用 `ChestDialog` 通路与 `PickChest` 命令，标题区分「战败补给」）；**零棋子败（败 1~2）无弹窗**——横幅 3 秒自动 / 点击后回备战，机会照常已扣；**第 3 败（含零棋子第 3 败）无弹窗**——战败横幅提示「机会耗尽」（`ResultBanner` 剩余机会行改终局行，工作值待调），3 秒自动 / 点击后直接进 RUN_END——弹窗均居 `dialogStage` 最上层，背景压暗
+- 败局横幅与终局面板（机会制新增，工作值待调）：败 1~2 横幅显示**「剩余机会 N」**（N = 机会上限 3 − 已耗，即 2 或 1）；RUN_END 终局面板（`RunEndPanel`）成因文案三分岔——**“远征通关”（COMPLETED）/ “远征已放弃”（ABANDONED）/ “远征失败”（DEFEATED，新文案位）**
 - 弹窗层级与输入优先级一致（input §2.2 multiplexer：dialogStage > uiStage > boardProcessor > keyProcessor）
 - **侦察即棋盘**：共享棋盘设计使敌情侦察无需独立面板——敌区三行直接可见（GDD §4.1 的红利）
 - **悬停预览锚点（Phase 5.1 R1 + feedback07，表外补充常量）**：棋盘悬停 (128,48,94,192)、商店悬停 (508,48,112,192)、背包悬停 (132,140,90,100)——`BoardGeometry` BOARD_HOVER/SHOP_HOVER/INVENTORY_HOVER 组；源：① ShopBar 槽位（250ms 驻留）② 棋盘单位（点击候选）③ 背包槽位（BATTLE 置灰/空槽/拖拽中归一抑制）
@@ -353,7 +354,7 @@ Main.create → LoadingScreen（全量加载）→ new Assets(manager, placehold
 - [ ] 特效实现：手绘闪光帧 vs `ParticleEffect`——Phase 7
 - [ ] 血条 / 能量条 / 星级底光的最终样式（棋子下方微型条）
 - [ ] 商店卡拖拽购买增强（input §2.4 列为待定增强）
-- [ ] 宝箱三选一弹窗与棋子详情面板的视觉细化
+- [ ] 宝箱弹窗（胜局三选一 / 败局败箱二选一，2026-08-23）与棋子详情面板的视觉细化；败局横幅「剩余机会 N / 机会耗尽」与终局「远征失败」文案视觉（机会制工作值待调）
 
 ---
 
@@ -371,3 +372,5 @@ Main.create → LoadingScreen（全量加载）→ new Assets(manager, placehold
 | 2026-08-21 | 技能特效 | **四锚点 × 双命名空间**（§5.4）：一次性归 `fx_{skillId}`、持续归 `fx_status_{type}`（轮询差分驱动）；通用兜底永不阻塞美术 |
 | 2026-08-21 | 通知面板 | **左下常驻小窗 + L 键大窗回看**（§5.5）：CombatEvent 第三消费者 + `CommandManager.onExecuted` 经营监听，双流合并；HUD 增第 9 区 |
 | 2026-08-21 | 资源访问 | **注入式 `Assets` 门面**定稿（§7.6）：否决静态 GameContext 方案（Android 生命周期失同步 / 隐式依赖不可测 / Context 词义冲突）；音频统一 `Assets.sound()` 出口（Phase 7 平滑升级 AudioManager）；分层铁律入册 |
+| 2026-08-23 | RESULT 弹窗分岔（手验修订一） | **胜局三选一 / 败局败箱二选一共用 `ChestDialog` + `PickChest` 通路**（标题区分「战败补给」，`ChestDialog` 需支持 2 选项——现硬编码 3 按钮）；零棋子败局无弹窗、维持 `ResultBanner` 3 秒自动 / 点击重试——规则见 GDD §2.2 |
+| 2026-08-23 | RESULT 三分岔与终局文案（机会制裁决） | 胜局三选一 / **败 1~2 二选一败箱**（零棋子败无弹窗、机会照扣）/ **第 3 败无箱**——横幅「机会耗尽」后直接 RUN_END；`RunEndPanel` 增 **`DEFEATED`「远征失败」**文案位、`ResultBanner` 败 1~2 显示剩余机会行——规则见 GDD §2.2，代码锚点见 architecture §5.4 |
