@@ -6,6 +6,7 @@ import com.voidvvv.kz_auto_chess_n.data.EquipmentRarity;
 import com.voidvvv.kz_auto_chess_n.data.GameData;
 import com.voidvvv.kz_auto_chess_n.entities.ChestOffer;
 import com.voidvvv.kz_auto_chess_n.entities.ChestOption;
+import com.voidvvv.kz_auto_chess_n.entities.ChestOrigin;
 import com.voidvvv.kz_auto_chess_n.entities.Equipment;
 import com.voidvvv.kz_auto_chess_n.entities.IdIssuer;
 import com.voidvvv.kz_auto_chess_n.entities.Player;
@@ -24,7 +25,7 @@ import java.util.List;
  */
 public final class ChestSystem {
 
-    /** 胜局进入 RESULT 时 roll 三选项（槽1 金币常驻 / 槽2 经验书 / 槽3 装备） */
+    /** 胜局进入 RESULT 时 roll 三选项（槽1 金币常驻 / 槽2 经验书 / 槽3 装备）；RNG 消耗 = 2（不变） */
     public ChestOffer roll(int round, GameData data, RandomGenerator rng) {
         boolean boss = GameBalance.isBossRound(round);
         int gold = GameBalance.chestGold(round, boss);
@@ -32,8 +33,18 @@ public final class ChestSystem {
                 boss ? GameBalance.BOSS_CHEST_RARITY_WEIGHTS : GameBalance.CHEST_RARITY_WEIGHTS, gold);
         return new ChestOffer(round, boss, Arrays.asList(
                 ChestOption.gold(gold),
-                ChestOption.expBook(GameBalance.CHEST_EXP_BOOK_GAIN),
+                ChestOption.expBook(GameBalance.chestExpBook(round)),
                 equipment));
+    }
+
+    /**
+     * 败箱（败 1~2 且上场 > 0，GDD §2.2）：二选一，公式确定值——金币 = 胜箱 ×50% 向下取整
+     * （Boss 按加倍后值减半）/ 经验书 = 胜箱同公式同值；无装备槽；零 RNG 消耗（architecture §六）。
+     */
+    public ChestOffer buildDefeatOffer(int round) {
+        return new ChestOffer(round, GameBalance.isBossRound(round), ChestOrigin.DEFEAT, Arrays.asList(
+                ChestOption.gold(GameBalance.defeatChestGold(round)),
+                ChestOption.expBook(GameBalance.chestExpBook(round))));
     }
 
     /** 领取（PickChest handler 调）：装备发号入包，金币/经验入账；返回通知行文案 */

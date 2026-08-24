@@ -12,8 +12,10 @@ import com.voidvvv.kz_auto_chess_n.data.EquipmentRarity;
 import com.voidvvv.kz_auto_chess_n.data.GameData;
 import com.voidvvv.kz_auto_chess_n.entities.ChestOffer;
 import com.voidvvv.kz_auto_chess_n.entities.ChestOption;
+import com.voidvvv.kz_auto_chess_n.entities.ChestOrigin;
 import com.voidvvv.kz_auto_chess_n.render.Assets;
 import com.voidvvv.kz_auto_chess_n.render.PlaceholderKeys;
+import com.voidvvv.kz_auto_chess_n.render.board.BoardGeometry;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -36,20 +38,31 @@ public final class ChestDialog extends Group {
     private final CommandManager commandManager;
     private final Assets assets;
     private final GameData data;
+    private final OptionButton[] buttons = new OptionButton[3];
     private ChestOffer offer;
 
     public ChestDialog(CommandManager commandManager, Assets assets, GameData data) {
         this.commandManager = commandManager;
         this.assets = assets;
         this.data = data;
-        for (int i = 0; i < 3; i++) {
-            addActor(new OptionButton(i));
+        for (int i = 0; i < buttons.length; i++) {
+            buttons[i] = new OptionButton(i);
+            addActor(buttons[i]);
         }
     }
 
-    /** Screen 在 push 前刷新（offer 不可变，无逐帧刷新需求） */
+    /** Screen 在 push 前刷新（offer 不可变，无逐帧刷新需求）；按选项数显隐 + 居中重排（胜 3 / 败 2） */
     public void refresh(ChestOffer offer) {
         this.offer = offer;
+        int n = offer.getOptions().size(); // 2~3（ChestOffer 构造校验）
+        float totalW = n * 120f + (n - 1) * 10f;
+        float x = (BoardGeometry.VIRTUAL_W - totalW) / 2f;
+        for (int i = 0; i < buttons.length; i++) {
+            buttons[i].setVisible(i < n);
+            if (i < n) {
+                buttons[i].setPosition(x + i * 130f, 130f);
+            }
+        }
     }
 
     /** 选项文案：金币/经验书带数额，装备取表内模板名 */
@@ -108,6 +121,9 @@ public final class ChestDialog extends Group {
                 return;
             }
             ChestOption option = offer.optionAt(index);
+            if (option == null) {
+                return; // 败箱 2 选项：第 3 槽无选项不绘制（防御；refresh 已隐藏）
+            }
             Color tint = optionTint(data, option);
             Color old = batch.getColor();
             batch.setColor(tint.r, tint.g, tint.b, 0.95f * parentAlpha);
@@ -134,8 +150,19 @@ public final class ChestDialog extends Group {
         batch.draw(assets.region(PlaceholderKeys.WHITE), 110f, 100f, 420f, 140f);
         batch.setColor(old);
         assets.font().getData().setScale(1.5f);
-        assets.font().draw(batch, offer != null && offer.isBoss() ? "BOSS 宝箱" : "宝箱", 268f, 216f);
+        assets.font().draw(batch, titleText(offer), 268f, 216f);
         assets.font().getData().setScale(1f);
         super.draw(batch, parentAlpha);
+    }
+
+    /** 标题三值：败箱「战败补给」（GDD §2.2）/ Boss 箱 / 普通箱（工作值待调） */
+    static String titleText(ChestOffer offer) {
+        if (offer == null) {
+            return "宝箱";
+        }
+        if (offer.getOrigin() == ChestOrigin.DEFEAT) {
+            return "战败补给";
+        }
+        return offer.isBoss() ? "BOSS 宝箱" : "宝箱";
     }
 }

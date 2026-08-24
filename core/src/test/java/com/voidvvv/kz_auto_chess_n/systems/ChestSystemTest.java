@@ -10,6 +10,7 @@ import com.voidvvv.kz_auto_chess_n.data.GameData;
 import com.voidvvv.kz_auto_chess_n.data.StatKey;
 import com.voidvvv.kz_auto_chess_n.entities.ChestOffer;
 import com.voidvvv.kz_auto_chess_n.entities.ChestOption;
+import com.voidvvv.kz_auto_chess_n.entities.ChestOrigin;
 import com.voidvvv.kz_auto_chess_n.entities.Player;
 import com.voidvvv.kz_auto_chess_n.entities.SequentialIdIssuer;
 import com.voidvvv.kz_auto_chess_n.utils.RandomGenerator;
@@ -86,11 +87,58 @@ class ChestSystemTest {
         ChestOffer offer = new ChestSystem().roll(4, fullRarityData(), new RandomGenerator(42L));
         assertThat(offer.getRound()).isEqualTo(4);
         assertThat(offer.isBoss()).isFalse();
+        assertThat(offer.getOrigin()).isEqualTo(ChestOrigin.VICTORY);
         assertThat(offer.getOptions()).hasSize(3);
         assertThat(offer.optionAt(0)).isEqualTo(ChestOption.gold(GameBalance.chestGold(4, false)));
         assertThat(offer.optionAt(0).getAmount()).isEqualTo(4);
-        assertThat(offer.optionAt(1)).isEqualTo(ChestOption.expBook(GameBalance.CHEST_EXP_BOOK_GAIN));
+        assertThat(offer.optionAt(1)).isEqualTo(ChestOption.expBook(GameBalance.chestExpBook(4)));
         assertThat(offer.optionAt(2).getKind()).isEqualTo(ChestOption.Kind.EQUIPMENT);
+    }
+
+    // —— 胜箱经验书公式（修订二：4 + floor(轮/5)，Boss 轮同公式） ——
+
+    @Test
+    @DisplayName("胜箱槽2 经验书 = chestExpBook(round)：第 1/5/25 轮 → 4/5/9（Boss 轮 15 同公式不加倍）")
+    void victoryChestExpBookFollowsFormula() {
+        ChestSystem system = new ChestSystem();
+        assertThat(system.roll(1, fullRarityData(), new RandomGenerator(42L)).optionAt(1))
+                .isEqualTo(ChestOption.expBook(4));
+        assertThat(system.roll(5, fullRarityData(), new RandomGenerator(42L)).optionAt(1))
+                .isEqualTo(ChestOption.expBook(5));
+        assertThat(system.roll(25, fullRarityData(), new RandomGenerator(42L)).optionAt(1))
+                .isEqualTo(ChestOption.expBook(9));
+        assertThat(system.roll(15, fullRarityData(), new RandomGenerator(42L)).optionAt(1))
+                .isEqualTo(ChestOption.expBook(7)); // Boss 轮同公式同值（不加倍）
+    }
+
+    // —— 败箱构造（机会制 CP4：公式确定值、零 RNG） ——
+
+    @Test
+    @DisplayName("buildDefeatOffer：2 选项、origin=DEFEAT、第 7 轮 [gold(5), expBook(5)]、15 轮 [8,7]、25 轮 [11,9]")
+    void buildDefeatOfferFormulaAnchors() {
+        ChestSystem system = new ChestSystem();
+        ChestOffer round7 = system.buildDefeatOffer(7);
+        assertThat(round7.getOrigin()).isEqualTo(ChestOrigin.DEFEAT);
+        assertThat(round7.isBoss()).isTrue();
+        assertThat(round7.getOptions()).hasSize(2);
+        assertThat(round7.optionAt(0)).isEqualTo(ChestOption.gold(5));
+        assertThat(round7.optionAt(1)).isEqualTo(ChestOption.expBook(5));
+
+        ChestOffer round15 = system.buildDefeatOffer(15);
+        assertThat(round15.optionAt(0)).isEqualTo(ChestOption.gold(8));
+        assertThat(round15.optionAt(1)).isEqualTo(ChestOption.expBook(7));
+
+        ChestOffer round25 = system.buildDefeatOffer(25);
+        assertThat(round25.optionAt(0)).isEqualTo(ChestOption.gold(11));
+        assertThat(round25.optionAt(1)).isEqualTo(ChestOption.expBook(9));
+    }
+
+    @Test
+    @DisplayName("buildDefeatOffer 确定性：同 round 重复调用产出相等（零 RNG，不接 RandomGenerator）")
+    void buildDefeatOfferDeterministic() {
+        ChestSystem system = new ChestSystem();
+        assertThat(system.buildDefeatOffer(9)).isEqualTo(system.buildDefeatOffer(9));
+        assertThat(system.buildDefeatOffer(1).optionAt(0)).isEqualTo(ChestOption.gold(1)); // 胜箱 3/2
     }
 
     @Test
@@ -168,18 +216,15 @@ class ChestSystemTest {
         assertThat(player.getInventory().get(0).getTemplate().getId()).isEqualTo("eq_sword");
     }
 
-    // —— ChestOffer / ChestOption 值语义与校验 ——
+    // —— ChestOffer / ChestOption 值语义与校验（2~3 选项迁移至 ChestOfferTest） ——
 
     @Test
-    @DisplayName("ChestOffer 恰三选项约束；optionAt 越界返回 null")
+    @DisplayName("ChestOffer 三选项 + optionAt 越界返回 null（胜箱便捷构造默认 VICTORY）")
     void chestOfferValidation() {
-        List<ChestOption> two = Arrays.asList(ChestOption.gold(1), ChestOption.expBook(1));
-        assertThatThrownBy(() -> new ChestOffer(1, false, two))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("三");
         ChestOffer offer = new ChestOffer(1, true, Arrays.asList(
                 ChestOption.gold(1), ChestOption.expBook(1), ChestOption.equipment("eq_white")));
         assertThat(offer.getOptions()).hasSize(3);
+        assertThat(offer.getOrigin()).isEqualTo(ChestOrigin.VICTORY);
         assertThat(offer.optionAt(-1)).isNull();
         assertThat(offer.optionAt(3)).isNull();
         assertThat(offer.getRound()).isEqualTo(1);

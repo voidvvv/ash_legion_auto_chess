@@ -73,9 +73,8 @@ public final class RunEndPanel extends Group {
         batch.draw(assets.region(PlaceholderKeys.WHITE), 90f, 74f, 460f, 216f);
         batch.setColor(Color.WHITE);
         RunContext ctx = context.get();
-        boolean abandoned = ctx.getRunState().getEndCause() == RunEndCause.ABANDONED;
         assets.font().getData().setScale(2f);
-        assets.font().draw(batch, abandoned ? "远征已放弃" : "远征通关", 272f, 268f); // 4 字 ×24px 居中
+        assets.font().draw(batch, endTitleText(ctx.getRunState().getEndCause()), 272f, 268f); // 4 字 ×24px 居中
         assets.font().getData().setScale(1f);
         int round = ctx.getRunState().getRound();
         assets.font().draw(batch, "抵达第 " + round + "/" + GameBalance.TOTAL_ROUNDS + " 轮", 280f, 240f);
@@ -89,6 +88,22 @@ public final class RunEndPanel extends Group {
             assets.font().draw(batch, "熟练度 +" + ctx.getRunState().getMasteryAwarded(), 262f, 218f);
         }
         assets.font().draw(batch, "种子 " + ctx.getRunState().getSeed(), 285f, 126f);
+    }
+
+    /** 终局标题三值（render §九；工作值待调）：COMPLETED 远征通关 / ABANDONED 远征已放弃 / DEFEATED 远征失败 */
+    static String endTitleText(RunEndCause cause) {
+        if (cause == null) {
+            return "远征通关"; // 防御：RUN_END 期 endCause 必非 null
+        }
+        switch (cause) {
+            case ABANDONED:
+                return "远征已放弃";
+            case DEFEATED:
+                return "远征失败";
+            case COMPLETED:
+            default:
+                return "远征通关";
+        }
     }
 
     /** 终局双钮共用壳 */

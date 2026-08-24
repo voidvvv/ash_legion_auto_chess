@@ -15,7 +15,7 @@ import java.util.Objects;
  * 发号器归本类持有（口径 #2），跨场持续递增不重置——玩家名单与战斗实例同一 id 空间。
  *
  * <p>敌阵 {@code enemyWave} 为轮开始事件产物（口径 #3）：beginRound 时生成、轮内固定；
- * 商店/怜悯等经济态推 Phase 5（字段 {@code mercyLossCount} 先建好，触发逻辑后接）。
+ * 商店等经济态推 Phase 5；本轮战败机会计数 {@code defeatCountPerRound}（3 次机会制，GDD §2.2）。
  */
 public final class RunState {
     private final long seed;
@@ -27,7 +27,8 @@ public final class RunState {
     private final RunModifiers modifiers;
     private int round = 1;
     private GamePhase phase = GamePhase.SHOPPING;
-    private int mercyLossCount;
+    /** 本轮已战败次数（3 次机会制，GDD §2.2；判负瞬间 +1、新轮进入清零、入快照——D10 续玩不重置） */
+    private int defeatCountPerRound;
     private List<WaveSpec> enemyWave = Collections.emptyList();
     /** StartRun 已执行标记（防重入；重开 = 新鲜 RunState 天然复位） */
     private boolean runStarted;
@@ -35,8 +36,6 @@ public final class RunState {
     private ChestOffer pendingChest;
     /** RUN_END 期非 null */
     private RunEndCause endCause;
-    /** 本轮已发怜悯金币（GDD §3.2 每轮 ≤3；新轮进入清零） */
-    private int mercyGoldThisRound;
     /** 全局逻辑钟（CommandManager 消费 tick 后推进——Phase 4 口径 #11 统一销账，实现口径 #17） */
     private int logicTick;
     /** 熟练度结算暂存（MasteryCalculator stub 产出；Phase 6 接档案域） */
@@ -65,12 +64,11 @@ public final class RunState {
     public RunModifiers getModifiers() { return modifiers; }
     public int getRound() { return round; }
     public GamePhase getPhase() { return phase; }
-    public int getMercyLossCount() { return mercyLossCount; }
+    public int getDefeatCountPerRound() { return defeatCountPerRound; }
     public List<WaveSpec> getEnemyWave() { return enemyWave; }
     public boolean isRunStarted() { return runStarted; }
     public ChestOffer getPendingChest() { return pendingChest; }
     public RunEndCause getEndCause() { return endCause; }
-    public int getMercyGoldThisRound() { return mercyGoldThisRound; }
     public int getLogicTick() { return logicTick; }
     public int getMasteryAwarded() { return masteryAwarded; }
 
@@ -92,12 +90,12 @@ public final class RunState {
         this.round = round;
     }
 
-    public void setMercyLossCount(int count) {
-        this.mercyLossCount = count;
-    }
-
-    public void setMercyGoldThisRound(int count) {
-        this.mercyGoldThisRound = count;
+    public void setDefeatCountPerRound(int count) {
+        if (count < 0 || count > GameBalance.DEFEAT_LIMIT_PER_ROUND) {
+            throw new IllegalArgumentException(
+                    "本轮战败次数必须在 0~" + GameBalance.DEFEAT_LIMIT_PER_ROUND + "，实际=" + count);
+        }
+        this.defeatCountPerRound = count;
     }
 
     public void setPendingChest(ChestOffer offer) {

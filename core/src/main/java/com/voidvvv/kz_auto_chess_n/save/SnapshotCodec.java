@@ -104,7 +104,7 @@ public final class SnapshotCodec {
         }
         return new RunSnapshot(RunSnapshot.CURRENT_VERSION, runState.getSeed(),
                 ctx.getRng().getConsumedCount(), runState.getSceneId(), runState.getHeroId(),
-                runState.getRound(), runState.getMercyLossCount(), runState.getMercyGoldThisRound(),
+                runState.getRound(), runState.getDefeatCountPerRound(),
                 runState.getIdIssuer().peekNext(), player.getGold(),
                 player.getLevel(), player.getCurrentExp(),
                 units, benchIndex, grid, inventory, pool, shopSlots, wave);
@@ -201,8 +201,7 @@ public final class SnapshotCodec {
         RunState runState = new RunState(s.getSeed(), s.getSceneId(), s.getHeroId(), modifiers,
                 new SequentialIdIssuer(s.getIdIssuerNext()));
         runState.setRound(s.getRound());
-        runState.setMercyLossCount(s.getMercyLossCount());
-        runState.setMercyGoldThisRound(s.getMercyGoldThisRound());
+        runState.setDefeatCountPerRound(s.getDefeatCountPerRound());
         runState.markRunStarted();
         runState.setPhase(GamePhase.SHOPPING);
         List<WaveSpec> wave = new ArrayList<WaveSpec>();
@@ -233,8 +232,7 @@ public final class SnapshotCodec {
             sb.append(",\"heroId\":null");
         }
         sb.append(",\"round\":").append(s.getRound());
-        sb.append(",\"mercyLossCount\":").append(s.getMercyLossCount());
-        sb.append(",\"mercyGoldThisRound\":").append(s.getMercyGoldThisRound());
+        sb.append(",\"defeatCountPerRound\":").append(s.getDefeatCountPerRound());
         sb.append(",\"idIssuerNext\":").append(s.getIdIssuerNext());
         sb.append(",\"playerGold\":").append(s.getPlayerGold());
         sb.append(",\"playerLevel\":").append(s.getPlayerLevel());
@@ -323,14 +321,15 @@ public final class SnapshotCodec {
         if (!root.isObject()) {
             throw new DataValidationException("run_snapshot.json: 根节点必须是对象");
         }
-        checkUnknownKeys(root, "version", "seed", "rngConsumedCount", "sceneId", "heroId", "round",
-                "mercyLossCount", "mercyGoldThisRound", "idIssuerNext", "playerGold", "playerLevel",
-                "playerExp", "units", "benchUnitIndex", "deploymentUnitIndex", "inventory",
-                "equipments", "shopSlotUnitIds", "enemyWave");
         int version = requireInt(root, "version");
         if (version != RunSnapshot.CURRENT_VERSION) {
+            // 版本拦截先于键检查（E1：旧档错误信息更明确——"不支持的快照版本" vs "未知字段 mercyLossCount"）
             throw new DataValidationException("run_snapshot.json/version: 不支持的快照版本 " + version);
         }
+        checkUnknownKeys(root, "version", "seed", "rngConsumedCount", "sceneId", "heroId", "round",
+                "defeatCountPerRound", "idIssuerNext", "playerGold", "playerLevel",
+                "playerExp", "units", "benchUnitIndex", "deploymentUnitIndex", "inventory",
+                "equipments", "shopSlotUnitIds", "enemyWave");
         long seed = requireLong(root, "seed");
         int rngConsumedCount = requireNonNegativeInt(root, "rngConsumedCount");
         int round = requireInt(root, "round");
@@ -338,8 +337,11 @@ public final class SnapshotCodec {
             throw new DataValidationException(
                     "run_snapshot.json/round: 必须在 1~" + GameBalance.TOTAL_ROUNDS + "，实际=" + round);
         }
-        int mercyLossCount = requireNonNegativeInt(root, "mercyLossCount");
-        int mercyGoldThisRound = requireNonNegativeInt(root, "mercyGoldThisRound");
+        int defeatCountPerRound = requireNonNegativeInt(root, "defeatCountPerRound");
+        if (defeatCountPerRound > GameBalance.DEFEAT_LIMIT_PER_ROUND) {
+            throw new DataValidationException("run_snapshot.json/defeatCountPerRound: 不得超过 "
+                    + GameBalance.DEFEAT_LIMIT_PER_ROUND + "，实际=" + defeatCountPerRound);
+        }
         int idIssuerNext = requireInt(root, "idIssuerNext");
         if (idIssuerNext < 1) {
             throw new DataValidationException("run_snapshot.json/idIssuerNext: 必须 ≥ 1，实际=" + idIssuerNext);
@@ -393,7 +395,7 @@ public final class SnapshotCodec {
                     requireInt(w, "gridX"), requireInt(w, "gridY")));
         }
         return new RunSnapshot(version, seed, rngConsumedCount, requireString(root, "sceneId"),
-                optionalString(root, "heroId"), round, mercyLossCount, mercyGoldThisRound,
+                optionalString(root, "heroId"), round, defeatCountPerRound,
                 idIssuerNext, playerGold, playerLevel, playerExp, units, benchUnitIndex,
                 deploymentUnitIndex, inventory, equipments, shopSlotUnitIds, enemyWave);
     }

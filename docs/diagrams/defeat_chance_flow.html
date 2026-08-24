@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>判负三分岔流程（每轮 3 次机会制）</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  body { font-family: -apple-system, "PingFang SC", sans-serif; margin: 24px; background: #fafafa; }
+  h1 { font-size: 20px; }
+  .note { color: #666; font-size: 13px; margin-bottom: 16px; }
+  table { border-collapse: collapse; font-size: 13px; margin-top: 20px; }
+  th, td { border: 1px solid #ccc; padding: 6px 10px; }
+  th { background: #eee; }
+</style>
+</head>
+<body>
+<h1>判负三分岔流程（每轮 3 次机会制，GDD V0.15 §2.2）</h1>
+<p class="note">归属：docs/spec_plan/2026-08-24_defeat_chest_economy_pack.md §5 / CP15 ｜ 机会上限 DEFEAT_LIMIT_PER_ROUND = 3（工作值待调）</p>
+<pre class="mermaid">
+flowchart TD
+    A[判负 全灭/超时/投降] --> B["onBattleOver: defeatCountPerRound +1（零棋子照扣）"]
+    B --> C{败几次?}
+    C -- "1~2 且上场>0" --> D[公式构造败箱 二选一 零RNG<br>金币=胜箱x50%向下取整 / 经验书=胜箱同值<br>挂 pendingChest origin=DEFEAT]
+    C -- "1~2 且零棋子" --> E[无败箱 横幅<br>点击任意处重试 · 剩余机会 N]
+    C -- "3 机会耗尽" --> F[无败箱 横幅<br>机会耗尽 · 远征失败]
+    D --> G[ChestDialog「战败补给」二选一<br>PickChest 唯一出口<br>横幅点击/3s 均被 pendingChest 守卫拦截]
+    G --> H[continueAfterDefeat<br>战斗态丢弃 · 回 SHOPPING 同轮重试<br>round/敌阵/商店不变]
+    E --> I[横幅 3s 自动 / 点击] --> H
+    F --> J[横幅 3s 自动 / 点击] --> K["endRun(DEFEATED)<br>熟练度 = 轮x3（同 ABANDONED）"]
+    K --> L[RUN_END · RunEndPanel「远征失败」<br>restart 同英雄同场景新 seed]
+    H --> M[进 SHOPPING 首帧写快照<br>defeatCountPerRound 入档 · 续玩不重置]
+    N[胜局领箱推进新轮] --> O[defeatCountPerRound 清零]
+</pre>
+<table>
+  <tr><th>判负时状态</th><th>机会计数</th><th>pendingChest</th><th>RESULT 出口</th><th>去向</th></tr>
+  <tr><td>上场 &gt; 0，第 1/2 败</td><td>+1（→1 或 2）</td><td>败箱二选一（零 RNG）</td><td>PickChest（唯一出口）</td><td>回 SHOPPING 同轮重试</td></tr>
+  <tr><td>零棋子，第 1/2 败</td><td>+1（→1 或 2）</td><td>null</td><td>横幅 3s / 点击</td><td>回 SHOPPING 同轮重试</td></tr>
+  <tr><td>任意（含零棋子/投降），第 3 败</td><td>+1（→3）</td><td>null</td><td>横幅 3s / 点击</td><td>endRun(DEFEATED) → RUN_END</td></tr>
+</table>
+<script>mermaid.initialize({ startOnLoad: true });</script>
+</body>
+</html>

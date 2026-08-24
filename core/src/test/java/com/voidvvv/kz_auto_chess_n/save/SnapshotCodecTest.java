@@ -2,6 +2,7 @@ package com.voidvvv.kz_auto_chess_n.save;
 
 import com.voidvvv.kz_auto_chess_n.command.RunContext;
 import com.voidvvv.kz_auto_chess_n.config.DataValidationException;
+import com.voidvvv.kz_auto_chess_n.entities.BattleState;
 import com.voidvvv.kz_auto_chess_n.data.BaseStats;
 import com.voidvvv.kz_auto_chess_n.data.EquipmentData;
 import com.voidvvv.kz_auto_chess_n.data.EquipmentEffect;
@@ -92,7 +93,7 @@ class SnapshotCodecTest {
                 scenes, equipments, heroes, new ArrayList<String>());
     }
 
-    /** 富态备战期上下文：金/等级/经验/装备席（含穿着）/部署（含空格）/背包/商店（含空槽）/敌阵/怜悯/RNG/发号器 */
+    /** 富态备战期上下文：金/等级/经验/装备席（含穿着）/部署（含空格）/背包/商店（含空槽）/敌阵/机会计数/RNG/发号器 */
     private static RunContext richContext(GameData data) {
         Player player = new Player(37, 3, 5);
         Equipment weapon = new Equipment(21, data.getEquipment("eq_w"));
@@ -116,8 +117,7 @@ class SnapshotCodecTest {
         RunState runState = new RunState(99L, "scene_forest", "hero_x",
                 RunModifiers.EMPTY, new SequentialIdIssuer(200));
         runState.setRound(4);
-        runState.setMercyLossCount(2);
-        runState.setMercyGoldThisRound(1);
+        runState.setDefeatCountPerRound(2);
         runState.markRunStarted();
         runState.setPhase(GamePhase.SHOPPING);
         runState.setEnemyWave(Arrays.asList(
@@ -137,14 +137,13 @@ class SnapshotCodecTest {
     void captureCapturesEverything() {
         GameData data = data();
         RunSnapshot s = SnapshotCodec.capture(richContext(data));
-        assertThat(s.getVersion()).isEqualTo(1);
+        assertThat(s.getVersion()).isEqualTo(2);
         assertThat(s.getSeed()).isEqualTo(99L);
         assertThat(s.getRngConsumedCount()).isEqualTo(2);
         assertThat(s.getSceneId()).isEqualTo("scene_forest");
         assertThat(s.getHeroId()).isEqualTo("hero_x");
         assertThat(s.getRound()).isEqualTo(4);
-        assertThat(s.getMercyLossCount()).isEqualTo(2);
-        assertThat(s.getMercyGoldThisRound()).isEqualTo(1);
+        assertThat(s.getDefeatCountPerRound()).isEqualTo(2);
         assertThat(s.getIdIssuerNext()).isEqualTo(200);
         assertThat(s.getPlayerGold()).isEqualTo(37);
         assertThat(s.getPlayerLevel()).isEqualTo(3);
@@ -187,8 +186,7 @@ class SnapshotCodecTest {
         assertThat(read.getSceneId()).isEqualTo(captured.getSceneId());
         assertThat(read.getHeroId()).isEqualTo(captured.getHeroId());
         assertThat(read.getRound()).isEqualTo(captured.getRound());
-        assertThat(read.getMercyLossCount()).isEqualTo(captured.getMercyLossCount());
-        assertThat(read.getMercyGoldThisRound()).isEqualTo(captured.getMercyGoldThisRound());
+        assertThat(read.getDefeatCountPerRound()).isEqualTo(captured.getDefeatCountPerRound());
         assertThat(read.getIdIssuerNext()).isEqualTo(captured.getIdIssuerNext());
         assertThat(read.getPlayerGold()).isEqualTo(captured.getPlayerGold());
         assertThat(read.getPlayerLevel()).isEqualTo(captured.getPlayerLevel());
@@ -221,8 +219,7 @@ class SnapshotCodecTest {
         assertThat(runState.isRunStarted()).isTrue();
         assertThat(runState.getPhase()).isEqualTo(GamePhase.SHOPPING);
         assertThat(runState.getRound()).isEqualTo(4);
-        assertThat(runState.getMercyLossCount()).isEqualTo(2);
-        assertThat(runState.getMercyGoldThisRound()).isEqualTo(1);
+        assertThat(runState.getDefeatCountPerRound()).isEqualTo(2);
         assertThat(runState.getHeroId()).isEqualTo("hero_x");
         assertThat(runState.getEnemyWave()).containsExactly(
                 new WaveSpec(data.getUnit("u_boss"), 1, 1.0f, 2, 1),
@@ -305,7 +302,7 @@ class SnapshotCodecTest {
     void readValidatesStructure() {
         GameData data = data();
         String json = SnapshotCodec.write(SnapshotCodec.capture(richContext(data)));
-        assertThatThrownBy(() -> SnapshotCodec.read(json.replace("\"version\":1", "\"version\":9")))
+        assertThatThrownBy(() -> SnapshotCodec.read(json.replace("\"version\":2", "\"version\":9")))
                 .isInstanceOf(DataValidationException.class)
                 .hasMessageContaining("不支持的快照版本");
         assertThatThrownBy(() -> SnapshotCodec.read(json.replace("\"round\":4", "\"round\":4,\"zzz\":1")))
@@ -316,6 +313,96 @@ class SnapshotCodecTest {
                 .replace("],\"inventory\"", "],\"deploymentUnitIndex\":[],\"inventory\"")))
                 .isInstanceOf(DataValidationException.class)
                 .hasMessageContaining("deploymentUnitIndex");
+    }
+
+    // —— 机会制 V2（CP8/CP9）：旧档拦截 + defeatCountPerRound 校验 ——
+
+    @Test
+    @DisplayName("旧档坏档（E1 版本号拦截）：v1 JSON（含 mercy 两键）→ read 抛 DataValidationException")
+    void readRejectsV1LegacySnapshotWithMercyKeys() {
+        GameData data = data();
+        String v2Json = SnapshotCodec.write(SnapshotCodec.capture(richContext(data)));
+        // 手工构造 v1 旧档：版本 1 + mercy 两键、无 defeatCountPerRound
+        //（分两步替换避免连锁：先暂占位再换回 mercy 两键）
+        String v1Json = v2Json.replace("\"version\":2", "\"version\":1")
+                .replace("\"defeatCountPerRound\":2,", "\"placeholder\":2,")
+                .replace("\"placeholder\":2,", "\"mercyLossCount\":2,\"mercyGoldThisRound\":1,");
+        assertThatThrownBy(() -> SnapshotCodec.read(v1Json))
+                .isInstanceOf(DataValidationException.class)
+                .hasMessageContaining("不支持的快照版本 1"); // 版本拦截先于键检查（E1）
+    }
+
+    @Test
+    @DisplayName("v2 JSON 含 mercyLossCount 键 → checkUnknownKeys 抛（已删键不得混入新档）")
+    void readRejectsMercyKeysInV2Snapshot() {
+        GameData data = data();
+        String json = SnapshotCodec.write(SnapshotCodec.capture(richContext(data)));
+        assertThatThrownBy(() -> SnapshotCodec.read(json.replace(
+                "\"defeatCountPerRound\":2",
+                "\"defeatCountPerRound\":2,\"mercyLossCount\":1")))
+                .isInstanceOf(DataValidationException.class)
+                .hasMessageContaining("未知字段 mercyLossCount");
+    }
+
+    @Test
+    @DisplayName("defeatCountPerRound：缺失 / 负值 / >3 均抛 DataValidationException")
+    void readValidatesDefeatCountPerRoundBounds() {
+        GameData data = data();
+        String json = SnapshotCodec.write(SnapshotCodec.capture(richContext(data)));
+        assertThatThrownBy(() -> SnapshotCodec.read(json.replace(
+                "\"defeatCountPerRound\":2,", "")))
+                .isInstanceOf(DataValidationException.class)
+                .hasMessageContaining("defeatCountPerRound"); // 缺失
+        assertThatThrownBy(() -> SnapshotCodec.read(json.replace(
+                "\"defeatCountPerRound\":2", "\"defeatCountPerRound\":-1")))
+                .isInstanceOf(DataValidationException.class)
+                .hasMessageContaining("不允许负值"); // 负值
+        assertThatThrownBy(() -> SnapshotCodec.read(json.replace(
+                "\"defeatCountPerRound\":2", "\"defeatCountPerRound\":4")))
+                .isInstanceOf(DataValidationException.class)
+                .hasMessageContaining("defeatCountPerRound"); // 超上界 3
+    }
+
+    @Test
+    @DisplayName("D10 续玩语义：restore 后再判负 1 次 → 第 3 败终局（已耗机会不重置——核心回归用例）")
+    void restoredDefeatCountCarriesOverToThirdDefeatEnd() {
+        GameData data = battleData();
+        RunContext restored = SnapshotCodec.restore(
+                SnapshotCodec.capture(richContext(data)), data, Profile.fresh(), new ShopSystem());
+        assertThat(restored.getRunState().getDefeatCountPerRound()).isEqualTo(2); // 已耗 2 次
+
+        RunFlowSystem flow = new RunFlowSystem();
+        restored.getRunState().setPhase(GamePhase.BATTLE);
+        BattleState battle = new com.voidvvv.kz_auto_chess_n.systems.BattleSystem().startBattle(
+                restored.getPlayer(), restored.getRunState().getEnemyWave(), data,
+                restored.getRng(), restored.getRunState().getIdIssuer(),
+                restored.getRunState().getModifiers());
+        restored.setBattleState(battle);
+        battle.finish(com.voidvvv.kz_auto_chess_n.entities.BattleOutcome.ENEMY_WIN);
+        flow.onBattleOver(restored); // 第 3 败：无败箱
+        assertThat(restored.getRunState().getPendingChest()).isNull();
+        flow.continueAfterDefeat(restored); // 横幅点击 → 终局
+        assertThat(restored.getRunState().getPhase()).isEqualTo(GamePhase.RUN_END);
+        assertThat(restored.getRunState().getEndCause())
+                .isEqualTo(com.voidvvv.kz_auto_chess_n.entities.RunEndCause.DEFEATED);
+        assertThat(restored.getRunState().getMasteryAwarded()).isEqualTo(4 * 3); // 轮×3（CP7 联动）
+    }
+
+    /** 含技能表的战斗可用数据集（D10 用例 startBattle 需要非空 skill——沿 RunFlowSystemTest 夹具口径） */
+    private static GameData battleData() {
+        GameData base = data();
+        Map<String, com.voidvvv.kz_auto_chess_n.data.SkillData> skills =
+                new LinkedHashMap<String, com.voidvvv.kz_auto_chess_n.data.SkillData>();
+        for (String id : Arrays.asList("u_a", "u_b", "u_leg", "u_boss")) {
+            skills.put("sk_" + id, com.voidvvv.kz_auto_chess_n.systems.support.BattleTestFixtures.skill(
+                    "sk_" + id, com.voidvvv.kz_auto_chess_n.data.SkillShape.SINGLE_TARGET,
+                    com.voidvvv.kz_auto_chess_n.data.Delivery.MELEE_INSTANT,
+                    com.voidvvv.kz_auto_chess_n.systems.support.BattleTestFixtures.effect(
+                            com.voidvvv.kz_auto_chess_n.data.SkillEffectType.DAMAGE, 2f, null, null)));
+        }
+        return new GameData(base.getUnits(), skills,
+                new LinkedHashMap<String, com.voidvvv.kz_auto_chess_n.data.SynergyData>(),
+                base.getScenes(), base.getEquipments(), base.getHeroes(), new ArrayList<String>());
     }
 
     @Test
@@ -358,7 +445,7 @@ class SnapshotCodecTest {
         RunSnapshot captured = SnapshotCodec.capture(richContext(data));
         RunSnapshot broken = new RunSnapshot(captured.getVersion(), captured.getSeed(),
                 captured.getRngConsumedCount(), captured.getSceneId(), captured.getHeroId(),
-                captured.getRound(), captured.getMercyLossCount(), captured.getMercyGoldThisRound(),
+                captured.getRound(), captured.getDefeatCountPerRound(),
                 captured.getIdIssuerNext(), captured.getPlayerGold(), captured.getPlayerLevel(),
                 captured.getPlayerExp(),
                 Collections.singletonList(new RunSnapshot.UnitSnapshot(

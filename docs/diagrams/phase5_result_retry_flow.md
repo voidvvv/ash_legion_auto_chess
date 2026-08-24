@@ -1,4 +1,6 @@
 # Phase 5 RESULT 期与 PickChest / 判负重试状态流转图
+> **2026-08-24 机会制修订**：本图表述的无限重试已被每轮 3 次机会制取代（怜悯机制同批删除），判负三分岔见 `defeat_chance_flow.md`。历史图内文不改。
+
 
 > 1C-R 战败处理（GDD §2.2）本期完整落地：胜 → 宝箱三选一 → 下一轮；负 → 同轮重试 + 怜悯；AbandonRun → RUN_END。
 > 浏览器查看版：`phase5_result_retry_flow.html`（双击打开）
