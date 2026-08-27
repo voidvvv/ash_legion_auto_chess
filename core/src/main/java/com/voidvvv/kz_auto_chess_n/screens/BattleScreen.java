@@ -15,6 +15,7 @@ import com.voidvvv.kz_auto_chess_n.command.RunContext;
 import com.voidvvv.kz_auto_chess_n.command.StartRunCommand;
 import com.voidvvv.kz_auto_chess_n.config.GameBalance;
 import com.voidvvv.kz_auto_chess_n.data.GameData;
+import com.voidvvv.kz_auto_chess_n.entities.ChestOrigin;
 import com.voidvvv.kz_auto_chess_n.entities.GamePhase;
 import com.voidvvv.kz_auto_chess_n.entities.Player;
 import com.voidvvv.kz_auto_chess_n.entities.RunModifiers;
@@ -343,7 +344,8 @@ public final class BattleScreen implements Screen {
         }
         resultBanner.setVisible(phase == GamePhase.RESULT);
         if (phase == GamePhase.RESULT && runContext.getBattleState() != null) {
-            resultBanner.refresh(runContext.getBattleState().getOutcome(), mercyLine()); // 横幅读 outcome + 怜悯行（口径 #10）
+            resultBanner.refresh(runContext.getBattleState().getOutcome(),
+                    resultStatusLine(runContext.getRunState())); // 横幅读 outcome + 机会制状态行（GDD §2.2）
         }
         syncChestDialog(phase);
         if (unitDetailDialog.getParent() != null) { // 在栈才检查（isExpired 对未打开态恒 true——CP25/T7 口径）
@@ -360,11 +362,21 @@ public final class BattleScreen implements Screen {
         dialogManager.draw();
     }
 
-    /** 败局怜悯提示行（刚发的怜悯金 → 横幅行；否则 null） */
-    private String mercyLine() {
-        RunState runState = runContext.getRunState();
-        return runState.getMercyGoldThisRound() > 0 && runState.getMercyLossCount() >= GameBalance.MERCY_START_LOSS
-                ? "怜悯 +1（连败 " + runState.getMercyLossCount() + "）" : null;
+    /**
+     * RESULT 期横幅状态行（机会制，GDD §2.2；工作值待调）：
+     * 胜局 null（hint 由 ResultBanner 内置）；败箱期「选择战败补给」；
+     * 败 1~2 无箱「点击任意处重试 · 剩余机会 N」；败 3「机会耗尽 · 远征失败」。
+     */
+    static String resultStatusLine(RunState runState) {
+        if (runState.getPendingChest() != null) {
+            return runState.getPendingChest().getOrigin() == ChestOrigin.DEFEAT
+                    ? "选择战败补给" : null; // 胜局 pendingChest → Banner 内置行
+        }
+        int left = GameBalance.DEFEAT_LIMIT_PER_ROUND - runState.getDefeatCountPerRound();
+        if (left <= 0) {
+            return "机会耗尽 · 远征失败"; // 第 3 败：点击/3s 后终局（continueAfterDefeat 路由）
+        }
+        return "点击任意处重试 · 剩余机会 " + left; // N = 2/1（工作值待调）
     }
 
     /** 胜局 RESULT：宝箱弹窗 push/pop（Screen 观察——领取后 pendingChest==null 自动收起） */

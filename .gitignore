@@ -173,3 +173,4 @@ Thumbs.db
 
 ## Runtime save files (lwjgl3 workingDir = assets/; not tracked):
 /assets/save/
+.evolver/

@@ -6,7 +6,8 @@ import java.util.List;
 
 /** 挂起存档（快照轨 MVP，仅在 SHOPPING 期捕获——裁决 D10）。完全不可变。 */
 public final class RunSnapshot {
-    public static final int CURRENT_VERSION = 1;
+    /** V2 = 3 次机会制：怜悯两键移除、defeatCountPerRound 入档；旧 v1 档按 D20 坏档重置不迁移 */
+    public static final int CURRENT_VERSION = 2;
 
     private final int version;
     private final long seed;
@@ -16,8 +17,8 @@ public final class RunSnapshot {
     /** 可空（防御旧档/无英雄局） */
     private final String heroId;
     private final int round;
-    private final int mercyLossCount;
-    private final int mercyGoldThisRound;
+    /** 本轮已战败次数（3 次机会制——D10 续玩语义：恢复后已耗机会不重置） */
+    private final int defeatCountPerRound;
     /** 发号器下一待发号（单一 id 空间续号） */
     private final int idIssuerNext;
     private final int playerGold;
@@ -39,7 +40,7 @@ public final class RunSnapshot {
     private final List<WaveEntrySnapshot> enemyWave;
 
     public RunSnapshot(int version, long seed, int rngConsumedCount, String sceneId, String heroId,
-                       int round, int mercyLossCount, int mercyGoldThisRound, int idIssuerNext,
+                       int round, int defeatCountPerRound, int idIssuerNext,
                        int playerGold, int playerLevel, int playerExp,
                        List<UnitSnapshot> units, List<Integer> benchUnitIndex,
                        List<Integer> deploymentUnitIndex, List<EquipmentSnapshot> inventory,
@@ -51,8 +52,7 @@ public final class RunSnapshot {
         this.sceneId = sceneId;
         this.heroId = heroId;
         this.round = round;
-        this.mercyLossCount = mercyLossCount;
-        this.mercyGoldThisRound = mercyGoldThisRound;
+        this.defeatCountPerRound = defeatCountPerRound;
         this.idIssuerNext = idIssuerNext;
         this.playerGold = playerGold;
         this.playerLevel = playerLevel;
@@ -72,8 +72,7 @@ public final class RunSnapshot {
     public String getSceneId() { return sceneId; }
     public String getHeroId() { return heroId; }
     public int getRound() { return round; }
-    public int getMercyLossCount() { return mercyLossCount; }
-    public int getMercyGoldThisRound() { return mercyGoldThisRound; }
+    public int getDefeatCountPerRound() { return defeatCountPerRound; }
     public int getIdIssuerNext() { return idIssuerNext; }
     public int getPlayerGold() { return playerGold; }
     public int getPlayerLevel() { return playerLevel; }

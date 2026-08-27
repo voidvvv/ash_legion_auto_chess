@@ -30,13 +30,13 @@ class RunStateTest {
     }
 
     @Test
-    @DisplayName("初始态：round=1、阶段 SHOPPING、敌阵为空、怜悯计数 0")
+    @DisplayName("初始态：round=1、阶段 SHOPPING、敌阵为空、机会计数 0")
     void initialState() {
         RunState state = newState();
         assertThat(state.getRound()).isEqualTo(1);
         assertThat(state.getPhase()).isEqualTo(GamePhase.SHOPPING);
         assertThat(state.getEnemyWave()).isEmpty();
-        assertThat(state.getMercyLossCount()).isZero();
+        assertThat(state.getDefeatCountPerRound()).isZero();
     }
 
     @Test
@@ -93,11 +93,19 @@ class RunStateTest {
     }
 
     @Test
-    @DisplayName("setMercyLossCount 更新怜悯计数（字段就位，触发逻辑 Phase 5）")
-    void mercyLossCountUpdatable() {
+    @DisplayName("setDefeatCountPerRound：接受 0~3、拒绝 -1 与 4（快照读侧校验的双保险）")
+    void defeatCountPerRoundValidated() {
         RunState state = newState();
-        state.setMercyLossCount(3);
-        assertThat(state.getMercyLossCount()).isEqualTo(3);
+        state.setDefeatCountPerRound(0);
+        assertThat(state.getDefeatCountPerRound()).isZero();
+        state.setDefeatCountPerRound(3);
+        assertThat(state.getDefeatCountPerRound()).isEqualTo(3);
+        assertThatThrownBy(() -> state.setDefeatCountPerRound(-1))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("本轮战败次数");
+        assertThatThrownBy(() -> state.setDefeatCountPerRound(4))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("4");
     }
 
     @Test
@@ -178,7 +186,7 @@ class RunStateTest {
         assertThat(drained.get(31)).isEqualTo("行39");
     }
 
-    // —— CP13：流程域字段（防重入 / 宝箱 / 终局成因 / 怜悯金 / 逻辑钟 / 熟练度） ——
+    // —— CP13：流程域字段（防重入 / 宝箱 / 终局成因 / 逻辑钟 / 熟练度） ——
 
     @Test
     @DisplayName("runStarted 初始 false；markRunStarted 一次性置位（重开 = 新鲜 RunState 复位）")
@@ -216,14 +224,11 @@ class RunStateTest {
     }
 
     @Test
-    @DisplayName("mercyGoldThisRound / masteryAwarded 默认 0；写方法可更新可查")
-    void mercyGoldAndMasteryAwardedUpdatable() {
+    @DisplayName("masteryAwarded 默认 0；写方法可更新可查")
+    void masteryAwardedUpdatable() {
         RunState state = newState();
-        assertThat(state.getMercyGoldThisRound()).isZero();
         assertThat(state.getMasteryAwarded()).isZero();
-        state.setMercyGoldThisRound(3);
         state.setMasteryAwarded(75);
-        assertThat(state.getMercyGoldThisRound()).isEqualTo(3);
         assertThat(state.getMasteryAwarded()).isEqualTo(75);
     }
 
