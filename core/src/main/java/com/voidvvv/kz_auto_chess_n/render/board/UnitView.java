@@ -97,10 +97,10 @@ public final class UnitView {
             region.flip(true, false);
         }
         batch.setColor(1f, 1f, 1f, alpha);
-        batch.draw(region, cx - size / 2f, cy - size / 2f, size, size);
-        if (anim.hitFlashRatio() > 0f) { // 受击白闪叠加层
+        drawBody(batch, region, cx, cy, size);
+        if (anim.hitFlashRatio() > 0f) { // 受击白闪叠加层（与本体共用同一变换）
             batch.setColor(1f, 1f, 1f, anim.hitFlashRatio() * 0.8f * alpha);
-            batch.draw(region, cx - size / 2f, cy - size / 2f, size, size);
+            drawBody(batch, region, cx, cy, size);
         }
         batch.setColor(WHITE);
         if (region.isFlipX() != wasFlip) {
@@ -111,6 +111,29 @@ public final class UnitView {
             SideColors.drawBorder(batch, assets.region(PlaceholderKeys.WHITE), cx, cy,
                     enemy ? SideColors.ENEMY : SideColors.PLAYER); // 敌我色框（P1b，与备战期同语义）
         }
+    }
+
+    /**
+     * 本体精灵绘制：先叠加受击抖动水平偏移（整数像素），再叠加攻击摆动
+     * （ROTATE：底部中心为轴小幅旋转——像素规则第三例外，render §八#3；
+     * TRANSLATE：沿朝向整数像素平移探身）。白闪层复用同一变换（attack_feedback FP1/FP2）。
+     * 摆动以单位自身朝向为正：y 向上坐标系正角 = 逆时针，玩家单位（朝右）前倾 = 负角，
+     * 敌方经 flipX 镜像后取反（左右观感对称，不取攻击目标方位）。
+     */
+    private void drawBody(SpriteBatch batch, TextureRegion region, int cx, int cy, float size) {
+        float x = cx + anim.hitShakeDx() - size / 2f;
+        float y = cy - size / 2f;
+        if (UnitAnimState.ATTACK_SWING_MODE == UnitAnimState.AttackSwingMode.TRANSLATE) {
+            int swingDx = anim.attackSwingDx() * (enemy ? -1 : 1); // 沿朝向前倾（敌方前进 = −x）
+            batch.draw(region, x + swingDx, y, size, size);
+            return;
+        }
+        float degrees = -anim.attackSwingDegrees() * (enemy ? -1f : 1f); // 正 = 前倾
+        if (degrees == 0f) {
+            batch.draw(region, x, y, size, size); // 未摆动：既有四参路径（关断/未触发与现状一致）
+            return;
+        }
+        batch.draw(region, x, y, size / 2f, 0f, size, size, 1f, 1f, degrees); // 底部中心轴
     }
 
     // —— 血条（红绿 2px）/ 能量条（黄 1px）/ 星级色点（口径 #19） ——
