@@ -46,8 +46,12 @@ public final class ResultBanner extends Group {
         addActor(new ClickCatcher());
     }
 
-    /** 每帧刷新文案（RESULT 期由 Screen 调用；mercyLine 可 null——败局怜悯提示；术语见计划 §2.1） */
-    public void refresh(BattleOutcome outcome, String mercyLine) {
+    /**
+     * 每帧刷新文案（RESULT 期由 Screen 调用）。statusLine：败局附加行（Screen 组装）——
+     * 败箱期「选择战败补给」/ 败 1~2 无箱「点击任意处重试 · 剩余机会 N」/ 败 3「机会耗尽 · 远征失败」；
+     * null = 无附加行（败局回退内置提示；胜局 hint 内置）。
+     */
+    public void refresh(BattleOutcome outcome, String statusLine) {
         if (outcome == BattleOutcome.PLAYER_WIN) {
             text = "胜利";
             tint = Color.GREEN;
@@ -55,11 +59,11 @@ public final class ResultBanner extends Group {
         } else if (outcome == BattleOutcome.ENEMY_WIN) {
             text = "战败";
             tint = Color.RED;
-            hint = mercyLine != null ? "点击任意处重试 · " + mercyLine : "点击任意处重试";
+            hint = statusLine != null ? statusLine : "点击任意处重试";
         } else {
             text = "超时";
             tint = Color.YELLOW;
-            hint = mercyLine != null ? "点击任意处重试 · " + mercyLine : "点击任意处重试";
+            hint = statusLine != null ? statusLine : "点击任意处重试";
         }
     }
 

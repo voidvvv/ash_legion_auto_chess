@@ -13,7 +13,7 @@ public interface MasteryCalculator {
 
     int settle(RunEndCause cause, int roundsReached);
 
-    /** GDD 基线口径（裁决 D3）：COMPLETED = 通关加成 + 轮数×3；ABANDONED = 轮数×3 */
+    /** GDD 基线口径（裁决 D3）：COMPLETED = 通关加成 + 轮数×3；ABANDONED / DEFEATED = 轮数×3（同口径，GDD §8.1） */
     MasteryCalculator GDD_BASIC = new MasteryCalculator() {
         @Override
         public int settle(RunEndCause cause, int roundsReached) {
@@ -21,6 +21,7 @@ public interface MasteryCalculator {
                 return GameBalance.MASTERY_COMPLETE_BONUS
                         + roundsReached * GameBalance.MASTERY_EXP_PER_ROUND;
             }
+            // ABANDONED（放弃远征）与 DEFEATED（第 3 败终局，GDD §2.2/§8.1）同口径 = 轮数×3
             return roundsReached * GameBalance.MASTERY_EXP_PER_ROUND;
         }
     };

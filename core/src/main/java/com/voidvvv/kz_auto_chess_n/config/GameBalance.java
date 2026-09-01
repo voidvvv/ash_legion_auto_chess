@@ -51,9 +51,9 @@ public final class GameBalance {
     public static final int SHOP_REFRESH_COST = 2;
     public static final int BUY_EXP_COST = 4;
     public static final int BUY_EXP_GAIN = 4;
-    public static final int CHEST_GOLD_CAP = 10;
-    public static final int MERCY_START_LOSS = 3;
-    public static final int MERCY_CAP_PER_ROUND = 3;
+    public static final int CHEST_GOLD_CAP = 12; // 修订二：10→12（现公式最大基础值 11，≈解除封顶；待调）
+    /** 每轮战败机会上限（3 次机会制，GDD §2.2；第 3 败直接终局无败箱；工作值待调） */
+    public static final int DEFEAT_LIMIT_PER_ROUND = 3;
 
     // —— 局外成长（GDD §8.1；Lv.1 解锁 = 全英雄基础权益，与英雄被动同通道叠加——裁决 D2）——
     /** 熟练度等级上限（GDD §8.1「等级上限 Lv.5」） */
@@ -74,8 +74,8 @@ public final class GameBalance {
     private static final int[] MASTERY_EXP_TO_NEXT = {50, 100, 150, 200, 0};
 
     // —— 宝箱三选一（Q2 裁决 A：最小可玩规则，数值待调）——
-    /** 槽2 经验书固定经验值（对齐"4 金 = 4 经验"购买价比，待调） */
-    public static final int CHEST_EXP_BOOK_GAIN = 4;
+    /** 槽2 经验书基底（修订二：4 + floor(轮/5)——GDD §3.2；Boss 不加倍；待调） */
+    public static final int CHEST_EXP_BOOK_BASE = 4;
     /** 普通箱装备槽稀有度权重 [白, 成, 传]（GDD §5.2：70/25/5，待调） */
     public static final int[] CHEST_RARITY_WEIGHTS = {70, 25, 5};
     /** Boss 箱装备槽稀有度权重 [白, 成, 传]——白位 0 = 必含 ≥1 成装及以上；传说 20% = 大幅提升（待调） */
@@ -98,8 +98,8 @@ public final class GameBalance {
 
     /** 棋手等级 → 人口上限（GDD §3.5：Lv.1→3 ... Lv.7→9） */
     private static final int[] POPULATION_BY_LEVEL = {3, 4, 5, 6, 7, 8, 9};
-    /** 棋手等级 → 升到下一级所需经验（GDD §3.5：Lv.1→2 起 4/8/16/24/40/56；Lv.7 封顶为 0） */
-    private static final int[] EXP_TO_NEXT_LEVEL = {4, 8, 16, 24, 40, 56, 0};
+    /** 棋手等级 → 升到下一级所需经验（修订二压平：4/8/12/20/28/36，总需求 148→108；Lv.7 封顶为 0；待调） */
+    private static final int[] EXP_TO_NEXT_LEVEL = {4, 8, 12, 20, 28, 36, 0};
 
     /**
      * 敌方人口锚点（GDD §7.3）：第1轮1人、第3轮2、第5轮3、第8轮4、第12轮5、第16轮6、第20轮7、第25轮8。
@@ -144,11 +144,23 @@ public final class GameBalance {
         return Math.round(ENEMY_COUNT.valueAt(round));
     }
 
-    /** 宝箱金币：3 + floor(轮/3)，第21轮起封顶10；Boss 箱 ×2（GDD §3.2） */
+    /** 宝箱金币：3 + floor(轮/3)，封顶 12（修订二）；Boss 箱 ×2（GDD §3.2） */
     public static int chestGold(int round, boolean boss) {
         checkRound(round);
         int base = Math.min(CHEST_GOLD_CAP, 3 + round / 3);
         return boss ? base * 2 : base;
+    }
+
+    /** 经验书：4 + floor(轮/5)，胜箱败箱同公式同值，Boss 不加倍（修订二，GDD §3.2；待调） */
+    public static int chestExpBook(int round) {
+        checkRound(round);
+        return CHEST_EXP_BOOK_BASE + round / 5;
+    }
+
+    /** 败箱金币 = 加倍后胜箱金币 ×50% 向下取整（GDD §3.2 锚点：7 轮 5 / 15 轮 8 / 25 轮 11；待调） */
+    public static int defeatChestGold(int round) {
+        checkRound(round);
+        return chestGold(round, isBossRound(round)) / 2;
     }
 
     /** 商店费阶概率 [1费, 2费, 3费]%：锚点间逐轮线性插值，三档之和恒为 100（GDD §3.4） */

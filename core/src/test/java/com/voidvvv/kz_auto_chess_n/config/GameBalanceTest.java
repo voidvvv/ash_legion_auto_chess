@@ -66,25 +66,64 @@ class GameBalanceTest {
         }
     }
 
-    // —— 宝箱经济（GDD §3.2：3 + floor(轮/3)，第21轮起10金封顶；Boss 箱 ×2）——
+    // —— 宝箱经济（GDD §3.2 修订二：3 + floor(轮/3)，封顶 12；Boss 箱 ×2）——
 
     @Test
-    @DisplayName("宝箱金币锚点与封顶")
+    @DisplayName("宝箱金币锚点与封顶（修订二：封顶 12，第 24 轮 11 不再被压到 10）")
     void chestGoldAnchorsAndCap() {
         assertThat(GameBalance.chestGold(1, false)).isEqualTo(3);
         assertThat(GameBalance.chestGold(3, false)).isEqualTo(4);
         assertThat(GameBalance.chestGold(6, false)).isEqualTo(5);
         assertThat(GameBalance.chestGold(12, false)).isEqualTo(7);
         assertThat(GameBalance.chestGold(21, false)).isEqualTo(10);
-        assertThat(GameBalance.chestGold(25, false)).isEqualTo(10); // 封顶
+        assertThat(GameBalance.chestGold(24, false)).isEqualTo(11); // 旧封顶 10 下为 10——回归断言
+        assertThat(GameBalance.chestGold(25, false)).isEqualTo(11);
     }
 
     @Test
     @DisplayName("Boss 宝箱双倍")
     void bossChestGoldDoubled() {
-        // 第7轮 Boss：3+floor(7/3)=5 → ×2 = 10；第21轮 Boss：10×2 = 20
+        // 第7轮 Boss：3+floor(7/3)=5 → ×2 = 10；第25轮 Boss：11×2 = 22
         assertThat(GameBalance.chestGold(7, true)).isEqualTo(10);
-        assertThat(GameBalance.chestGold(21, true)).isEqualTo(20);
+        assertThat(GameBalance.chestGold(25, true)).isEqualTo(22);
+    }
+
+    @Test
+    @DisplayName("25 轮全胜宝箱金币总收入 = 199（GDD §3.2 验收账回归锚）")
+    void chestGoldTotalIncomeAcrossFullRun() {
+        int total = 0;
+        for (int round = 1; round <= GameBalance.TOTAL_ROUNDS; round++) {
+            total += GameBalance.chestGold(round, GameBalance.isBossRound(round));
+        }
+        assertThat(total).isEqualTo(199);
+    }
+
+    // —— 机会制与败箱公式（GDD §2.2/§3.2 修订一）——
+
+    @Test
+    @DisplayName("DEFEAT_LIMIT_PER_ROUND = 3（工作值回归锚）")
+    void defeatLimitConstant() {
+        assertThat(GameBalance.DEFEAT_LIMIT_PER_ROUND).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("经验书公式 chestExpBook：4 + floor(轮/5)——轮 1/5/10/15/20/25 → 4/5/6/7/8/9")
+    void chestExpBookFormula() {
+        assertThat(GameBalance.chestExpBook(1)).isEqualTo(4);
+        assertThat(GameBalance.chestExpBook(5)).isEqualTo(5);
+        assertThat(GameBalance.chestExpBook(10)).isEqualTo(6);
+        assertThat(GameBalance.chestExpBook(15)).isEqualTo(7);
+        assertThat(GameBalance.chestExpBook(20)).isEqualTo(8);
+        assertThat(GameBalance.chestExpBook(25)).isEqualTo(9);
+    }
+
+    @Test
+    @DisplayName("败箱金币 defeatChestGold = 加倍后胜箱 ×50% 向下取整——第 1/7/15/25 轮 → 1/5/8/11")
+    void defeatChestGoldAnchors() {
+        assertThat(GameBalance.defeatChestGold(1)).isEqualTo(1);   // 胜箱 3 / 2
+        assertThat(GameBalance.defeatChestGold(7)).isEqualTo(5);   // Boss 10 / 2
+        assertThat(GameBalance.defeatChestGold(15)).isEqualTo(8);  // Boss 16 / 2
+        assertThat(GameBalance.defeatChestGold(25)).isEqualTo(11); // Boss 22 / 2
     }
 
     // —— 宝箱三选一与装备常量（Phase 5；Q2 裁决 A 最小可玩规则，数值待调）——
@@ -105,9 +144,9 @@ class GameBalanceTest {
     }
 
     @Test
-    @DisplayName("经验书收益为正、装备三槽、概率放大刻度 1000")
+    @DisplayName("经验书基底为正、装备三槽、概率放大刻度 1000")
     void phase5ScalarConstants() {
-        assertThat(GameBalance.CHEST_EXP_BOOK_GAIN).isPositive();
+        assertThat(GameBalance.CHEST_EXP_BOOK_BASE).isPositive();
         assertThat(GameBalance.EQUIP_SLOTS_PER_UNIT).isEqualTo(3);
         assertThat(GameBalance.PROBABILITY_WEIGHT_SCALE).isEqualTo(1000);
     }
@@ -202,12 +241,15 @@ class GameBalanceTest {
     }
 
     @Test
-    @DisplayName("升级经验需求表 Lv.1→2 起 4/8/16/24/40/56；Lv.7 封顶为 0")
+    @DisplayName("升级经验需求表（修订二压平）Lv.1→2 起 4/8/12/20/28/36；Lv.7 封顶为 0")
     void expToNextLevelTable() {
-        int[] expected = {4, 8, 16, 24, 40, 56, 0};
+        int[] expected = {4, 8, 12, 20, 28, 36, 0};
+        int total = 0;
         for (int level = 1; level <= 7; level++) {
             assertThat(GameBalance.expToNextLevel(level)).isEqualTo(expected[level - 1]);
+            total += expected[level - 1];
         }
+        assertThat(total).isEqualTo(108); // 满级总需求 148 → 108（GDD §3.5 修订二）
     }
 
     // —— 常量快照（data_schema §十）——
@@ -232,8 +274,7 @@ class GameBalanceTest {
         assertThat(GameBalance.SHOP_REFRESH_COST).isEqualTo(2);
         assertThat(GameBalance.BUY_EXP_COST).isEqualTo(4);
         assertThat(GameBalance.BUY_EXP_GAIN).isEqualTo(4);
-        assertThat(GameBalance.MERCY_START_LOSS).isEqualTo(3);
-        assertThat(GameBalance.MERCY_CAP_PER_ROUND).isEqualTo(3);
+        assertThat(GameBalance.CHEST_GOLD_CAP).isEqualTo(12); // 修订二：10 → 12
         assertThat(GameBalance.SHOP_SLOTS).isEqualTo(5);
         assertThat(GameBalance.BOARD_COLS).isEqualTo(6);
         assertThat(GameBalance.BOARD_ROWS).isEqualTo(7);

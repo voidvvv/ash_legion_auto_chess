@@ -52,8 +52,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * RunFlowSystem 测试（CP15 新口径，Q6 裁决：无演示名单，兵源 = 商店自购）：
- * StartRun 命令化与防重入 / 判负同轮重试（1C-R）与怜悯 / 胜局宝箱流转（必须 PickChest）/
- * 第 25 轮经领箱通关 / AbandonRun 两阶段 / 同 seed 重演一致（验收标准 §九第 3 条）。
+ * StartRun 命令化与防重入 / 判负三分岔（3 次机会制——败 1~2 上场>0 领败箱重试 / 零棋子败回备战 /
+ * 败 3 终局 DEFEATED）/ 胜局宝箱流转（必须 PickChest）/ 第 25 轮经领箱通关 / AbandonRun 两阶段 /
+ * 同 seed 重演一致（验收标准 §九第 3 条）。
  */
 class RunFlowSystemTest {
 
@@ -323,11 +324,11 @@ class RunFlowSystemTest {
         assertThat(ctx.getBattleState().getTick()).isEqualTo(tickAfterFirst);
     }
 
-    // —— 战后分流（胜局 roll 宝箱 2 RNG；败局零消耗） ——
+    // —— 战后分流（胜局 roll 宝箱 2 RNG；判负三分岔零消耗——败箱公式构造） ——
 
     @Test
-    @DisplayName("onBattleOver 败局：RESULT 保留 battleState、pendingChest 恒 null、RNG 零消耗")
-    void onBattleOverDefeatKeepsStateWithoutChest() {
+    @DisplayName("onBattleOver 败 1（上场>0）：RESULT 保留 battleState、pendingChest=败箱（2 选项 DEFEAT）、RNG 零消耗")
+    void onBattleOverFirstDefeatBuildsDefeatChest() {
         GameData data = demoData();
         RunFlowSystem flow = new RunFlowSystem();
         CommandManager manager = armedManager(flow);
@@ -342,8 +343,31 @@ class RunFlowSystemTest {
         flow.onBattleOver(ctx);
         assertThat(ctx.getRunState().getPhase()).isEqualTo(GamePhase.RESULT);
         assertThat(ctx.getBattleState()).isNotNull();
+        assertThat(ctx.getRunState().getPendingChest()).isNotNull();
+        assertThat(ctx.getRunState().getPendingChest().getOrigin())
+                .isEqualTo(com.voidvvv.kz_auto_chess_n.entities.ChestOrigin.DEFEAT);
+        assertThat(ctx.getRunState().getPendingChest().getOptions()).hasSize(2);
+        assertThat(ctx.getRunState().getDefeatCountPerRound()).isEqualTo(1);
+        assertThat(ctx.getRng().getConsumedCount()).isEqualTo(consumedBeforeOver); // 败箱零 RNG
+    }
+
+    @Test
+    @DisplayName("onBattleOver 零棋子判负：机会照扣（D-a 防刷）、无败箱、phase 停 RESULT")
+    void onBattleOverZeroUnitDefeatCountsChanceWithoutChest() {
+        GameData data = demoData();
+        RunFlowSystem flow = new RunFlowSystem();
+        CommandManager manager = armedManager(flow);
+        RunContext ctx = newContext(data);
+        flow.startRun(ctx);
+        manager.addCommand(StartBattleCommand.INSTANCE);
+        manager.executeAll(ctx);
+        new BattleSystem().runToEnd(ctx.getBattleState(), MAX_TICKS);
         assertThat(ctx.getBattleState().getOutcome()).isEqualTo(BattleOutcome.ENEMY_WIN);
-        assertThat(ctx.getRunState().getPendingChest()).isNull();
+        int consumedBeforeOver = ctx.getRng().getConsumedCount();
+        flow.onBattleOver(ctx);
+        assertThat(ctx.getRunState().getDefeatCountPerRound()).isEqualTo(1); // 零棋子照扣
+        assertThat(ctx.getRunState().getPendingChest()).isNull(); // 无败箱
+        assertThat(ctx.getRunState().getPhase()).isEqualTo(GamePhase.RESULT);
         assertThat(ctx.getRng().getConsumedCount()).isEqualTo(consumedBeforeOver);
     }
 
@@ -403,11 +427,34 @@ class RunFlowSystemTest {
         assertThat(ctx.getRunState().getRound()).isEqualTo(1); // 败局不推轮（1C-R）
     }
 
-    // —— 判负同轮重试（GDD §2.2：敌阵/商店/轮次不变且 RNG 零消耗） ——
+    // —— 判负三分岔（3 次机会制，GDD §2.2：败箱唯一出口 / 零棋子横幅 / 败 3 终局） ——
 
     @Test
-    @DisplayName("continueAfterDefeat：同轮重试——round/敌阵/商店不变、battleState 丢弃、RNG 零消耗")
-    void continueAfterDefeatRetriesSameRound() {
+    @DisplayName("败箱唯一出口：败箱期 tickResult 累计 >3s 不推进、continueAfterDefeat 直调 no-op")
+    void defeatChestIsSoleExit() {
+        GameData data = demoData();
+        RunFlowSystem flow = new RunFlowSystem();
+        CommandManager manager = armedManager(flow);
+        RunContext ctx = newContext(data);
+        flow.startRun(ctx);
+        defeatBySurrender(manager, flow, ctx); // 上场 0 → 败 1 无箱
+        flow.continueAfterDefeat(ctx); // 横幅 → 回 SHOPPING
+        deploy(ctx, "unit_trainee_01", 2, 5);  // 第二次带上场 → 败箱
+        manager.addCommand(StartBattleCommand.INSTANCE);
+        manager.executeAll(ctx);
+        new BattleSystem().runToEnd(ctx.getBattleState(), MAX_TICKS);
+        flow.onBattleOver(ctx);
+        assertThat(ctx.getRunState().getPendingChest()).isNotNull(); // 败 2 在场
+        flow.tickResult(ctx, GameBalance.RESULT_BANNER_SECONDS + 1f);
+        assertThat(ctx.getRunState().getPhase()).isEqualTo(GamePhase.RESULT); // 守卫拦截
+        flow.continueAfterDefeat(ctx);
+        assertThat(ctx.getRunState().getPhase()).isEqualTo(GamePhase.RESULT); // 同守卫 no-op
+        assertThat(ctx.getRunState().getPendingChest()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("PickChest(0) 败箱金币：入账 defeatChestGold 值、回 SHOPPING 同轮重试（round/敌阵/商店不变）")
+    void pickDefeatChestGoldRetriesSameRound() {
         GameData data = demoData();
         RunFlowSystem flow = new RunFlowSystem();
         CommandManager manager = armedManager(flow);
@@ -422,58 +469,127 @@ class RunFlowSystemTest {
         new BattleSystem().runToEnd(ctx.getBattleState(), MAX_TICKS);
         flow.onBattleOver(ctx);
         int consumedAtResult = ctx.getRng().getConsumedCount();
-        flow.continueAfterDefeat(ctx);
+        int goldBefore = ctx.getPlayer().getGold();
+        manager.addCommand(new PickChestCommand(0));
+        manager.executeAll(ctx);
+        assertThat(ctx.getPlayer().getGold())
+                .isEqualTo(goldBefore + GameBalance.defeatChestGold(1));
         assertThat(ctx.getRunState().getRound()).isEqualTo(1);
         assertThat(ctx.getRunState().getPhase()).isEqualTo(GamePhase.SHOPPING);
         assertThat(ctx.getBattleState()).isNull();
+        assertThat(ctx.getRunState().getPendingChest()).isNull();
         assertThat(ctx.getRunState().getEnemyWave()).containsExactlyElementsOf(waveBefore);
         assertThat(ctx.getShop().getSlots()).containsExactlyElementsOf(slotsBefore);
-        assertThat(ctx.getRng().getConsumedCount()).isEqualTo(consumedAtResult);
-        assertThat(ctx.getRunState().getMercyLossCount()).isEqualTo(1); // 有上场 → 计数
+        assertThat(ctx.getRng().getConsumedCount()).isEqualTo(consumedAtResult); // 零 RNG
+        assertThat(ctx.getRunState().getDefeatCountPerRound()).isEqualTo(1); // 不再计
     }
 
     @Test
-    @DisplayName("continueAfterDefeat 零棋子战败：怜悯不计数、金不变（防刷，口径 #8）")
-    void continueAfterDefeatZeroUnitsNotCounted() {
-        GameData data = demoData();
-        RunFlowSystem flow = new RunFlowSystem();
-        CommandManager manager = armedManager(flow);
-        RunContext ctx = newContext(data);
-        flow.startRun(ctx);
-        manager.addCommand(StartBattleCommand.INSTANCE);
-        manager.executeAll(ctx);
-        new BattleSystem().runToEnd(ctx.getBattleState(), MAX_TICKS);
-        assertThat(ctx.getBattleState().getOutcome()).isEqualTo(BattleOutcome.ENEMY_WIN);
-        flow.onBattleOver(ctx);
-        flow.continueAfterDefeat(ctx);
-        assertThat(ctx.getRunState().getMercyLossCount()).isZero();
-        assertThat(ctx.getPlayer().getGold()).isEqualTo(GameBalance.START_GOLD);
-        assertThat(ctx.getRunState().getPhase()).isEqualTo(GamePhase.SHOPPING);
-    }
-
-    @Test
-    @DisplayName("怜悯：第 3 败起 +1 金、每轮封顶 3（第 6 败不再发——口径 #10）")
-    void mercyFromThirdLossCappedAtThreePerRound() {
+    @DisplayName("第 3 败终局：判负后无箱；3s 自动（或点击）→ RUN_END + endCause=DEFEATED + 熟练度=轮×3")
+    void thirdDefeatEndsRunWithDefeatedCause() {
         GameData data = demoData();
         RunFlowSystem flow = new RunFlowSystem();
         CommandManager manager = armedManager(flow);
         RunContext ctx = newContext(data);
         flow.startRun(ctx);
         deploy(ctx, "unit_trainee_01", 2, 5);
-        int[] goldAfterLoss = new int[6];
-        for (int i = 0; i < 6; i++) {
+        defeatBySurrender(manager, flow, ctx); // 败 1（在场 → 败箱）
+        manager.addCommand(new PickChestCommand(0)); // 领败箱回 SHOPPING
+        manager.executeAll(ctx);
+        defeatBySurrender(manager, flow, ctx); // 败 2（在场 → 败箱）
+        manager.addCommand(new PickChestCommand(1)); // 领败箱（经验书）回 SHOPPING
+        manager.executeAll(ctx);
+        assertThat(ctx.getRunState().getDefeatCountPerRound()).isEqualTo(2);
+        defeatBySurrender(manager, flow, ctx); // 败 3（在场 → 无箱终局）
+        assertThat(ctx.getRunState().getPendingChest()).isNull();
+        flow.tickResult(ctx, GameBalance.RESULT_BANNER_SECONDS);
+        assertThat(ctx.getRunState().getPhase()).isEqualTo(GamePhase.RUN_END);
+        assertThat(ctx.getRunState().getEndCause()).isEqualTo(RunEndCause.DEFEATED);
+        assertThat(ctx.getRunState().getMasteryAwarded())
+                .isEqualTo(1 * GameBalance.MASTERY_EXP_PER_ROUND); // 轮×3
+        assertThat(ctx.getPlayer().getGold()).isGreaterThanOrEqualTo(GameBalance.START_GOLD); // 怜悯已删——无额外金
+    }
+
+    @Test
+    @DisplayName("零棋子败 ×3 同样终局（D-a：机会按战败次数计，与上场人数无关）")
+    void threeZeroUnitDefeatsAlsoEndRun() {
+        GameData data = demoData();
+        RunFlowSystem flow = new RunFlowSystem();
+        CommandManager manager = armedManager(flow);
+        RunContext ctx = newContext(data);
+        flow.startRun(ctx);
+        for (int i = 0; i < 2; i++) {
             defeatBySurrender(manager, flow, ctx);
-            flow.continueAfterDefeat(ctx);
-            goldAfterLoss[i] = ctx.getPlayer().getGold();
+            flow.continueAfterDefeat(ctx); // 无箱横幅 → 回 SHOPPING
+            assertThat(ctx.getRunState().getPhase()).isEqualTo(GamePhase.SHOPPING);
         }
-        assertThat(goldAfterLoss[0]).isEqualTo(GameBalance.START_GOLD); // 第 1 败无金
-        assertThat(goldAfterLoss[1]).isEqualTo(GameBalance.START_GOLD); // 第 2 败无金
-        assertThat(goldAfterLoss[2]).isEqualTo(GameBalance.START_GOLD + 1); // 第 3 败起 +1
-        assertThat(goldAfterLoss[5]).isEqualTo(GameBalance.START_GOLD + 3); // 封顶 3
-        assertThat(ctx.getRunState().getMercyLossCount()).isEqualTo(6);
-        assertThat(ctx.getRunState().getMercyGoldThisRound()).isEqualTo(3);
-        assertThat(ctx.getRunState().drainNotices())
-                .anyMatch(line -> line.contains("怜悯金币"));
+        defeatBySurrender(manager, flow, ctx); // 第 3 败
+        flow.continueAfterDefeat(ctx);
+        assertThat(ctx.getRunState().getPhase()).isEqualTo(GamePhase.RUN_END);
+        assertThat(ctx.getRunState().getEndCause()).isEqualTo(RunEndCause.DEFEATED);
+    }
+
+    @Test
+    @DisplayName("投降同口径（D-b）：BATTLE 期 Surrender 走同一判负路径（机会 +1、按次数给箱）")
+    void surrenderFollowsSameDefeatPath() {
+        GameData data = demoData();
+        RunFlowSystem flow = new RunFlowSystem();
+        CommandManager manager = armedManager(flow);
+        RunContext ctx = newContext(data);
+        flow.startRun(ctx);
+        deploy(ctx, "unit_trainee_01", 2, 5);
+        defeatBySurrender(manager, flow, ctx); // 投降 = 判负
+        assertThat(ctx.getRunState().getDefeatCountPerRound()).isEqualTo(1);
+        assertThat(ctx.getRunState().getPendingChest()).isNotNull(); // 在场 → 败箱
+        assertThat(ctx.getRunState().getPendingChest().getOrigin())
+                .isEqualTo(com.voidvvv.kz_auto_chess_n.entities.ChestOrigin.DEFEAT);
+    }
+
+    @Test
+    @DisplayName("判负 RNG 确定性：判负 + 败箱构造全程 rng.getConsumedCount() 不变")
+    void defeatPathConsumesNoRng() {
+        GameData data = demoData();
+        RunFlowSystem flow = new RunFlowSystem();
+        CommandManager manager = armedManager(flow);
+        RunContext ctx = newContext(data);
+        flow.startRun(ctx);
+        deploy(ctx, "unit_trainee_01", 2, 5);
+        defeatBySurrender(manager, flow, ctx);
+        int consumedAtBattle = ctx.getRng().getConsumedCount(); // 含开战消耗
+        // 再走一轮判负（领箱 → 开战 → 投降）
+        manager.addCommand(new PickChestCommand(0));
+        manager.executeAll(ctx);
+        manager.addCommand(StartBattleCommand.INSTANCE);
+        manager.executeAll(ctx);
+        int consumedBeforeSurrender = ctx.getRng().getConsumedCount();
+        manager.addCommand(SurrenderCommand.INSTANCE);
+        manager.executeAll(ctx);
+        flow.onBattleOver(ctx);
+        assertThat(ctx.getRng().getConsumedCount()).isEqualTo(consumedBeforeSurrender); // 判负+败箱零消耗
+        assertThat(consumedAtBattle).isGreaterThanOrEqualTo(0);
+    }
+
+    @Test
+    @DisplayName("同 seed 败局重试不变量：领败箱 → 再开战敌阵逐位 equals")
+    void defeatRetryKeepsEnemyWaveInvariant() {
+        GameData data = demoData();
+        RunFlowSystem flow = new RunFlowSystem();
+        CommandManager manager = armedManager(flow);
+        RunContext a = newContext(data);
+        RunContext b = newContext(data);
+        flow.startRun(a);
+        flow.startRun(b);
+        deploy(a, "unit_trainee_01", 2, 5);
+        deploy(b, "unit_trainee_01", 2, 5);
+        defeatBySurrender(manager, flow, a);
+        defeatBySurrender(manager, flow, b);
+        List<WaveSpec> waveA = new ArrayList<WaveSpec>(a.getRunState().getEnemyWave());
+        List<WaveSpec> waveB = new ArrayList<WaveSpec>(b.getRunState().getEnemyWave());
+        manager.addCommand(new PickChestCommand(0));
+        manager.executeAll(a);
+        manager.executeAll(b);
+        assertThat(a.getRunState().getEnemyWave()).containsExactlyElementsOf(waveA); // 重试敌阵不变
+        assertThat(b.getRunState().getEnemyWave()).containsExactlyElementsOf(waveB);
     }
 
     // —— 胜局推进（PickChest 唯一出口 → 新轮/终局） ——
@@ -509,7 +625,7 @@ class RunFlowSystemTest {
     }
 
     @Test
-    @DisplayName("PickChest 槽2 经验书：+CHEST_EXP_BOOK_GAIN 经验（Lv.1 恰好升 Lv.2）")
+    @DisplayName("PickChest 槽2 经验书：+chestExpBook(round) 经验（Lv.1 恰好升 Lv.2）")
     void pickChestExpBookAddsExperience() {
         GameData data = demoData();
         RunFlowSystem flow = new RunFlowSystem();
@@ -526,7 +642,7 @@ class RunFlowSystemTest {
         manager.executeAll(ctx);
         assertThat(ctx.getPlayer().getGold()).isEqualTo(goldBefore); // 经验书不动金
         assertThat(ctx.getPlayer().getLevel())
-                .isEqualTo(2); // expToNextLevel(1)=4 == CHEST_EXP_BOOK_GAIN
+                .isEqualTo(2); // expToNextLevel(1)=4 == chestExpBook(1)
         assertThat(ctx.getPlayer().getCurrentExp()).isZero();
         assertThat(ctx.getRunState().getRound()).isEqualTo(2);
     }
@@ -579,20 +695,21 @@ class RunFlowSystemTest {
     }
 
     @Test
-    @DisplayName("新轮进入双清零：连败计数与本轮怜悯金归零（§5.1 关键区分）")
-    void advanceAfterVictoryResetsMercyCounters() {
+    @DisplayName("新轮进入机会清零：败 2 次后胜局领箱推进 → 新轮 defeatCountPerRound == 0（§5.1）")
+    void advanceAfterVictoryResetsDefeatCount() {
         GameData data = demoData();
         RunFlowSystem flow = new RunFlowSystem();
         CommandManager manager = armedManager(flow);
         RunContext ctx = newContext(data);
         flow.startRun(ctx);
         deploy(ctx, "unit_trainee_01", 2, 5);
-        for (int i = 0; i < 3; i++) {
-            defeatBySurrender(manager, flow, ctx);
-            flow.continueAfterDefeat(ctx);
-        }
-        assertThat(ctx.getRunState().getMercyLossCount()).isEqualTo(3);
-        assertThat(ctx.getRunState().getMercyGoldThisRound()).isEqualTo(1);
+        defeatBySurrender(manager, flow, ctx); // 败 1 → 败箱
+        manager.addCommand(new PickChestCommand(0));
+        manager.executeAll(ctx);
+        defeatBySurrender(manager, flow, ctx); // 败 2 → 败箱
+        manager.addCommand(new PickChestCommand(0));
+        manager.executeAll(ctx);
+        assertThat(ctx.getRunState().getDefeatCountPerRound()).isEqualTo(2);
         ctx.getPlayer().undeploy(2, 5); // 换必胜夹具
         deploy(ctx, "unit_champion_01", 2, 5);
         manager.addCommand(StartBattleCommand.INSTANCE);
@@ -602,8 +719,7 @@ class RunFlowSystemTest {
         manager.addCommand(new PickChestCommand(0));
         manager.executeAll(ctx);
         assertThat(ctx.getRunState().getRound()).isEqualTo(2);
-        assertThat(ctx.getRunState().getMercyLossCount()).isZero();
-        assertThat(ctx.getRunState().getMercyGoldThisRound()).isZero();
+        assertThat(ctx.getRunState().getDefeatCountPerRound()).isZero(); // 新轮清零
     }
 
     // —— 终局：第 25 轮经领箱通关（差异声明 #9：第 25 轮仍先领箱再 RUN_END） ——

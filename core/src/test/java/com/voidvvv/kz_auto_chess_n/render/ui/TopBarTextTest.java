@@ -29,9 +29,9 @@ class TopBarTextTest {
     @DisplayName("中期数值随动：round/金币/经验进度逐字段核对")
     void midRunFields() {
         assertThat(TopBar.statusText(25, 0, 3, 5))
-                .isEqualTo("轮次 25/25  金币 0  等级 3（5/16）");
+                .isEqualTo("轮次 25/25  金币 0  等级 3（5/12）"); // 经验表压平（修订二）：Lv.3→4 = 12
         assertThat(TopBar.statusText(12, 47, 6, 55))
-                .isEqualTo("轮次 12/25  金币 47  等级 6（55/56）");
+                .isEqualTo("轮次 12/25  金币 47  等级 6（55/36）"); // 经验表压平（修订二）：Lv.6→7 = 36
     }
 
     @Test
