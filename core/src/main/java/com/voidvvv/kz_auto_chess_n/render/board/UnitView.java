@@ -21,6 +21,7 @@ public final class UnitView {
     private static final Color BAR_RED = new Color(0.75f, 0.15f, 0.15f, 1f);
     private static final Color BAR_GREEN = new Color(0.2f, 0.8f, 0.25f, 1f);
     private static final Color BAR_YELLOW = new Color(0.95f, 0.85f, 0.2f, 1f);
+    private static final Color BAR_DARK = new Color(0.12f, 0.12f, 0.15f, 1f); // 蓄力条底槽（render §5.6，待调）
     private static final Color STAR_GOLD = new Color(1f, 0.85f, 0.3f, 1f);
     private static final Color WHITE = new Color(Color.WHITE);
 
@@ -136,7 +137,7 @@ public final class UnitView {
         batch.draw(region, x, y, size / 2f, 0f, size, size, 1f, 1f, degrees); // 底部中心轴
     }
 
-    // —— 血条（红绿 2px）/ 能量条（黄 1px）/ 星级色点（口径 #19） ——
+    // —— 血条（红绿 2px）/ 能量条（黄 1px）/ 攻击蓄力条（白 1px，render §5.6）/ 星级色点（口径 #19） ——
 
     private void drawBars(SpriteBatch batch, int cx, int cy) {
         TextureRegion white = assets.region(PlaceholderKeys.WHITE);
@@ -147,6 +148,12 @@ public final class UnitView {
         batch.draw(white, cx - 12f, cy + 17f, 24f * hp, 2f);
         batch.setColor(BAR_YELLOW);
         batch.draw(white, cx - 12f, cy + 19f, 24f * unit.getEnergy() / GameBalance.ENERGY_MAX, 1f);
+        // 攻击蓄力条（render §5.6 第四条微条）：轮询 attackTimer/attackInterval、钳制满格（眩晕时满格悬停）；纯表现零事件
+        float charge = Math.min(1f, unit.getAttackTimer() / unit.attackInterval());
+        batch.setColor(BAR_DARK);
+        batch.draw(white, cx - 12f, cy + 21f, 24f, 1f);
+        batch.setColor(WHITE);
+        batch.draw(white, cx - 12f, cy + 21f, 24f * charge, 1f);
         batch.setColor(STAR_GOLD);
         for (int i = 0; i < unit.getStar(); i++) { // 脚下星级点
             batch.draw(white, cx - (unit.getStar() * 4f - 2f) / 2f + i * 4f, cy - 19f, 2f, 2f);

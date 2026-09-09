@@ -1,5 +1,6 @@
 package com.voidvvv.kz_auto_chess_n.entities;
 
+import com.voidvvv.kz_auto_chess_n.config.GameBalance;
 import com.voidvvv.kz_auto_chess_n.data.BaseStats;
 import com.voidvvv.kz_auto_chess_n.data.Delivery;
 import com.voidvvv.kz_auto_chess_n.data.SkillData;
@@ -127,20 +128,35 @@ class BattleUnitTest {
     }
 
     @Test
-    @DisplayName("attackInterval/moveCooldown 换算：aspd2 → 0.5s/击；ms2 → 0.5s/格")
+    @DisplayName("attackInterval/moveCooldown 换算：aspd2 → 1/(2×0.6)s/击；ms2 → 0.5s/格（移动不吃系数）")
     void intervalConversions() {
         BattleUnit fast = new BattleUnit(2, tpl(), 1, Side.ENEMY, skill(),
                 new BattleStats(100f, 10f, 5f, 2f, 1f, 2f, 0f, 100f, 0f));
-        assertThat(fast.attackInterval()).isCloseTo(0.5f, within(1e-6f));
-        assertThat(fast.moveCooldown()).isCloseTo(0.5f, within(1e-6f));
-        assertThat(unit().attackInterval()).isCloseTo(1f, within(1e-6f));
+        assertThat(fast.attackInterval())
+                .isCloseTo(1f / (2f * GameBalance.ATTACK_SPEED_GLOBAL_FACTOR), within(1e-6f));
+        assertThat(fast.moveCooldown()).isCloseTo(0.5f, within(1e-6f)); // 口径 K5：移速不受攻速系数影响
+        assertThat(unit().attackInterval())
+                .isCloseTo(1f / GameBalance.ATTACK_SPEED_GLOBAL_FACTOR, within(1e-6f));
     }
 
     @Test
-    @DisplayName("开局即就绪（口径 #4）：计时器初始已满，本 tick 即可出手/走步")
-    void timersStartReady() {
+    @DisplayName("攻速系数不改变 PCT 修正相对收益：ASPD_UP +30% → 间隔缩短恰 1.3 倍")
+    void attackSpeedStatusRelativeGainUnaffectedByFactor() {
         BattleUnit unit = unit();
+        float base = unit.attackInterval();
+        unit.addStatus(new ActiveStatus(StatusType.ASPD_UP, 9, 30f, 5f));
+        assertThat(base / unit.attackInterval()).isCloseTo(1.3f, within(1e-4f));
+    }
+
+    @Test
+    @DisplayName("开战铺垫后从零蓄力（口径 #4 修订，2026-09-02）：初始不可出手/走步，蓄满一个间隔方可行动")
+    void timersStartFromZero() {
+        BattleUnit unit = unit();
+        assertThat(unit.canActOnAttackTimer()).isFalse();
+        assertThat(unit.canActOnMoveTimer()).isFalse();
+        unit.advanceTimers(unit.attackInterval());
         assertThat(unit.canActOnAttackTimer()).isTrue();
+        unit.advanceTimers(unit.moveCooldown());
         assertThat(unit.canActOnMoveTimer()).isTrue();
     }
 

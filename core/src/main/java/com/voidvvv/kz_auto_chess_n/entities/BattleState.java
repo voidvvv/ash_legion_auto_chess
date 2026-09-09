@@ -26,6 +26,7 @@ public final class BattleState {
     private final SynergySnapshot enemySynergies;
     private int tick;
     private float elapsed;
+    private float introRemaining;         // 开战转场「清场入阵」剩余秒数（battle §二；0 = 主循环已起）
     private boolean over;
     private BattleOutcome outcome;
 
@@ -88,6 +89,10 @@ public final class BattleState {
 
     public int getTick() { return tick; }
     public float getElapsed() { return elapsed; }
+    /** 开战转场是否进行中（battle §二：转场期间主循环冻结——step 门控读取） */
+    public boolean isIntroCountdownActive() { return introRemaining > 0f; }
+    /** 开战转场剩余秒数（转场驱动器归一化进度的只读源——render §5.6） */
+    public float getIntroRemaining() { return introRemaining; }
     public boolean isOver() { return over; }
     public BattleOutcome getOutcome() { return outcome; }
     public RandomGenerator getRng() { return rng; }
@@ -120,6 +125,21 @@ public final class BattleState {
     /** framework-internal：移除在途弹（命中或消散后） */
     public void removeProjectile(Projectile projectile) {
         projectiles.remove(projectile);
+    }
+
+    /** framework-internal：startBattle 布阵/开局效果/初始索敌完成后开启转场（battle §二清场入阵流程） */
+    public void beginIntroCountdown(float seconds) {
+        introRemaining = seconds;
+    }
+
+    /** framework-internal：转场推进（step 门控内按 LOGIC_STEP 递减；下限 0 不下穿） */
+    public void advanceIntroCountdown(float dt) {
+        introRemaining = Math.max(0f, introRemaining - dt);
+    }
+
+    /** framework-internal：跳过转场直入主循环（测试/调试后门，生产路径不调用） */
+    public void skipIntroCountdown() {
+        introRemaining = 0f;
     }
 
     /** framework-internal：推进一个逻辑步的时钟 */
