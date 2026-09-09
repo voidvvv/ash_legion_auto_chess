@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>开战转场「清场入阵」驱动器状态机（battle_intro_transition_flow）</title>
+<style>
+  :root { --bg:#12141a; --panel:#1b1e27; --line:#2c313f; --gold:#d4a72c; --green:#6fbf73; --red:#d46a6a; --blue:#6a9fd4; --dim:#9aa4b2; --txt:#e6e9ef; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:28px 34px; background:var(--bg); color:var(--txt); font:14px/1.7 "Segoe UI","Microsoft YaHei",sans-serif; }
+  h1 { font-size:21px; color:var(--gold); margin:0 0 4px; }
+  h2 { font-size:16px; color:var(--gold); margin:30px 0 10px; border-bottom:1px solid var(--line); padding-bottom:6px; }
+  .meta { color:var(--dim); font-size:12.5px; margin-bottom:18px; }
+  .note { background:#241f10; border:1px solid #5a4a1a; border-radius:8px; padding:9px 14px; font-size:13px; margin:10px 0 22px; }
+  .note b { color:var(--gold); }
+  table { border-collapse:collapse; width:100%; font-size:13px; margin:8px 0; }
+  th,td { border:1px solid var(--line); padding:6px 10px; text-align:left; vertical-align:top; }
+  th { background:#20242f; color:var(--gold); font-weight:600; white-space:nowrap; }
+  td code, .note code { background:#242838; padding:1px 6px; border-radius:4px; font-size:12px; color:#cdd6e4; }
+  /* —— 状态机图 —— */
+  .fsm { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:14px 0 6px; }
+  .st { border:2px solid var(--line); border-radius:10px; background:var(--panel); padding:10px 12px; position:relative; }
+  .st h3 { margin:0 0 6px; font-size:14px; }
+  .st ul { margin:0; padding-left:18px; color:var(--dim); font-size:12.5px; }
+  .st .tag { position:absolute; top:-11px; right:10px; font-size:11px; padding:0 8px; border-radius:8px; background:#242838; color:var(--dim); }
+  .s-shop  { border-color:var(--green); } .s-shop h3 { color:var(--green); }
+  .s-fwd   { border-color:var(--gold);  } .s-fwd  h3 { color:var(--gold); }
+  .s-battle{ border-color:var(--blue);  } .s-battle h3{ color:var(--blue); }
+  .s-rev   { border-color:var(--gold);  } .s-rev  h3 { color:var(--gold); }
+  .s-end   { border-color:var(--red);   } .s-end  h3 { color:var(--red); }
+  .s-result{ border-color:#8a7fb0;      } .s-result h3{ color:#a89bd6; }
+  .arrows { color:var(--dim); font-size:12.5px; margin:10px 0 4px; line-height:2; }
+  .arrows b { color:var(--txt); }
+  /* —— 动效演示 —— */
+  .demo { border:2px solid var(--line); border-radius:12px; background:#0d0f14; padding:14px; margin:12px 0 26px; }
+  .bar { position:relative; width:100%; max-width:880px; height:230px; margin:0 auto; background:#171a22; border-radius:8px; overflow:hidden; }
+  .fx { position:absolute; border-radius:4px; font-size:11px; display:flex; align-items:center; justify-content:center; color:#cfd6e2; transition:all .12s linear; }
+  .topbar { left:2%; top:4px; width:96%; height:16px; background:#20242f; border:1px solid #2c313f; }
+  .hud    { left:2%; top:26px; width:96%; height:26px; background:#1d2430; border:1px solid #3f5466; }
+  .shop   { left:2%; bottom:4px; width:96%; height:40px; background:#241d2b; border:1px solid #5a4466; }
+  .bench  { left:3%; bottom:56px; width:17%; height:64px; background:#23301c; border:1px solid #4a6636; }
+  .bag    { left:3%; bottom:126px; width:17%; height:40px; background:#2a2438; border:1px solid #4a3f66; }
+  .fight  { left:22%; bottom:70px; width:11%; height:26px; background:#7a4a1a; border:1px solid #f0b46a; }
+  .sell   { right:3%; bottom:150px; width:9%; height:26px; background:#3a2020; border:1px solid #8a4040; }
+  .syn    { right:3%; top:56px; width:17%; height:70px; background:#20242f; border:1px solid #2c313f; }
+  .board  { left:35%; top:34px; width:30%; height:150px; background:#23301c; border:1px solid #4a6636; }
+  .ghost  { position:absolute; border:2px dashed var(--red); border-radius:4px; background:rgba(212,106,106,.10); }
+  .camnote{ position:absolute; right:10px; bottom:6px; font-size:11px; color:var(--gold); }
+  .ctrl { display:flex; gap:10px; align-items:center; justify-content:center; margin-top:12px; flex-wrap:wrap; }
+  button { background:#242838; color:var(--txt); border:1px solid #3a4152; border-radius:6px; padding:6px 16px; cursor:pointer; font-size:13px; }
+  button:hover { border-color:var(--gold); color:var(--gold); }
+  .phase-label { font-size:13px; color:var(--gold); min-width:280px; text-align:center; }
+</style>
+</head>
+<body>
+
+<h1>开战转场「清场入阵」驱动器状态机</h1>
+<div class="meta">V1.0（2026-09-09）｜ 配图于 <code>docs/spec_plan/2026-09-09_battle_intro_transition.md</code> §5 ｜ 依据 battle_design V1.8 §二（Q1 裁决 <b>A——就地适配</b>）+ render_design V1.6 §5.6</div>
+
+<div class="note"><b>非对称双驱动</b>：正向进度 = <code>1 − introRemaining / 0.6</code>（消费逻辑冻结门——×2 快进与暂停冻结零特判自动正确）；反向无逻辑计时器，渲染侧自计时（<code>dt = frozen ? 0 : delta</code>）。转场零 RNG / 零事件 / 零 elapsed → 确定性回放与存档不含它。</div>
+
+<h2>一、状态机</h2>
+<div class="fsm">
+  <div class="st s-shop"><span class="tag">稳态</span><h3>SHOPPING_STEADY · 备战</h3>
+    <ul><li>zoom = 1.06</li><li>chrome 全显 / ③ 可见</li><li>输入放行，Catcher 隐</li><li>等 StartBattle</li></ul></div>
+  <div class="st s-fwd"><span class="tag">转场</span><h3>FORWARD · 正向 0.6s</h3>
+    <ul><li>p = 1 − intro/0.6（逻辑门）</li><li>zoom 1.06→1.0</li><li>⑧↓ HUD↓ ⑥③← ②← ⑦提示淡出</li><li><b>输入禁用</b>（modalBlocked + Catcher）</li></ul></div>
+  <div class="st s-battle"><span class="tag">稳态</span><h3>BATTLE_STEADY · 战斗</h3>
+    <ul><li>zoom = 1.0，chrome 隐，③ 隐</li><li>解冻：计时器从零蓄力</li><li>主循环五阶段（零感知转场）</li></ul></div>
+  <div class="st s-result"><span class="tag">过境</span><h3>RESULT · 战毕</h3>
+    <ul><li>zoom = 1.0，chrome 隐，③ 隐</li><li>横幅/弹窗（Catcher 不在场）</li><li>败 3 → RUN_END</li></ul></div>
+  <div class="st s-rev"><span class="tag">转场</span><h3>REVERSE · 反向 0.6s</h3>
+    <ul><li>p = 1 − rev/0.6（自计时）</li><li>zoom 1.0→1.06</li><li>HUD↑ ⑧↑归位 ⑥③→ ②→ ⑦提示淡入</li><li><b>输入禁用</b></li></ul></div>
+  <div class="st s-end"><span class="tag">终点</span><h3>RUN_END · 终局</h3>
+    <ul><li>zoom = 1.0，chrome 隐</li><li>重开 → SHOPPING 稳态（<b>不播反向</b>：RUN_END→SHOPPING ≠ RESULT→SHOPPING）</li></ul></div>
+</div>
+<div class="arrows">
+  <b>SHOPPING</b> ──StartBattle 生效──▶ <b>FORWARD</b> ──intro==0（解冻，输入同帧恢复）──▶ <b>BATTLE</b> ──isOver──▶ <b>RESULT</b> ──PickChest / 点击 / 3s──▶ <b>REVERSE</b> ──rev==0──▶ <b>SHOPPING</b><br>
+  <b>FORWARD / REVERSE</b> ──转场期 Esc→放弃（AbandonRun）──▶ <b>RUN_END</b>（中断自愈：snap 稳态，zoom 1.0、输入恢复、无残影）
+</div>
+
+<h2>二、双域姿态表（p: 0→1，位移取整吸附；zoom 例外）</h2>
+<table>
+  <tr><th>域</th><th>元素</th><th>正向</th><th>反向</th><th>稳态所有者</th></tr>
+  <tr><td>UI</td><td>⑧ 商店栏（底部条带）</td><td>下滑离场 <code>y=−72p</code>（裁决 A）</td><td>自底缘上滑归位 <code>y=−72(1−p)</code></td><td>Screen 相位行（转场窗由控制器接管可见性）</td></tr>
+  <tr><td>UI</td><td>战斗 HUD（顶部）</td><td>上缘外下落 <code>y=+72(1−p)</code></td><td>上升退场 <code>y=+72p</code></td><td>同上</td></tr>
+  <tr><td>UI</td><td>⑥ 开战按钮</td><td>左移+淡出 <code>x=−140p, a=1−p</code></td><td>淡入+滑回 <code>x=−140(1−p), a=p</code></td><td>同上</td></tr>
+  <tr><td>UI</td><td>③ 背包</td><td>同 ⑥</td><td>同 ⑥</td><td><b>控制器常驻</b>（仅 SHOPPING 可见，K7）</td></tr>
+  <tr><td>UI</td><td>⑤ 羁绊 / ⑨ 通知 / 顶栏</td><td>⑤ 不动（既有置暗 0.35）；⑨/顶栏不动</td><td>同左</td><td>SynergyPanel.draw 等</td></tr>
+  <tr><td>UI</td><td>全屏 Catcher</td><td>显示（吞 UI 点击，dialogStage 不受影响）</td><td>显示</td><td>隐（不可见不参与 hit 测试）</td></tr>
+  <tr><td>棋盘域</td><td>② 备战席（槽+席上棋子）</td><td>左滑 <code>x=−140p</code></td><td>滑回 <code>x=−140(1−p)</code></td><td>BattleRenderer.drawShopping(chrome)</td></tr>
+  <tr><td>棋盘域</td><td>⑦ 出售区 / 布阵提示</td><td>淡出 <code>a=1−p</code></td><td>淡入 <code>a=p</code></td><td>同上</td></tr>
+  <tr><td>棋盘域</td><td>敌阵虚影</td><td>淡出（实体化一拍——实体单位同位置就位）</td><td>淡入（下轮侦察）</td><td>同上</td></tr>
+  <tr><td>棋盘域</td><td>玩家部署帧</td><td><b>不画</b>（UnitView 已就位，防叠影——K5）</td><td>随 a 淡入</td><td>同上</td></tr>
+  <tr><td>镜头</td><td>worldCamera.zoom</td><td>1.06 → 1.0（线性）</td><td>1.0 → 1.06（线性）</td><td>控制器常驻（SHOPPING=1.06，其余=1.0）</td></tr>
+</table>
+
+<h2>三、动效演示（方向感核对——裁决 A：⑧ 自底部下滑，HUD 自顶部下落）</h2>
+<div class="demo">
+  <div class="bar" id="bar">
+    <div class="fx topbar">① 顶栏（不动）</div>
+    <div class="fx hud"    id="fx-hud">战斗 HUD ↓下落/↑退场</div>
+    <div class="fx board">④ 棋盘（zoom 1.06⇄1.0）</div>
+    <div class="ghost" style="left:60%; top:44px; width:26px; height:26px;" id="gh1"></div>
+    <div class="ghost" style="left:66%; top:44px; width:26px; height:26px;" id="gh2"></div>
+    <div class="fx bench"  id="fx-bench">② 备战席 ←</div>
+    <div class="fx bag"    id="fx-bag">③ 背包 ←</div>
+    <div class="fx fight"  id="fx-fight">⑥ 开战 ←</div>
+    <div class="fx sell"   id="fx-sell">⑦ 出售（淡）</div>
+    <div class="fx syn">⑤ 羁绊（置暗 0.35）</div>
+    <div class="fx shop"   id="fx-shop">⑧ 商店栏 ↓下滑 / ↑归位（裁决 A：实机在底部）</div>
+    <div class="camnote" id="cam">zoom 1.06</div>
+  </div>
+  <div class="ctrl">
+    <button id="btn-fwd">▶ 正向（SHOPPING→BATTLE）</button>
+    <button id="btn-rev">◀ 反向（RESULT→SHOPPING）</button>
+    <button id="btn-reset">复位</button>
+    <span class="phase-label" id="lbl">SHOPPING 稳态 · zoom 1.06 · 输入放行</span>
+  </div>
+</div>
+
+<script>
+  var D = 600, raf = null;
+  var els = { hud:fx('fx-hud'), shop:fx('fx-shop'), bench:fx('fx-bench'), bag:fx('fx-bag'),
+              fight:fx('fx-fight'), sell:fx('fx-sell'), gh:[fx('gh1'), fx('gh2')], cam:fx('cam'), lbl:fx('lbl') };
+  function fx(id){ return document.getElementById(id); }
+  function snap(v){ return Math.round(v); }
+  function pose(p, dir) { // dir +1 = 正向（清场），-1 = 反向（归位）
+    var q = 1 - p;
+    els.hud.style.transform   = 'translateY(' + snap(72 * (dir>0 ? q : p)) + 'px)';
+    els.shop.style.transform  = 'translateY(' + snap(46 * (dir>0 ? p : q)) + 'px)';
+    els.bench.style.transform = 'translateX(' + (-snap(120 * (dir>0 ? p : q))) + 'px)';
+    els.bag.style.transform   = 'translateX(' + (-snap(120 * (dir>0 ? p : q))) + 'px)';
+    els.bag.style.opacity     = dir>0 ? (1-p) : p;
+    els.fight.style.transform = 'translateX(' + (-snap(120 * (dir>0 ? p : q))) + 'px)';
+    els.fight.style.opacity   = dir>0 ? (1-p) : p;
+    els.sell.style.opacity    = dir>0 ? (1-p) : p;
+    els.gh.forEach(function(g){ g.style.opacity = dir>0 ? (1-p) : p; });
+    els.cam.textContent = 'zoom ' + (1.06 - 0.06*p*(dir>0?1:-0) - (dir>0?0:0.06*q)).toFixed(3);
+  }
+  function run(dir) {
+    reset(true);
+    var t0 = null;
+    function step(ts) {
+      if (!t0) t0 = ts;
+      var p = Math.min(1, (ts - t0) / D);
+      pose(p, dir);
+      els.lbl.textContent = dir>0
+        ? 'FORWARD ' + Math.round(p*100) + '% · 输入禁用 · zoom ' + (1.06-0.06*p).toFixed(3)
+        : 'REVERSE ' + Math.round(p*100) + '% · 输入禁用 · zoom ' + (1.0+0.06*p).toFixed(3);
+      if (p < 1) raf = requestAnimationFrame(step);
+      else els.lbl.textContent = dir>0 ? 'BATTLE 稳态 · 解冻（计时器从零蓄力）· zoom 1.0 · 输入放行'
+                                       : 'SHOPPING 稳态 · zoom 1.06 · 输入放行';
+    }
+    raf = requestAnimationFrame(step);
+  }
+  function reset(keep) {
+    if (raf) cancelAnimationFrame(raf);
+    ['hud','shop','bench','bag','fight'].forEach(function(k){ els[k].style.transform='none'; });
+    ['bag','fight','sell'].forEach(function(k){ els[k].style.opacity=1; });
+    els.gh.forEach(function(g){ g.style.opacity=1; });
+    els.cam.textContent = 'zoom 1.06';
+    if (!keep) els.lbl.textContent = 'SHOPPING 稳态 · zoom 1.06 · 输入放行';
+  }
+  document.getElementById('btn-fwd').onclick = function(){ run(+1); };
+  document.getElementById('btn-rev').onclick = function(){ run(-1); };
+  document.getElementById('btn-reset').onclick = function(){ reset(false); };
+</script>
+
+<div class="note" style="margin-top:26px"><b>确定性注记</b>：转场零 RNG / 零 CombatEvent / 零 elapsed（battle §二冻结清单）→ 回放与存档不包含它；软回滚 = <code>BATTLE_INTRO_TRANSITION_SECONDS = 0f</code>（转场+输入禁用即关）、<code>SHOPPING_CAMERA_ZOOM = 1f</code>（回正即关）。命中换算：<code>viewport.unproject</code> 含 zoom 逆变换，备战期拖拽无需补偿。</div>
+
+</body>
+</html>

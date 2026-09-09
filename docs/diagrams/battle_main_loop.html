@@ -9,7 +9,7 @@
 </head>
 <body>
 <h1>战斗主循环流程图（Phase 3）</h1>
-<p>依据 battle_design §二（H 语义）/§五/§六；实现层口径见 spec_plan/2026-08-21_phase3_battle_engine.md §三。</p>
+<p>依据 battle_design §二（H 语义）/§五/§六；实现层口径见 spec_plan/2026-08-21_phase3_battle_engine.md §三；开战转场「清场入阵」（2026-09-09 修订，取代 2026-09-02 倒计时案）详见 battle_intro_slide_transition.html。</p>
 <pre class="mermaid">
 flowchart TD
     subgraph INIT["startBattle · 开战一次（tick 0，零 RNG 消耗）"]
@@ -17,11 +17,15 @@ flowchart TD
         I1["玩家部署名单（Player 部署表 18 格）&lt;br/&gt;+ 敌方 WaveSpec 列表（Phase 2 产出）"]
         I2["IdIssuer 发号：玩家侧先（扫描序 y升 x升）&lt;br/&gt;→ 敌方后（WaveSpec 列表序 = 抽取序 + Boss 殿后）"]
         I3["SynergySystem 两侧双通道统计（race / class）&lt;br/&gt;→ StatPipeline 第一级基准快照（battle §八）"]
-        I4["开局效果落地（如兽人6 开局 SHIELD 30% maxHp）&lt;br/&gt;初始 HP=maxHp · 能量=0 · 攻击/移动计时器就绪"]
-        I5["按 id 序初始 findTarget（GDD §6.6 步骤1）"]
+        I4["开局效果落地（如兽人6 开局 SHIELD 30% maxHp）&lt;br/&gt;初始 HP=maxHp · 能量=0 · 攻击/移动计时器归零（2026-09-02 口径修订；2026-09-09 语境更新：转场后从零蓄力）"]
+        I5["按 id 序初始 findTarget（GDD §6.6 步骤 2）"]
         I1 --> I2 --> I3 --> I4 --> I5
     end
-    INIT --> STEP
+    INIT --> INTRO
+
+    INTRO["⏱ 开战转场 · 清场入阵 0.6s（0.4~0.8 待调，2026-09-09）&lt;br/&gt;逻辑冻结：step 不调用 · 计时器=0 · elapsed 不走（60s 超时钟不起表）· 零 RNG · 零 CombatEvent · 输入禁用&lt;br/&gt;渲染：备战 UI 滑出 / 战斗 HUD 落位 / 镜头回正 + 敌军亮相（战毕反向同款）——详见 battle_intro_slide_transition.html"]
+
+    INTRO --> STEP
 
     subgraph LOOP["BattleSystem.step · 每逻辑 tick（60Hz，固定序）"]
         direction TB

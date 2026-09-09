@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>开战转场「清场入阵」设计定稿 V1.1（已批准 2026-09-09；Q6 勘误）</title>
+<style>
+  :root{
+    --bg:#12101a; --panel:#221b2e; --panel2:#2b2338; --line:#4a3b5c;
+    --txt:#cfc6dd; --dim:#8a7fa0; --gold:#d9a441; --hp:#57c26a;
+    --pblue:#3f7fbf; --pred:#b23a48; --charge:#f2f2f2;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  body{background:var(--bg); color:var(--txt); font-family:"Microsoft YaHei",sans-serif; padding:24px 32px}
+  h1{font-size:22px; color:#fff} h1 small{color:var(--gold); font-size:13px; margin-left:10px}
+  .meta{color:var(--dim); font-size:12px; margin:6px 0 18px}
+  h2{font-size:15px; color:#fff; margin:26px 0 10px; border-left:4px solid var(--gold); padding-left:8px}
+  p.note{font-size:12px; color:var(--dim); margin-bottom:10px; max-width:1100px}
+
+  /* ===== 舞台：1280×720 虚拟屏 ×0.6 缩放 ===== */
+  .frame-wrap{display:inline-block; vertical-align:top; margin:0 18px 18px 0}
+  .caption{font-size:12px; color:var(--txt); background:var(--panel); border:1px solid var(--line);
+           border-radius:4px; padding:6px 10px; max-width:768px}
+  .caption b{color:var(--gold)}
+  .sizer{width:768px; height:432px; overflow:hidden; border:2px solid var(--line); border-radius:6px; margin-bottom:6px}
+  .sizer.big{width:1024px; height:576px}
+  .screen{position:relative; width:1280px; height:720px; background:#0d0b13;
+          transform:scale(.6); transform-origin:top left; overflow:hidden;
+          font-size:14px; user-select:none}
+  .sizer.big .screen{transform:scale(.8)}
+  .abs{position:absolute}
+
+  /* ===== 通用元件 ===== */
+  .panel{background:var(--panel); border:2px solid var(--line); border-radius:4px; color:var(--dim)}
+  .panel .tt{font-size:11px; color:var(--dim); padding:4px 8px; border-bottom:1px solid var(--line)}
+  .topbar-l{font-size:18px; color:var(--gold); font-weight:bold}
+  .topbar-r{width:44px; height:36px; line-height:34px; text-align:center; color:var(--dim)}
+  .unit{position:absolute; width:44px; height:44px; border:2px solid #fff3; background:#1a1626}
+  .unit.p{background:linear-gradient(160deg,#2b4a6b,#1d3450); border-color:var(--pblue)}
+  .unit.e{background:linear-gradient(160deg,#6b2b36,#501d26); border-color:var(--pred)}
+  .unit.ghost{opacity:.45; border-style:dashed}
+  .bars{position:absolute; top:-14px; left:-1px; width:46px}
+  .bars .hp{height:5px; background:#2a1e22; margin-bottom:2px}
+  .bars .hp i{display:block; height:100%; background:var(--hp)}
+  .bars .ch{height:4px; background:#2a2830}
+  .bars .ch i{display:block; height:100%; width:0; background:var(--charge)}
+
+  /* Q6 勘误：商店栏实机渲染在底部（BattleScreen.java:226 装配无 setPosition = 底部 0..64 条带；render §九表值与代码漂移系既有问题）；战斗 HUD 常驻顶部——两屏缘各自进出，不共槽 */
+  .shopbar{position:absolute; left:0; bottom:0; width:1280px; height:128px; background:var(--panel);
+           border-top:2px solid var(--line)}
+  .card{position:absolute; top:12px; width:176px; height:104px; background:var(--panel2);
+        border:2px solid var(--line); border-radius:4px; color:var(--dim); font-size:12px; padding:6px}
+  .card .cost{position:absolute; bottom:4px; right:8px; color:var(--gold)}
+  .btn{position:absolute; background:var(--panel2); border:2px solid var(--line); border-radius:4px;
+       color:var(--txt); text-align:center; font-size:13px; line-height:40px}
+  .btn small{color:var(--gold)}
+  .fightbtn{position:absolute; width:128px; height:80px; background:#5a3a1c; border:2px solid var(--gold);
+            border-radius:6px; color:var(--gold); font-size:26px; font-weight:bold; text-align:center;
+            line-height:76px; letter-spacing:6px}
+  .battlehud{position:absolute; left:0; top:0; width:1280px; height:128px; background:var(--panel);
+             border-bottom:2px solid var(--line)}
+  .timer{position:absolute; left:352px; top:52px; width:576px; height:14px; background:#2a2830; border-radius:3px}
+  .timer i{display:block; height:100%; width:100%; background:var(--gold); border-radius:3px}
+  .timer-label{position:absolute; left:352px; top:72px; width:576px; text-align:center; font-size:12px; color:var(--dim)}
+
+  /* 棋盘 ④ (224,50,192,224)up → (448,172,384,448)，6×7 格 64px */
+  .board{position:absolute; left:448px; top:172px; width:384px; height:448px;
+         background:
+           linear-gradient(0deg, rgba(63,127,191,.14) 0 192px, rgba(0,0,0,0) 192px 256px, rgba(178,58,72,.14) 256px 448px),
+           repeating-linear-gradient(90deg, rgba(255,255,255,.07) 0 2px, transparent 2px 64px),
+           repeating-linear-gradient(0deg, rgba(255,255,255,.07) 0 2px, transparent 2px 64px),
+           #171320;
+         border:2px solid var(--line)}
+  .hint{position:absolute; left:448px; top:140px; width:384px; text-align:center; font-size:13px; color:var(--dim)}
+  .sellzone{position:absolute; left:1128px; top:136px; width:112px; height:92px; border:2px dashed #a05;
+            border-radius:6px; color:#c56; font-size:14px; text-align:center; line-height:88px; background:#221018}
+
+  /* 转场标注 */
+  .tag{position:absolute; font-size:12px; color:var(--gold); background:#1a1420cc;
+       border:1px dashed var(--gold); border-radius:4px; padding:3px 8px; z-index:9}
+
+  /* ===== F1/F2 各元件状态（静态分镜） ===== */
+  .f1 .shopbar{transform:translateY(88px); opacity:.5} /* Q6：实机在底部 → 下滑离场 */
+  .f1 .battlehud{transform:translateY(-96px); opacity:.6}
+  .f1 .fightbtn{transform:translateX(-120px); opacity:.25}
+  .f1 .bench{transform:translateX(-140px); opacity:.35}
+  .f1 .inventory{transform:translateX(-160px); opacity:.3}
+  .f1 .sellzone,.f1 .hint{opacity:0}
+  .f1 .synergy{opacity:.5}
+  .f1 .board{transform:scale(1.03)}
+  .f1 .unit.ghost{opacity:1; border-style:solid} /* 侦察虚影 → 实体化（开战） */
+
+  .f2 .shopbar,.f2 .fightbtn,.f2 .bench,.f2 .inventory,.f2 .sellzone,.f2 .hint{display:none}
+  .f2 .synergy{opacity:.35}
+  .f2 .ch i.w55{width:55%} .f2 .ch i.w30{width:30%} .f2 .ch i.w70{width:70%}
+  .f2 .ch i.w15{width:15%} .f2 .ch i.w45{width:45%} .f2 .ch i.w20{width:20%} .f2 .ch i.w60{width:60%}
+
+  /* ===== 动效演示（点击重播） ===== */
+  @keyframes shopOut{0%{transform:translateY(0);opacity:1} 22%{transform:translateY(140px);opacity:0} 100%{transform:translateY(140px);opacity:0}} /* Q6：下滑离场（+140px 向下） */
+  @keyframes hudIn{0%{transform:translateY(-140px);opacity:0} 8%{opacity:1} 24%{transform:translateY(0);opacity:1} 100%{transform:translateY(0);opacity:1}}
+  @keyframes fightOut{0%{transform:none;opacity:1} 20%{transform:translateX(-200px);opacity:0} 100%{transform:translateX(-200px);opacity:0}}
+  @keyframes leftOut{0%{transform:none;opacity:1} 22%{transform:translateX(-320px);opacity:0} 100%{transform:translateX(-320px);opacity:0}}
+  @keyframes fadeOutQ{0%{opacity:1} 14%{opacity:0} 100%{opacity:0}}
+  @keyframes dimSyn{0%{opacity:1} 24%{opacity:.35} 100%{opacity:.35}}
+  @keyframes settle{0%{transform:scale(1.06)} 24%{transform:scale(1)} 100%{transform:scale(1)}}
+  @keyframes fill{0%,24%{width:0} 88%{width:var(--w)} 100%{width:var(--w)}}
+  @keyframes swing{0%,58%{transform:rotate(0)} 63%{transform:rotate(-7deg)} 70%{transform:rotate(5deg)} 76%{transform:rotate(0)} 100%{transform:rotate(0)}}
+  @keyframes flash{0%,60%{filter:none} 64%{filter:brightness(2.4)} 74%{filter:none} 100%{filter:none}}
+  .demo .shopbar,.demo .battlehud,.demo .fightbtn,.demo .bench,.demo .inventory,
+  .demo .sellzone,.demo .hint,.demo .synergy,.demo .board{animation-duration:2.6s; animation-timing-function:ease-in-out; animation-fill-mode:forwards; animation-play-state:paused}
+  .demo .ch i{animation:fill 2.6s linear forwards; animation-play-state:paused}
+  .demo .swing-u{animation:swing 2.6s ease-in-out forwards; animation-play-state:paused}
+  .demo .flash-u{animation:flash 2.6s linear forwards; animation-play-state:paused}
+  .demo.play .shopbar{animation-name:shopOut; animation-play-state:running}
+  .demo.play .battlehud{animation-name:hudIn; animation-play-state:running}
+  .demo.play .fightbtn{animation-name:fightOut; animation-play-state:running}
+  .demo.play .bench{animation-name:leftOut; animation-play-state:running}
+  .demo.play .inventory{animation-name:leftOut; animation-play-state:running}
+  .demo.play .sellzone,.demo.play .hint{animation-name:fadeOutQ; animation-play-state:running}
+  .demo.play .synergy{animation-name:dimSyn; animation-play-state:running}
+  .demo.play .board{animation-name:settle; animation-play-state:running}
+  .demo.play .ch i{animation-play-state:running}
+  .demo.play .swing-u{animation-play-state:running}
+  .demo.play .flash-u{animation-play-state:running}
+  .demo .unit.ghost{transition:opacity .4s .5s, border .4s .5s}
+  .demo.play .unit.ghost{opacity:1; border-style:solid}
+  .replay{display:inline-block; margin:8px 0; padding:8px 22px; background:#5a3a1c; border:2px solid var(--gold);
+          color:var(--gold); font-size:15px; border-radius:6px; cursor:pointer; letter-spacing:2px}
+  .timeline{font-size:12px; color:var(--dim); margin-top:4px}
+  .timeline b{color:var(--gold)}
+  ul.qa{font-size:13px; line-height:1.9; max-width:1000px}
+  ul.qa b{color:var(--gold)}
+</style>
+</head>
+<body>
+<h1>开战转场「清场入阵」设计定稿<small>V1.1 · 2026-09-09 · 已批准（Q1 滑出 / Q2 0.6s / Q3 反向转场 / Q4 镜头回正 / Q5 上摇否决 / Q6 商店栏实机在底部勘误）——废弃 3-2-1 倒计时横幅</small></h1>
+<div class="meta">虚拟分辨率 640×360（图中 ×2 绘制）· 坐标依据 render §九 · 配套说明见同目录 battle_intro_slide_transition.md · 示意图用系统字体，实机为像素字体</div>
+
+<h2>动效演示（≈2.6s：0~0.6s 转场滑切【逻辑冻结】→ 解冻蓄力 → 首刀）</h2>
+<button class="replay" onclick="replay()">▶ 重播转场</button>
+<div class="sizer big">
+  <div class="screen demo play" id="demo">
+    <div class="topbar-l abs" style="left:16px; top:14px">Lv.1 ◆ 10G</div>
+    <div class="topbar-r panel abs" style="left:1216px; top:12px">⏸</div>
+
+    <div class="shopbar">
+      <div class="card" style="left:180px">剑士<div class="cost">1G</div></div>
+      <div class="card" style="left:372px">弓手<div class="cost">1G</div></div>
+      <div class="card" style="left:564px">盾卫<div class="cost">2G</div></div>
+      <div class="card" style="left:756px">游侠<div class="cost">2G</div></div>
+      <div class="card" style="left:948px">术士<div class="cost">3G</div></div>
+      <div class="btn" style="left:1136px; top:14px; width:120px; height:40px; line-height:36px">刷新 <small>2G</small></div>
+      <div class="btn" style="left:1136px; top:66px; width:120px; height:40px; line-height:36px">买经验 <small>4G</small></div>
+    </div>
+
+    <div class="battlehud">
+      <div class="timer"><i></i></div>
+      <div class="timer-label">战场时间 60s（超时判负）</div>
+      <div class="btn" style="left:864px; top:36px; width:96px; height:44px; line-height:40px">×1</div>
+      <div class="btn" style="left:1040px; top:36px; width:96px; height:44px; line-height:40px">投降</div>
+    </div>
+
+    <div class="notify panel abs" style="left:40px; top:140px; width:256px; height:92px">
+      <div class="tt">⑨ 事件通知（最近 4 行）</div>
+    </div>
+
+    <div class="inventory panel abs" style="left:40px; top:232px; width:216px; height:144px">
+      <div class="tt">③ 装备背包 3×2</div>
+      <div class="abs panel" style="left:12px; top:32px; width:56px; height:56px">🗡</div>
+      <div class="abs panel" style="left:80px; top:32px; width:56px; height:56px">🛡</div>
+      <div class="abs panel" style="left:148px; top:32px; width:56px; height:56px">🧪</div>
+    </div>
+
+    <div class="bench panel abs" style="left:40px; top:384px; width:216px; height:240px">
+      <div class="tt">② 备战席 3×3</div>
+      <div class="abs unit p" style="left:14px; top:44px; width:52px; height:52px"></div>
+      <div class="abs unit p" style="left:98px; top:44px; width:52px; height:52px"></div>
+    </div>
+
+    <div class="fightbtn" style="left:268px; top:464px">开 战</div>
+    <div class="sellzone">出售区</div>
+    <div class="hint">拖拽棋子布阵 · 拖至右下出售区卖出 · 点开战</div>
+
+    <div class="synergy panel abs" style="left:1016px; top:336px; width:224px; height:288px">
+      <div class="tt">⑤ 羁绊面板（战斗期置暗保留）</div>
+      <div style="padding:8px; font-size:12px">兽人 2/6 ▓▓░░░░<br>亡灵 1/4 ▓░░░<br>游侠 2/3 ▓▓▓</div>
+    </div>
+
+    <div class="board"></div>
+    <!-- 棋盘 (448,172) 格64：unit left=448+gx*64+10, top=172+gy*64+10 -->
+    <div class="unit p abs" style="left:458px; top:442px"><div class="bars"><div class="hp"><i style="width:90%"></i></div><div class="ch"><i style="--w:55%"></i></div></div></div>
+    <div class="unit p abs swing-u" style="left:586px; top:506px"><div class="bars"><div class="hp"><i style="width:75%"></i></div><div class="ch"><i style="--w:30%"></i></div></div></div>
+    <div class="unit p abs" style="left:650px; top:442px"><div class="bars"><div class="hp"><i style="width:100%"></i></div><div class="ch"><i style="--w:70%"></i></div></div></div>
+    <div class="unit p abs" style="left:778px; top:570px"><div class="bars"><div class="hp"><i style="width:60%"></i></div><div class="ch"><i style="--w:15%"></i></div></div></div>
+    <div class="unit e abs flash-u" style="left:650px; top:246px"><div class="bars"><div class="hp"><i style="width:85%"></i></div><div class="ch"><i style="--w:20%"></i></div></div></div>
+    <div class="unit e abs ghost" style="left:522px; top:182px"><div class="bars"><div class="hp"><i style="width:100%"></i></div><div class="ch"><i style="--w:45%"></i></div></div></div>
+    <div class="unit e abs ghost" style="left:714px; top:310px"><div class="bars"><div class="hp"><i style="width:100%"></i></div><div class="ch"><i style="--w:60%"></i></div></div></div>
+  </div>
+</div>
+<div class="timeline"><b>0s</b> 点「开战」→ <b>0~0.6s</b> 清场滑切（逻辑冻结、输入禁用）→ <b>0.6s</b> 解冻：计时器从零蓄力（白色细条肉眼充能）→ <b>≈1.7~3.0s</b> 首刀（图中 1.7s 处我方近战出手 / 敌方白闪受击）</div>
+
+<h2>三帧静态分镜</h2>
+
+<div class="frame-wrap">
+  <div class="sizer"><div class="screen f0">
+    <div class="topbar-l abs" style="left:16px; top:14px">Lv.1 ◆ 10G</div>
+    <div class="topbar-r panel abs" style="left:1216px; top:12px">⏸</div>
+    <div class="shopbar">
+      <div class="card" style="left:180px">剑士<div class="cost">1G</div></div>
+      <div class="card" style="left:372px">弓手<div class="cost">1G</div></div>
+      <div class="card" style="left:564px">盾卫<div class="cost">2G</div></div>
+      <div class="card" style="left:756px">游侠<div class="cost">2G</div></div>
+      <div class="card" style="left:948px">术士<div class="cost">3G</div></div>
+      <div class="btn" style="left:1136px; top:14px; width:120px; height:40px; line-height:36px">刷新 <small>2G</small></div>
+      <div class="btn" style="left:1136px; top:66px; width:120px; height:40px; line-height:36px">买经验 <small>4G</small></div>
+    </div>
+    <div class="notify panel abs" style="left:40px; top:140px; width:256px; height:92px"><div class="tt">⑨ 事件通知</div></div>
+    <div class="inventory panel abs" style="left:40px; top:232px; width:216px; height:144px"><div class="tt">③ 装备背包</div>
+      <div class="abs panel" style="left:12px; top:32px; width:56px; height:56px">🗡</div>
+      <div class="abs panel" style="left:80px; top:32px; width:56px; height:56px">🛡</div></div>
+    <div class="bench panel abs" style="left:40px; top:384px; width:216px; height:240px"><div class="tt">② 备战席</div>
+      <div class="abs unit p" style="left:14px; top:44px; width:52px; height:52px"></div></div>
+    <div class="fightbtn" style="left:268px; top:464px">开 战</div>
+    <div class="sellzone">出售区</div>
+    <div class="hint">拖拽棋子布阵 · 拖至右下出售区卖出 · 点开战</div>
+    <div class="synergy panel abs" style="left:1016px; top:336px; width:224px; height:288px"><div class="tt">⑤ 羁绊面板</div>
+      <div style="padding:8px; font-size:12px">兽人 2/6<br>亡灵 1/4<br>游侠 2/3</div></div>
+    <div class="board"></div>
+    <div class="unit p abs" style="left:458px; top:442px"></div>
+    <div class="unit p abs" style="left:586px; top:506px"></div>
+    <div class="unit p abs" style="left:650px; top:442px"></div>
+    <div class="unit p abs" style="left:778px; top:570px"></div>
+    <div class="unit e abs ghost" style="left:650px; top:246px"></div>
+    <div class="unit e abs ghost" style="left:522px; top:182px"></div>
+    <div class="unit e abs ghost" style="left:714px; top:310px"></div>
+  </div></div>
+  <div class="caption"><b>F0 备战期（现状）</b>——商店栏 / 开战按钮 / 出售区 / 布阵提示 / 备战席背包齐上；棋盘共享常驻，敌阵为半透明侦察虚影（虚线红框）。</div>
+</div>
+
+<div class="frame-wrap">
+  <div class="sizer"><div class="screen f1">
+    <div class="topbar-l abs" style="left:16px; top:14px">Lv.1 ◆ 10G</div>
+    <div class="topbar-r panel abs" style="left:1216px; top:12px">⏸</div>
+    <div class="shopbar">
+      <div class="card" style="left:180px">剑士<div class="cost">1G</div></div>
+      <div class="card" style="left:372px">弓手<div class="cost">1G</div></div>
+      <div class="card" style="left:564px">盾卫<div class="cost">2G</div></div>
+      <div class="card" style="left:756px">游侠<div class="cost">2G</div></div>
+      <div class="card" style="left:948px">术士<div class="cost">3G</div></div>
+      <div class="btn" style="left:1136px; top:14px; width:120px; height:40px; line-height:36px">刷新 <small>2G</small></div>
+      <div class="btn" style="left:1136px; top:66px; width:120px; height:40px; line-height:36px">买经验 <small>4G</small></div>
+    </div>
+    <div class="battlehud">
+      <div class="timer"><i></i></div><div class="timer-label">战场时间 60s</div>
+      <div class="btn" style="left:864px; top:36px; width:96px; height:44px; line-height:40px">×1</div>
+      <div class="btn" style="left:1040px; top:36px; width:96px; height:44px; line-height:40px">投降</div>
+    </div>
+    <div class="notify panel abs" style="left:40px; top:140px; width:256px; height:92px"><div class="tt">⑨ 事件通知</div></div>
+    <div class="inventory panel abs" style="left:40px; top:232px; width:216px; height:144px"><div class="tt">③ 装备背包</div></div>
+    <div class="bench panel abs" style="left:40px; top:384px; width:216px; height:240px"><div class="tt">② 备战席</div></div>
+    <div class="fightbtn" style="left:268px; top:464px">开 战</div>
+    <div class="sellzone">出售区</div>
+    <div class="hint">拖拽棋子布阵 · 点开战</div>
+    <div class="synergy panel abs" style="left:1016px; top:336px; width:224px; height:288px"><div class="tt">⑤ 羁绊面板</div></div>
+    <div class="board"></div>
+    <div class="unit p abs" style="left:458px; top:442px"></div>
+    <div class="unit p abs" style="left:586px; top:506px"></div>
+    <div class="unit p abs" style="left:650px; top:442px"></div>
+    <div class="unit p abs" style="left:778px; top:570px"></div>
+    <div class="unit e abs" style="left:650px; top:246px"></div>
+    <div class="unit e abs" style="left:522px; top:182px"></div>
+    <div class="unit e abs" style="left:714px; top:310px"></div>
+    <div class="tag" style="left:640px; top:690px">商店栏下滑离场 ↓（Q6：实机在底部）</div>
+    <div class="tag" style="left:640px; top:96px">战斗 HUD 自上缘外下落就位 ↓（常驻顶部，不接管槽位——Q6）</div>
+    <div class="tag" style="left:236px; top:496px">开战按钮 ←淡出</div>
+    <div class="tag" style="left:300px; top:300px">备战席/背包 ←滑出（Q1）</div>
+    <div class="tag" style="left:1040px; top:640px">羁绊面板置暗保留</div>
+    <div class="tag" style="left:470px; top:190px">棋盘轻微回正 zoom 1.06→1.0（Q4）</div>
+    <div class="tag" style="left:560px; top:120px">虚影实体化 = 敌军亮相</div>
+  </div></div>
+  <div class="caption"><b>F1 转场中（~0.3s / 0.6s，逻辑冻结）</b>——两屏缘各自进出：商店栏下滑离场（Q6：实机在底部）、战斗 HUD 自上缘外下落就位（常驻顶部，观感 = 经营层/战斗层整层交换）；备战件离场；敌阵虚影实体化（敌军亮相一拍）；棋盘镜头轻微回正聚焦。此期间输入禁用、计时器未走。</div>
+</div>
+
+<div class="frame-wrap">
+  <div class="sizer"><div class="screen f2">
+    <div class="topbar-l abs" style="left:16px; top:14px">Lv.1 ◆ 10G</div>
+    <div class="topbar-r panel abs" style="left:1216px; top:12px">⏸</div>
+    <div class="battlehud">
+      <div class="timer"><i></i></div><div class="timer-label">战场时间 60s（超时判负）</div>
+      <div class="btn" style="left:864px; top:36px; width:96px; height:44px; line-height:40px">×1</div>
+      <div class="btn" style="left:1040px; top:36px; width:96px; height:44px; line-height:40px">投降</div>
+    </div>
+    <div class="notify panel abs" style="left:40px; top:140px; width:256px; height:92px"><div class="tt">⑨ 事件通知</div></div>
+    <div class="synergy panel abs" style="left:1016px; top:336px; width:224px; height:288px"><div class="tt">⑤ 羁绊面板</div>
+      <div style="padding:8px; font-size:12px; opacity:.8">兽人 2/6<br>亡灵 1/4<br>游侠 2/3</div></div>
+    <div class="board"></div>
+    <div class="unit p abs" style="left:458px; top:442px"><div class="bars"><div class="hp"><i style="width:90%"></i></div><div class="ch"><i class="w55"></i></div></div></div>
+    <div class="unit p abs" style="left:586px; top:506px"><div class="bars"><div class="hp"><i style="width:75%"></i></div><div class="ch"><i class="w30"></i></div></div></div>
+    <div class="unit p abs" style="left:650px; top:442px"><div class="bars"><div class="hp"><i style="width:100%"></i></div><div class="ch"><i class="w70"></i></div></div></div>
+    <div class="unit p abs" style="left:778px; top:570px"><div class="bars"><div class="hp"><i style="width:60%"></i></div><div class="ch"><i class="w15"></i></div></div></div>
+    <div class="unit e abs" style="left:650px; top:246px"><div class="bars"><div class="hp"><i style="width:85%"></i></div><div class="ch"><i class="w20"></i></div></div></div>
+    <div class="unit e abs" style="left:522px; top:182px"><div class="bars"><div class="hp"><i style="width:100%"></i></div><div class="ch"><i class="w45"></i></div></div></div>
+    <div class="unit e abs" style="left:714px; top:310px"><div class="bars"><div class="hp"><i style="width:100%"></i></div><div class="ch"><i class="w60"></i></div></div></div>
+    <div class="tag" style="left:500px; top:646px">解冻：白条=出手蓄力，肉眼充能（首刀 1.1~2.4s 后）</div>
+  </div></div>
+  <div class="caption"><b>F2 战斗起步（0.6s 后，逻辑解冻）</b>——干净战场，棋盘成为绝对主角；头顶白色蓄力条从零充能（保留已落地的节奏件：计时器归零 + 蓄力条 + 攻速 ×0.6）；紧张感由"清场空拍 + 充能等待"承担。</div>
+</div>
+
+<h2>开放问题（2026-09-09 已全部裁决，裁决记录见 battle_intro_slide_transition.md 第五节）</h2>
+<ul class="qa">
+  <li><b>Q1</b> 备战席/背包要不要随转场滑出？图中取「滑出」（战场最净）；备选「原地置灰保留」（现状语义）。</li>
+  <li><b>Q2</b> 转场时长 <b>0.6s</b>（0.4~0.8 待调）——过短无仪式感，过长拖沓。</li>
+  <li><b>Q3</b> 战毕回备战是否<b>反向同款</b>（商店栏上滑回位、战斗 HUD 上升退场、备战席滑回——Q6 勘误后方向）？</li>
+  <li><b>Q4</b> 棋盘镜头回正（zoom 1.06→1.0）保留吗？去掉则纯 HUD 滑切，实现再省一档。</li>
+  <li><b>Q5</b> 替代风味「镜头上摇」（备战期偏看己方、开战上摇见全军）——不推荐：备战期需看全盘侦察敌阵。</li>
+  <li><b>Q6</b>（V1.1 勘误）商店栏⑧实机在<b>底部</b>（BattleScreen 装配无 setPosition；render §九表值与代码漂移系既有问题）——按<b>方案 A 就地适配</b>修正本图：⑧ 下滑离场/上滑回位、HUD 常驻顶部不接管槽位、「交接同一槽位」废弃。</li>
+</ul>
+<p class="note" style="margin-top:14px">机制说明：转场期复用现有开战冻结门控（introRemaining），仅时长 3s→0.6s；倒计时横幅 BattleIntroBanner 退役删除；攻速 ×0.6 / 计时器从零蓄力 / 头顶蓄力条三件套去一留二。详细文字版见 battle_intro_slide_transition.md。</p>
+
+<script>
+function replay(){
+  var d=document.getElementById('demo');
+  d.classList.remove('play');
+  void d.offsetWidth; // 重置动画
+  d.classList.add('play');
+}
+window.addEventListener('load', replay);
+</script>
+</body>
+</html>

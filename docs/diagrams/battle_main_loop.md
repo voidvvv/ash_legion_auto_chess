@@ -2,7 +2,7 @@
 
 > `BattleSystem.startBattle`（开战一次）与 `step`（60Hz 固定序五阶段）的全流程。
 > 浏览器查看版：`battle_main_loop.html`（双击打开）
-> 依据：`battle_design.md` §二（H 语义）/§五/§六；实现层口径见 `docs/spec_plan/2026-08-21_phase3_battle_engine.md` §三（#2 弹道相位插入、#3 互斥行动链、#15 判定序）
+> 依据：`battle_design.md` §二（H 语义）/§五/§六；实现层口径见 `docs/spec_plan/2026-08-21_phase3_battle_engine.md` §三（#2 弹道相位插入、#3 互斥行动链、#15 判定序）；开战转场「清场入阵」（2026-09-09 修订，取代 2026-09-02 倒计时案）详见 `battle_intro_slide_transition.md`
 
 ```mermaid
 flowchart TD
@@ -11,11 +11,15 @@ flowchart TD
         I1["玩家部署名单（Player 部署表 18 格）<br/>+ 敌方 WaveSpec 列表（Phase 2 产出）"]
         I2["IdIssuer 发号：玩家侧先（扫描序 y升 x升）<br/>→ 敌方后（WaveSpec 列表序 = 抽取序 + Boss 殿后）"]
         I3["SynergySystem 两侧双通道统计（race / class）<br/>→ StatPipeline 第一级基准快照（battle §八）"]
-        I4["开局效果落地（如兽人6 开局 SHIELD 30% maxHp）<br/>初始 HP=maxHp · 能量=0 · 攻击/移动计时器就绪"]
-        I5["按 id 序初始 findTarget（GDD §6.6 步骤1）"]
+        I4["开局效果落地（如兽人6 开局 SHIELD 30% maxHp）<br/>初始 HP=maxHp · 能量=0 · 攻击/移动计时器归零（2026-09-02 口径修订；2026-09-09 语境更新：转场后从零蓄力）"]
+        I5["按 id 序初始 findTarget（GDD §6.6 步骤 2）"]
         I1 --> I2 --> I3 --> I4 --> I5
     end
-    INIT --> STEP
+    INIT --> INTRO
+
+    INTRO["⏱ 开战转场 · 清场入阵 0.6s（0.4~0.8 待调，2026-09-09）<br/>逻辑冻结：step 不调用 · 计时器=0 · elapsed 不走（60s 超时钟不起表）· 零 RNG · 零 CombatEvent · 输入禁用<br/>渲染：备战 UI 滑出 / 战斗 HUD 落位 / 镜头回正 + 敌军亮相（战毕反向同款）——详见 battle_intro_slide_transition.md"]
+
+    INTRO --> STEP
 
     subgraph LOOP["BattleSystem.step · 每逻辑 tick（60Hz，固定序）"]
         direction TB
