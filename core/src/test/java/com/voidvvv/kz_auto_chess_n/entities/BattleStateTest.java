@@ -114,6 +114,34 @@ class BattleStateTest {
     }
 
     @Test
+    @DisplayName("开战转场字段：直构缺省不激活；begin → active；advance 递减至 0 不下穿")
+    void introCountdownLifecycle() {
+        BattleState state = state(unit(1, Side.PLAYER));
+        assertThat(state.isIntroCountdownActive()).isFalse(); // 直构（非 startBattle）无转场（口径 K2）
+        state.beginIntroCountdown(GameBalance.BATTLE_INTRO_TRANSITION_SECONDS);
+        assertThat(state.isIntroCountdownActive()).isTrue();
+        assertThat(state.getIntroRemaining())
+                .isCloseTo(GameBalance.BATTLE_INTRO_TRANSITION_SECONDS, within(1e-6f));
+        for (int i = 0; i < 35; i++) { // 0.6s = 36 步（浮点容差：35 步仍在转场）
+            state.advanceIntroCountdown(GameBalance.LOGIC_STEP);
+        }
+        assertThat(state.isIntroCountdownActive()).isTrue();
+        state.advanceIntroCountdown(GameBalance.LOGIC_STEP);
+        state.advanceIntroCountdown(GameBalance.LOGIC_STEP); // 越界不下穿
+        assertThat(state.isIntroCountdownActive()).isFalse();
+        assertThat(state.getIntroRemaining()).isEqualTo(0f);
+    }
+
+    @Test
+    @DisplayName("skipIntroCountdown：测试/调试后门，剩余清零直入主循环")
+    void skipIntroCountdownZerosRemaining() {
+        BattleState state = state(unit(1, Side.PLAYER));
+        state.beginIntroCountdown(GameBalance.BATTLE_INTRO_TRANSITION_SECONDS);
+        state.skipIntroCountdown();
+        assertThat(state.isIntroCountdownActive()).isFalse();
+    }
+
+    @Test
     @DisplayName("finish 置 outcome 后 isOver；aliveCount 按侧过滤清扫单位")
     void finishAndAliveQueries() {
         BattleUnit a = unit(1, Side.PLAYER);

@@ -7,6 +7,7 @@ import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.scenes.scene2d.Actor;
+import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.voidvvv.kz_auto_chess_n.command.CommandManager;
@@ -28,6 +29,7 @@ import com.voidvvv.kz_auto_chess_n.render.Assets;
 import com.voidvvv.kz_auto_chess_n.render.board.BattleRenderer;
 import com.voidvvv.kz_auto_chess_n.render.board.BoardGeometry;
 import com.voidvvv.kz_auto_chess_n.render.ui.BattleHud;
+import com.voidvvv.kz_auto_chess_n.render.ui.BattleTransitionController;
 import com.voidvvv.kz_auto_chess_n.render.ui.ChestDialog;
 import com.voidvvv.kz_auto_chess_n.render.ui.EquipPendingState;
 import com.voidvvv.kz_auto_chess_n.render.ui.HoverPreviewCard;
@@ -94,6 +96,10 @@ public final class BattleScreen implements Screen {
     private final ShoppingHud shoppingHud;
     private final BattleHud battleHud;
     private final ResultBanner resultBanner;
+    /** 开战转场驱动器（battle §二 / render §5.6；裁决 A）：UI 姿态 + worldCamera zoom + 输入封禁位 */
+    private final BattleTransitionController transitionController;
+    /** 全屏透明收点（仅转场窗口 touchable）：吞 UI 点击——render §5.6 转场期输入禁用的 UI 域封禁面（K6） */
+    private final Actor inputCatcher;
     private final RunEndPanel runEndPanel;
     private final ShopBar shopBar;
     private final InventoryPanel inventoryPanel;
@@ -189,6 +195,12 @@ public final class BattleScreen implements Screen {
         this.synergyPanel = new SynergyPanel(assets, contextSupplier());
         this.notificationPanel = new NotificationPanel(assets, contextSupplier(), commandManager);
         this.hoverPreview = new HoverPreviewCard(assets, contextSupplier());
+        // 开战转场装配（battle §二 / render §5.6）：收点先于控制器构造（控制器持有其引用）
+        this.inputCatcher = new Actor(); // 无绘制；空 ClickListener 即消费点击（ResultBanner.ClickCatcher 先例）
+        this.inputCatcher.setSize(BoardGeometry.VIRTUAL_W, BoardGeometry.VIRTUAL_H);
+        this.inputCatcher.addListener(new ClickListener());
+        this.transitionController = new BattleTransitionController(
+                worldCamera, shopBar, shoppingHud, battleHud, inventoryPanel, inputCatcher);
         this.chestDialog = new ChestDialog(commandManager, assets, data);
         this.unitDetailDialog = new UnitDetailDialog(commandManager, assets, contextSupplier(),
                 new UnitDetailDialog.CloseListener() {
@@ -225,6 +237,7 @@ public final class BattleScreen implements Screen {
         uiStage.addActor(synergyPanel);
         uiStage.addActor(notificationPanel);
         uiStage.addActor(hoverPreview); // 最上层：瞬态悬停卡（无输入监听，不阻断任何交互）
+        uiStage.addActor(inputCatcher); // 转场窗口全屏吞点击（render §5.6 输入禁用）：最顶层、仅转场期可命中
     }
 
     /** 上下文供应者（面板/横幅共用——值随 restartRun 换新） */
@@ -269,10 +282,10 @@ public final class BattleScreen implements Screen {
         battleHud.resetSpeed();
         this.boardProcessor = new BoardInputProcessor(worldViewport, commandManager,
                 contextSupplier(),
-                new java.util.function.BooleanSupplier() { // 模态阻断位（Phase 4 预留位兑现）
+                new java.util.function.BooleanSupplier() { // 模态/转场阻断位（input §3）：弹窗或转场窗口期吞棋盘输入
                     @Override
                     public boolean getAsBoolean() {
-                        return dialogManager.isShowing();
+                        return dialogManager.isShowing() || transitionController.isInputBlocked();
                     }
                 },
                 new java.util.function.IntConsumer() { // 死区点击：装备待定落点 / 详情弹窗
@@ -301,6 +314,13 @@ public final class BattleScreen implements Screen {
     public void render(float delta) {
         ScreenUtils.clear(0.05f, 0.04f, 0.08f, 1f); // 清屏（与菜单/装载屏同底色）：否则棋盘外区域无重绘，拖拽 ghost 与已隐藏 HUD 留余像
         boolean frozen = paused || dialogManager.isShowing(); // 模拟冻结（口径 #14：暂停或任一弹窗模态）
+        GamePhase phase = runContext.getRunState().getPhase(); // 前提：转场驱动器与绘制同帧同相位
+        // 开战转场驱动（battle §二 / render §5.6）：先于 worldViewport.apply() 写 zoom；dt 冻结感知——反向自计时随暂停停走
+        transitionController.update(phase,
+                phase == GamePhase.BATTLE && runContext.getBattleState() != null
+                        && runContext.getBattleState().isIntroCountdownActive()
+                        ? runContext.getBattleState().getIntroRemaining() : 0f,
+                frozen ? 0f : delta);
         if (!frozen) {
             stepSimulation(delta);
             renderClock += delta;
@@ -310,8 +330,8 @@ public final class BattleScreen implements Screen {
         float alpha = frozen ? 0f : accumulator / GameBalance.LOGIC_STEP;
         worldViewport.apply();
         batch.setProjectionMatrix(worldCamera.combined);
-        battleRenderer.draw(batch, runContext, alpha, renderClock, frozen ? 0f : delta, boardProcessor);
-        GamePhase phase = runContext.getRunState().getPhase();
+        battleRenderer.draw(batch, runContext, alpha, renderClock, frozen ? 0f : delta, boardProcessor,
+                transitionController.benchOffsetX(), transitionController.chromeFadeAlpha());
         if (phase == GamePhase.RUN_END && !runEndSettled) { // 档案结算每局一次（裁决 D11）
             runEndSettled = true;
             ProfileService.Settlement settlement = metaService.settleRun(data, runContext);
@@ -331,7 +351,8 @@ public final class BattleScreen implements Screen {
         if (phase == GamePhase.SHOPPING) {
             shopBar.refresh(runContext);
         }
-        inventoryPanel.refresh(); // ③⑤⑨ 全程可见（BATTLE 置灰在各自 draw 内，差异声明 #8）
+        transitionController.applyUiPose(); // 转场姿态覆写（⑥⑧HUD③ + Catcher；稳态归零不越权——K7）
+        inventoryPanel.refresh(); // ⑤⑨ 全程可见（BATTLE 置灰在各自 draw 内，差异声明 #8）；③ 稳态可见性归转场驱动器（K7）
         synergyPanel.refresh(runContext);
         notificationPanel.refresh(runContext);
         notificationPanel.syncBattle(runContext.getBattleState());

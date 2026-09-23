@@ -19,6 +19,19 @@ public final class GameBalance {
     public static final float CRIT_CHANCE = 0.20f;
     public static final float CRIT_MULTIPLIER = 1.5f;
 
+    /** 全局攻速系数（battle §5.1：敌我对称、只在消耗点乘算——BattleUnit.attackInterval() 一处；1 = 关闭） */
+    public static final float ATTACK_SPEED_GLOBAL_FACTOR = 0.6f;
+
+    // —— 开战转场「清场入阵」（battle §二 / render §5.6；2026-09-09 修订取代 2026-09-02 倒计时案）——
+    /** 开战转场时长秒数（区间 0.4~0.8 待调；0 = 关闭转场——直接解冻且输入禁用窗口消失，软回滚杠杆 K11） */
+    public static final float BATTLE_INTRO_TRANSITION_SECONDS = 0.6f;
+    /** 备战期镜头基线 zoom（Q4：备战微拉远，开战回正 1.0「聚焦战场」；非整数缩放有轻微像素闪烁风险——计划 §8 W2） */
+    public static final float SHOPPING_CAMERA_ZOOM = 1.06f;
+    /** ② 备战席 / ③ 背包 / ⑥ 开战按钮 左滑（左移）距离，虚拟像素（≥ 备战席宽 108 + 留白；⑥ 同时淡出完成离场；待调） */
+    public static final float BATTLE_TRANSITION_SLIDE_LEFT_PX = 140f;
+    /** ⑧ 商店栏下滑 / 战斗 HUD 下落的单侧屏缘出场距离，虚拟像素（≥ 商店栏高 64 + 留白；待调） */
+    public static final float BATTLE_TRANSITION_SLIDE_EDGE_PX = 72f;
+
     // —— 能量 ——
     public static final int ENERGY_MAX = 100;
     public static final int ENERGY_PER_HIT = 10;

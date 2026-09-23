@@ -119,13 +119,19 @@ public final class BattleSystem {
         applyOpeningEffects(state, playerSynergies, Side.PLAYER);
         applyOpeningEffects(state, enemySynergies, Side.ENEMY);
         targeting.retargetAll(state); // 按 id 序初始索敌
+        state.beginIntroCountdown(GameBalance.BATTLE_INTRO_TRANSITION_SECONDS); // 开战转场 0.6s（battle §二清场入阵）
         return state;
     }
 
-    /** 推进一个 LOGIC_STEP（五阶段固定序）；战斗已结束则空操作 */
+    /** 推进一个 LOGIC_STEP（五阶段固定序）；开战转场期间仅推转场时钟（battle §二实现落点②「step 门控」：
+     *  主循环五阶段整体不执行——elapsed/RNG/事件/计时器/能量全冻结）；战斗已结束则空操作 */
     public void step(BattleState state) {
         Objects.requireNonNull(state, "state 不能为 null");
         if (state.isOver()) {
+            return;
+        }
+        if (state.isIntroCountdownActive()) {
+            state.advanceIntroCountdown(GameBalance.LOGIC_STEP); // ×2 快进 = 同一 accumulator 通路，无特判
             return;
         }
         state.beginTick();

@@ -190,6 +190,58 @@ class BattleSystemTest {
         assertThat(state.getUnits().get(6).getStatuses()).hasSize(1); // 敌方首位同样有盾
     }
 
+    // —— 开战铺垫（battle §二）——
+
+    @Test
+    @DisplayName("开战转场冻结清单（battle §二）：转场期间 tick/elapsed/事件/RNG/计时器全冻结，归零后主循环起步")
+    void introCountdownFreezesMainLoop() {
+        GameData data = data();
+        Player player = deployPlayer(data, data.getUnit("orc"), 2, 4);
+        List<WaveSpec> wave = waveOf(data.getUnit("grunt"), 1f, 2, 0);
+        BattleState state = start(data, player, wave, 42L);
+
+        assertThat(state.isIntroCountdownActive()).isTrue();
+        assertThat(state.getIntroRemaining())
+                .isCloseTo(GameBalance.BATTLE_INTRO_TRANSITION_SECONDS, within(1e-6f));
+        int rngBefore = state.getRng().getConsumedCount();
+        for (int i = 0; i < 35; i++) { // 0.6s = 36 步（浮点容差：35 步仍在转场）
+            SYSTEM.step(state);
+        }
+        assertThat(state.getTick()).isZero();          // beginTick 未达
+        assertThat(state.getElapsed()).isEqualTo(0f);   // 60s 超时钟不起表
+        assertThat(state.getEvents()).isEmpty();        // 零 CombatEvent
+        assertThat(state.getRng().getConsumedCount()).isEqualTo(rngBefore); // 零 RNG
+        assertThat(state.getUnits().get(0).getAttackTimer()).isEqualTo(0f); // 计时器保持 0
+
+        for (int i = 35; i < 41; i++) { // 转场归零后主循环刚起步（± 浮点余量，口径 K1）
+            SYSTEM.step(state);
+        }
+        assertThat(state.isIntroCountdownActive()).isFalse();
+        assertThat(state.getTick()).isBetween(1, 6);    // 主循环刚起步
+        assertThat(state.getElapsed())                  // elapsed 恒 = tick × LOGIC_STEP（不含转场）
+                .isCloseTo(state.getTick() * GameBalance.LOGIC_STEP, within(1e-5f));
+    }
+
+    @Test
+    @DisplayName("首刀延后（§5.1 修订）：铺垫后从零蓄力，首个出手 = 满 1/(aspd×0.6) 秒")
+    void firstAttackDelayedByFullInterval() {
+        GameData data = data();
+        Player player = deployPlayer(data, ranged("sentry", 10000, 1, 1f), 2, 4); // 射程 3，敌 (2,1) 距 3：开局即在射程
+        List<WaveSpec> wave = waveOf(melee("dummy", "哥布林", 10000, 1, 1f), 1f, 2, 1);
+        BattleState state = start(data, player, wave, 42L);
+        state.skipIntroCountdown(); // 隔离变量：本用例只验证蓄力口径，不验证铺垫
+        int launchTick = -1;
+        for (int i = 0; i < 120 && launchTick < 0; i++) {
+            SYSTEM.step(state);
+            for (CombatEvent e : state.getEvents()) {
+                if (e.getType() == CombatEvent.Type.ATTACK_LAUNCHED && e.getSourceId() == 1) {
+                    launchTick = e.getTick();
+                }
+            }
+        }
+        assertThat(launchTick).isBetween(100, 101); // 1/(1×0.6) = 1.6667s ≈ 100 tick（浮点容差 ±1）
+    }
+
     // —— 主循环 ——
 
     @Test
@@ -199,9 +251,11 @@ class BattleSystemTest {
         Player player = deployPlayer(data, data.getUnit("orc"), 2, 4);
         List<WaveSpec> wave = waveOf(data.getUnit("grunt"), 1f, 2, 1);
         BattleState state = start(data, player, wave, 42L);
+        state.skipIntroCountdown(); // 既有用例关注主循环语义，跳过开战铺垫（battle §二新口径）
 
-        SYSTEM.step(state); // tick1：双方各走一步（玩家先动、占 (2,3)；敌方跟进 (2,2)）
-        SYSTEM.step(state); // tick2：双方同处射程起点——id 1 先结算
+        for (int i = 0; i < 120; i++) { // 归零蓄力：接敌 60 tick + 首刀 100 tick（浮点余量）
+            SYSTEM.step(state);
+        }
         CombatEvent firstHit = null;
         for (CombatEvent e : state.getEvents()) {
             if (e.getType() == CombatEvent.Type.HIT) {
@@ -221,6 +275,7 @@ class BattleSystemTest {
         Player player = deployPlayer(data, data.getUnit("orc"), 2, 6);
         List<WaveSpec> wave = waveOf(data.getUnit("grunt"), 1f, 2, 0);
         BattleState state = start(data, player, wave, 42L);
+        state.skipIntroCountdown(); // 既有用例关注主循环语义，跳过开战铺垫（battle §二新口径）
         BattleUnit playerUnit = state.getUnits().get(0);
         playerUnit.setEnergy(100f);
         int y = playerUnit.getGridY();
@@ -237,19 +292,22 @@ class BattleSystemTest {
         // 口径 #6：技能直伤同样触发攻守回能——清零后攻击者又 +10
         assertThat(playerUnit.getEnergy()).isEqualTo(10f);
 
-        SYSTEM.step(state); // 能量清零后走步恢复
+        for (int i = 0; i < 70; i++) { // 首步 60 tick（归零蓄力）后走步恢复
+            SYSTEM.step(state);
+        }
         assertThat(playerUnit.getGridY()).isLessThan(y);
     }
 
     @Test
-    @DisplayName("计时器结转（口径 #4）：aspd 2 → 0.5s/击，150 tick 内 4~6 次普攻无掉次")
+    @DisplayName("计时器结转（口径 #4）：aspd 2 → 1/(2×0.6)s/击，300 tick 内 4~6 次普攻无掉次")
     void attackTimerCarryOver() {
         GameData data = data();
         Player player = deployPlayer(data, melee("tank", "兽人", 5000, 1, 2f), 2, 4);
         List<WaveSpec> wave = waveOf(melee("etank", "哥布林", 5000, 1, 2f), 1f, 2, 2);
         BattleState state = start(data, player, wave, 42L);
+        state.skipIntroCountdown(); // 既有用例关注主循环语义，跳过开战铺垫（battle §二新口径）
 
-        for (int i = 0; i < 150; i++) {
+        for (int i = 0; i < 300; i++) { // 间隔 50 tick + 接敌 60 tick：出手 60/110/…/260 共 5 次
             SYSTEM.step(state);
         }
         int hits = 0;
@@ -265,11 +323,13 @@ class BattleSystemTest {
     @DisplayName("H 语义互秒（口径 #15 从严）：同 tick 双双 HP≤0 均进清扫，判 ENEMY_WIN")
     void mutualKillSameTick() {
         GameData data = data();
-        Player player = deployPlayer(data, melee("duel", "兽人", 250, 100, 1f), 2, 4);
-        List<WaveSpec> wave = waveOf(melee("eduel", "哥布林", 250, 100, 1f), 1f, 2, 2);
+        Player player = deployPlayer(data, melee("duel", "兽人", 200, 100, 1f), 2, 4);
+        List<WaveSpec> wave = waveOf(melee("eduel", "哥布林", 200, 100, 1f), 1f, 2, 2);
         BattleState state = start(data, player, wave, 42L);
+        state.skipIntroCountdown(); // 既有用例关注主循环语义，跳过开战铺垫（battle §二新口径）
 
-        SYSTEM.runToEnd(state, 300);
+        // hp=2×atk：一刀（含暴击 150）必不致死、两刀（无暴击 100）必杀 → 同 tick 双灭与暴击 roll 序列无关
+        SYSTEM.runToEnd(state, 400); // 双灭落 tick 200（间隔 100 + 接敌 60），留余量
         int deaths = 0;
         int deathTick = -1;
         for (CombatEvent e : state.getEvents()) {
@@ -305,6 +365,7 @@ class BattleSystemTest {
         player.deploy(observerUnit, 1, 4);
         List<WaveSpec> wave = waveOf(melee("weak", "哥布林", 50, 0, 1f), 1f, 2, 0, 4, 0);
         BattleState state = start(data, player, wave, 42L);
+        state.skipIntroCountdown(); // 既有用例关注主循环语义，跳过开战铺垫（battle §二新口径）
 
         BattleUnit firstEnemy = state.getUnits().get(2); // id 3
         BattleUnit secondEnemy = state.getUnits().get(3); // id 4
@@ -328,6 +389,7 @@ class BattleSystemTest {
         Player player = deployPlayer(data, lowHpObserver, 2, 4);
         List<WaveSpec> wave = waveOf(melee("e1", "哥布林", 1000, 1, 1f), 1f, 1, 0, 4, 0);
         BattleState state = start(data, player, wave, 42L);
+        state.skipIntroCountdown(); // 既有用例关注主循环语义，跳过开战铺垫（battle §二新口径）
         BattleUnit observer = state.getUnits().get(0);
         assertThat(observer.getTargetId()).isEqualTo(2); // 满血平局 → 距离近者
 
@@ -372,6 +434,7 @@ class BattleSystemTest {
         Player player = deployPlayer(data, melee("immortal", "兽人", 100000, 1, 1f), 2, 4);
         List<WaveSpec> wave = waveOf(melee("eimmortal", "哥布林", 100000, 1, 1f), 1f, 2, 0);
         BattleState state = start(data, player, wave, 42L);
+        state.skipIntroCountdown(); // 既有用例关注主循环语义，跳过开战铺垫（battle §二新口径）
 
         SYSTEM.runToEnd(state, 100);
         assertThat(state.isOver()).isFalse();
@@ -385,9 +448,10 @@ class BattleSystemTest {
         Player player = deployPlayer(data, ranged("archer", 10000, 1, 1f), 2, 4); // 射程 3：开局即在射程
         List<WaveSpec> wave = waveOf(melee("target", "哥布林", 10000, 1, 1f), 1f, 2, 0);
         BattleState state = start(data, player, wave, 42L);
-        state.getUnits().get(1).setEnergy(95f); // 受击 +5 → 跨百（敌在 4 格外，首个能量事件必为受击）
+        state.skipIntroCountdown(); // 既有用例关注主循环语义，跳过开战铺垫（battle §二新口径）
+        state.getUnits().get(1).setEnergy(85f); // 敌近战 +10 → 95，弹道受击 +5 → 跨百（近战先于弹道落地，2026-09-02 修订）
 
-        for (int i = 0; i < 60; i++) { // 弹道对开进目标：对向闭合约 7 格/秒
+        for (int i = 0; i < 240; i++) { // 走位 60 + 蓄力 100 + 弹道 ~30 tick（归零蓄力 + 系数 0.6）
             SYSTEM.step(state);
         }
         int hitTick = -1;

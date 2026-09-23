@@ -79,7 +79,7 @@
 | 1 | 棋盘 6×7 全场可通行可停留（含缓冲第 3 行与对方布阵区）；`grid[x][y]` 索引 [列][行]（沿 `WaveGenerator.java:63` 的 `occupied[x][y]` 先例，GDD §4.4 `boardGrid[6][7]`） | 敌区 0~2 与玩家区 4~6 不相邻，近战必须穿第 3 行才能接敌 |
 | 2 | 主循环在 battle §二四阶段中**插入弹道推进**：①状态推进 → ②弹道推进 → ③逐单位行动 → ④死亡清扫 → ⑤胜负判定 | §二未列弹道相位；暴击 RNG 仅在发射时消耗，插入位置不影响 RNG 序，只影响到达伤害先于/后于本 tick 后续单位行动——定为"先落地"，与"伤害立即落地，后行动者看到最新血量"一致 |
 | 3 | 行动链**严格互斥**（battle §二 if/else 链为准）：被控制→跳过 / 目标失效→重选 / 能量满→施放 / 射程内→出手 / 否则→走一步，每 tick 每单位至多一个行动。§5.1"同 tick 可先后各触发一次"解读为**两种计时器独立累计、互不重置、结转余数**，非一 tick 双动作 | 避免移动当 tick 即出手等效攻速膨胀；改回为"先移后攻"仅一行变更，留作数值调优开关 |
-| 4 | 攻击/移动计时器每 tick 恒累计（与是否在射程无关），出手/走步消耗后**结转余数**；开局即就绪 | battle §5.1"开战即就绪（无前摇）"——计时器是冷却不是蓄力 |
+| 4 | 攻击/移动计时器每 tick 恒累计（与是否在射程无关），出手/走步消耗后**结转余数**；开战铺垫倒计时后从零蓄力（2026-09-02 修订「开局即就绪」，battle §5.1 修订记录；实施见 2026-09-02_battle_pacing.md；2026-09-09 语境修订：铺垫形式 = 开战转场「清场入阵」0.6s，机制不变——实施见 2026-09-09_battle_intro_transition.md） | battle §5.1（V1.7 修订）——计时器是蓄力不是冷却 |
 | 5 | 能量封顶：延后施放期间能量钳制 100 不上溢；回能乘数取**获得者自身** `energyGainRate/100`；被控制期间回能完全冻结（+10/+5 均不获得） | GDD §6.5"眩晕时暂停积攒"；战歌号角类"全体友军回能 +15%"即每单位各自 ×1.15 |
 | 6 | 技能直伤（DAMAGE 效果）与普攻同走唯一管线 → **同样触发攻守回能**（+10/+5）；HEAL / SHIELD / APPLY_STATUS / DOT / 落空不触发 | battle §5.2 回能步写在共用管线内部（`docs/battle_design.md:159`），按字面执行 |
 | 7 | 数值精度：管线内 **float 全精度直存**（currentHp / energy / 事件 amount 均 float，无中间取整）；显示层取整留 Phase 4；断言用 AssertJ `isCloseTo` | 避免多次取整漂移；JVM 浮点运算按规范舍入，同 seed 回放逐位一致（配 `RandomGenerator` 位级确定） |
@@ -462,7 +462,7 @@ public final class BattleSystem {
      *  玩家侧 getDeployedUnits()（扫描序）+ 敌方 WaveSpec 列表序 → IdIssuer 发号（口径 #16）
      *  → 两侧 SynergySystem.resolve → StatPipeline.deriveBaseline（scale：玩家 1.0 / 敌方 spec.getScale()）
      *  → BattleState 布格 → 开局效果落地（openingEffects，口径 #17）
-     *  → HP=maxHp、能量 0、计时器就绪 → 按 id 序初始 findTarget */
+     *  → HP=maxHp、能量 0、计时器归零 + 开战铺垫倒计时开启（2026-09-02 修订）→ 按 id 序初始 findTarget */
     public BattleState startBattle(Player player, List<WaveSpec> enemyWave,
                                    GameData data, RandomGenerator rng, IdIssuer idIssuer);
 

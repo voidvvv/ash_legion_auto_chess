@@ -52,9 +52,9 @@ public final class BattleUnit {
         this.baseStats = Objects.requireNonNull(baseStats, "baseStats 不能为 null");
         this.currentHp = baseStats.getHp();
         this.effectiveStats = baseStats;
-        // 开局即就绪（口径 #4）：计时器初始已满——计时器是冷却不是蓄力
-        this.attackTimer = 1f / baseStats.getAttackSpeed();
-        this.moveTimer = 1f / baseStats.getMoveSpeed();
+        // 开战铺垫后从零蓄力（口径 #4 修订，2026-09-02）：计时器初始为 0——首刀/首步各延后一个完整间隔
+        this.attackTimer = 0f;
+        this.moveTimer = 0f;
     }
 
     // —— 只读 ——
@@ -111,9 +111,10 @@ public final class BattleUnit {
         return !cleaned;
     }
 
-    /** 攻击间隔（秒）：1 / 有效攻速 */
+    /** 攻击间隔（秒）：1 / (有效攻速 × 全局攻速系数)——系数只在消耗点乘算（battle §5.1，2026-09-02；
+     *  canActOnAttackTimer/consumeAttackTimer/蓄力条显示共用本式，units.json 与属性管线不动） */
     public float attackInterval() {
-        return 1f / getEffective(StatKey.ATTACK_SPEED);
+        return 1f / (getEffective(StatKey.ATTACK_SPEED) * GameBalance.ATTACK_SPEED_GLOBAL_FACTOR);
     }
 
     /** 攻击计时器当前值（只读观察，测试与调试用） */
