@@ -164,11 +164,13 @@ public final class BattleTransitionController {
 
     /** 镜头 zoom（K4：SHOPPING 稳态 1.06、其余稳态 1.0、转场线性插值）：随备战层淡出系数同步回正——
      *  chrome 全显（转场起点/SHOPPING 稳态）= 1.06，chrome 全隐（BATTLE 稳态）= 1.0，同一转场窗单一真相源。
-     *  整体基准 ×RENDER_GLOBAL_SCALE（2026-11-21 主人反馈 UI 偏大：世界域与 UI 域根缩放同系数、
-     *  同一中心点——两域足迹恒重合，棋盘/备战席/面板不错位） */
+     *  整体缩小（2026-11-21 主人整改）：<b>除以</b> RENDER_GLOBAL_SCALE——libGDX zoom 语义 = 可见世界 ÷ 画布
+     *  （zoom>1 拉远、内容变小），内容缩小 s 倍 ⇔ 可见世界放大 1/s ⇔ zoom = 基准 / s。回归修复
+     *  2026-11-21：初版误乘 s（zoom=0.8 → 放大 1.25，备战席/出售区出屏）——两域统一屏幕映射
+     *  screen(v) = (v−C)·s + C（C=屏心 320,180），s ≤ 1 时 640×360 全部布局恒在视口内 */
     private float zoom() {
-        return GameBalance.RENDER_GLOBAL_SCALE
-                * (1f + (GameBalance.SHOPPING_CAMERA_ZOOM - 1f) * chromeFadeAlpha());
+        return (1f + (GameBalance.SHOPPING_CAMERA_ZOOM - 1f) * chromeFadeAlpha())
+                / GameBalance.RENDER_GLOBAL_SCALE;
     }
 
     /** 像素取整吸附（render §八；zoom 插值除外——Q4 镜头域） */

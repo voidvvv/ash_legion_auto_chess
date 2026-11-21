@@ -12,8 +12,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 
 /** 开战转场驱动器状态机测试（battle §二 / render §5.6；headless——Actor/OrthographicCamera 零 GL）。
- *  zoom 断言全部乘 RENDER_GLOBAL_SCALE（2026-11-21 主人整改「UI 整体缩小」：世界域 zoom 基准 ×0.8，
- *  SHOPPING 稳态 0.848 / BATTLE 稳态 0.8——相对拉远差 6% 语义不变）。 */
+ *  zoom 断言全部除以 RENDER_GLOBAL_SCALE（libGDX zoom = 可见世界 ÷ 画布：缩小 0.8 倍 ⇔ zoom ÷0.8，
+ *  SHOPPING 稳态 1.06/0.8 = 1.325 / BATTLE 稳态 1/0.8 = 1.25——相对拉远差 6% 语义不变；
+ *  回归修复 2026-11-21：初版误乘致世界放大 1.25、备战席/出售区出屏）。 */
 class BattleTransitionControllerTest {
 
     private OrthographicCamera camera;
@@ -51,7 +52,7 @@ class BattleTransitionControllerTest {
         controller.update(GamePhase.SHOPPING, 0f, GameBalance.LOGIC_STEP);
         controller.applyUiPose();
         assertThat(camera.zoom).isCloseTo(
-                GameBalance.RENDER_GLOBAL_SCALE * GameBalance.SHOPPING_CAMERA_ZOOM, within(1e-6f));
+                GameBalance.SHOPPING_CAMERA_ZOOM / GameBalance.RENDER_GLOBAL_SCALE, within(1e-6f));
         assertThat(controller.benchOffsetX()).isZero();
         assertThat(controller.chromeFadeAlpha()).isEqualTo(1f);
         assertThat(controller.isInputBlocked()).isFalse();
@@ -75,14 +76,14 @@ class BattleTransitionControllerTest {
 
         runForward(GameBalance.BATTLE_INTRO_TRANSITION_SECONDS, 18); // 半程
         assertThat(camera.zoom)
-                .isCloseTo(GameBalance.RENDER_GLOBAL_SCALE * (1f + GameBalance.SHOPPING_CAMERA_ZOOM) / 2f,
+                .isCloseTo((1f + GameBalance.SHOPPING_CAMERA_ZOOM) / 2f / GameBalance.RENDER_GLOBAL_SCALE,
                         within(1e-4f));
         assertThat(controller.chromeFadeAlpha()).isCloseTo(0.5f, within(0.05f));
 
         runForward(GameBalance.BATTLE_INTRO_TRANSITION_SECONDS / 2f, 18); // 后半程：remaining 0.3 → 0
         controller.update(GamePhase.BATTLE, 0f, GameBalance.LOGIC_STEP); // 解冻帧（remaining==0 显式兜底）
         controller.applyUiPose();
-        assertThat(camera.zoom).isCloseTo(GameBalance.RENDER_GLOBAL_SCALE * 1f, within(1e-6f));
+        assertThat(camera.zoom).isCloseTo(1f / GameBalance.RENDER_GLOBAL_SCALE, within(1e-6f));
         assertThat(controller.isInputBlocked()).isFalse();
         assertThat(catcher.isVisible()).isFalse();
         assertThat(shopBar.getY()).isZero();                       // 稳态位姿归零
@@ -100,7 +101,7 @@ class BattleTransitionControllerTest {
         controller.update(GamePhase.BATTLE,
                 GameBalance.BATTLE_INTRO_TRANSITION_SECONDS / 2f, GameBalance.LOGIC_STEP); // ×2 快进一瞬
         assertThat(camera.zoom)
-                .isCloseTo(GameBalance.RENDER_GLOBAL_SCALE * (1f + GameBalance.SHOPPING_CAMERA_ZOOM) / 2f,
+                .isCloseTo((1f + GameBalance.SHOPPING_CAMERA_ZOOM) / 2f / GameBalance.RENDER_GLOBAL_SCALE,
                         within(1e-4f));
     }
 
@@ -121,7 +122,7 @@ class BattleTransitionControllerTest {
         }
         controller.applyUiPose();
         assertThat(camera.zoom).isCloseTo(
-                GameBalance.RENDER_GLOBAL_SCALE * GameBalance.SHOPPING_CAMERA_ZOOM, within(1e-6f));
+                GameBalance.SHOPPING_CAMERA_ZOOM / GameBalance.RENDER_GLOBAL_SCALE, within(1e-6f));
         assertThat(controller.isInputBlocked()).isFalse();
         assertThat(controller.chromeFadeAlpha()).isEqualTo(1f);
         assertThat(inventoryPanel.isVisible()).isTrue();
@@ -136,7 +137,7 @@ class BattleTransitionControllerTest {
         controller.applyUiPose();
         assertThat(controller.isInputBlocked()).isFalse();
         assertThat(catcher.isVisible()).isFalse();
-        assertThat(camera.zoom).isCloseTo(GameBalance.RENDER_GLOBAL_SCALE * 1f, within(1e-6f));
+        assertThat(camera.zoom).isCloseTo(1f / GameBalance.RENDER_GLOBAL_SCALE, within(1e-6f));
         assertThat(controller.chromeFadeAlpha()).isZero();
     }
 
@@ -150,7 +151,7 @@ class BattleTransitionControllerTest {
         assertThat(catcher.isVisible()).isFalse();
         assertThat(controller.chromeFadeAlpha()).isEqualTo(1f);
         assertThat(camera.zoom).isCloseTo(
-                GameBalance.RENDER_GLOBAL_SCALE * GameBalance.SHOPPING_CAMERA_ZOOM, within(1e-6f));
+                GameBalance.SHOPPING_CAMERA_ZOOM / GameBalance.RENDER_GLOBAL_SCALE, within(1e-6f));
     }
 
     @Test

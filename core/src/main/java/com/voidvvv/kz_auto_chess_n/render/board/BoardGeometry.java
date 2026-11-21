@@ -87,6 +87,40 @@ public final class BoardGeometry {
     private BoardGeometry() {
     }
 
+    // —— 整体渲染缩放布局数学（2026-11-21 整改 + 回归修复；纯 JVM 可测） ——
+
+    /**
+     * worldCamera 可见世界矩形（标准 FitViewport 相机位 = 画布中心 (320,180)，libGDX zoom 语义 =
+     * 可见世界 ÷ 画布）：{x, y, w, h} = (320−320z, 180−180z, 640z, 360z)。
+     * 内容缩小 s 倍 ⇔ zoom = 1/s（BattleTransitionController.zoom 除法基准）。
+     */
+    public static float[] visibleWorldRect(float zoom) {
+        float halfW = VIRTUAL_W / 2f * zoom;
+        float halfH = VIRTUAL_H / 2f * zoom;
+        return new float[]{VIRTUAL_W / 2f - halfW, VIRTUAL_H / 2f - halfH, halfW * 2f, halfH * 2f};
+    }
+
+    /**
+     * UI 域根缩放后的内容矩形（Stage 根 setScale(s) + 居中 setPosition）：
+     * {x, y, w, h} = (640(1−s)/2, 360(1−s)/2, 640s, 360s)——与世界域同中心，
+     * 两域统一屏幕映射 screen(v) = (v−C)·s + C。
+     */
+    public static float[] uiContentRect(float uiScale) {
+        float w = VIRTUAL_W * uiScale;
+        float h = VIRTUAL_H * uiScale;
+        return new float[]{(VIRTUAL_W - w) / 2f, (VIRTUAL_H - h) / 2f, w, h};
+    }
+
+    /** 统一屏幕映射：世界坐标或 UI 子坐标 v → 屏幕坐标（C = 画布中心；两域同式） */
+    public static float screenX(float v, float scale) {
+        return (v - VIRTUAL_W / 2f) * scale + VIRTUAL_W / 2f;
+    }
+
+    /** 同 {@link #screenX}（y 轴） */
+    public static float screenY(float v, float scale) {
+        return (v - VIRTUAL_H / 2f) * scale + VIRTUAL_H / 2f;
+    }
+
     // —— 棋盘格 ↔ 像素 ——
 
     public static int[] cellCenter(int gridX, int gridY) {

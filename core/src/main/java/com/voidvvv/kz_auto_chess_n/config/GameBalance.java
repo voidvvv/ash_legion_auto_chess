@@ -22,8 +22,10 @@ public final class GameBalance {
     public static final float ATTACK_SPEED_GLOBAL_FACTOR = 0.6f;
 
     /** UI/世界整体渲染缩放（2026-11-21 主人反馈「所有 UI 偏大」：整体调小一档 = 0.8×；
-     *  消费点两处——BattleTransitionController.zoom() 的 worldCamera 基准与 BattleScreen 的
-     *  uiStage/dialogStage 根缩放（同一中心点，UI 域与世界域足迹重合不错位）；1.0 = 恢复原大小 */
+     *  消费点两处——BattleTransitionController.zoom() 的 worldCamera 基准（<b>除以</b> s：libGDX zoom
+     *  = 可见世界 ÷ 画布，缩小 s 倍 ⇔ zoom = 基准/s）与 BattleScreen 的 uiStage/dialogStage 根缩放
+     *  （<b>乘</b> s、居中）。两域统一屏幕映射 screen(v)=(v−C)·s+C（C=屏心），s ≤ 1 时全部布局恒在视口；
+     *  1.0 = 恢复原大小 */
     public static final float RENDER_GLOBAL_SCALE = 0.8f;
 
     // —— 开战转场「清场入阵」（battle §二 / render §5.6；2026-09-09 修订取代 2026-09-02 倒计时案）——
