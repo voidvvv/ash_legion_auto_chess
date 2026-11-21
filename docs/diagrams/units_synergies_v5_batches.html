@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>棋子与羁绊 v5 落地——批次切分与验证门</title>
+<style>
+  body { background:#171a21; color:#d8dce4; font-family:"Microsoft YaHei",sans-serif; margin:0; padding:24px; }
+  h1 { font-size:20px; color:#f1c40f; margin:0 0 4px; }
+  .sub { color:#8b93a3; font-size:12px; margin-bottom:16px; }
+  .wrap { max-width:1120px; margin:0 auto; }
+  .chain { display:flex; flex-direction:column; gap:8px; margin-bottom:14px; }
+  .batch { border-radius:8px; padding:10px 16px; font-size:13px; line-height:1.8; }
+  .batch b { font-size:14px; }
+  .b0 { background:#15241d; border:1px solid #27ae60; } .b0 b { color:#a9e8bd; }
+  .b1 { background:#1e3a2a; border:1px dashed #27ae60; } .b1 b { color:#a9e8bd; }
+  .b2 { background:#241a1c; border:1px solid #c0392b; } .b2 b { color:#e8a9a9; }
+  .b3 { background:#3a2226; border:1px dashed #c0392b; } .b3 b { color:#e8a9a9; }
+  .b4 { background:#1c2230; border:1px solid #5dade2; } .b4 b { color:#9dcbf0; }
+  .b5 { background:#2b2b3a; border:1px solid #a569bd; } .b5 b { color:#dcc8ee; }
+  .arrow { text-align:center; color:#6c7382; font-size:13px; }
+  .gate { background:#3a3221; border:1px solid #f1c40f; border-radius:8px; padding:10px 16px; font-size:12px; color:#f5e6b8; line-height:1.8; margin-bottom:16px; }
+  .gate b { color:#f1c40f; }
+  .red { color:#e74c3c; font-weight:bold; }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th, td { border:1px solid #333a46; padding:5px 8px; text-align:left; vertical-align:top; }
+  th { background:#1f2633; color:#9dcbf0; }
+  td b { color:#f1c40f; }
+  td small { color:#9aa1af; }
+  .note { font-size:11px; color:#6c7382; margin-top:14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>棋子与羁绊 v5 落地——批次切分与验证门</h1>
+<div class="sub">实施计划配图 ｜ 2026-11-21 ｜ 切分依据：v5 D11 三批钩子 + 主人追加（批0 纯数据 / 批1 渲染小步 / 批5 报告）</div>
+
+<div class="chain">
+  <div class="batch b0"><b>批0 · 纯数据 + 词表基建（CP1~CP8）</b><br/>units 24 子 / skills +13 / synergies 8×3 替换制 / scenes 重排 / D10 敌方档位截断 / 暴击属性化迁移（§五.5，游侠档依赖）/ 放逐原语 + 薄执行器接线（BANISH/GAIN_ENERGY/KNOCKBACK/BURN）</div>
+  <div class="arrow">↓</div>
+  <div class="batch b1"><b>批1 · 渲染图形/颜色（CP9~CP11）</b><br/>UnitShapeKit（种族=图形族）+ StarColors（星级=颜色）→ PlaceholderArt 形状化 → UnitView/BattleRenderer/ShopBar tint 接线<br/><span class="red">红线：先 1 子（unit_warrior_01）跑通 lwjgl3:run 再铺开 24 子——两提交</span></div>
+  <div class="arrow">↓</div>
+  <div class="batch b2"><b>批2 · 死亡簇（CP12~CP19）</b><br/>遗物/旧疤计数通道 / 击杀归因 / 两遍式级联清扫（§五.2 = C2）/ 亡语执行器 + 双响 / 阵亡名册 / 大公点算 / undying 倒地四过滤点+时钟冻结（§五.3 = C7）/ 亡语源弹道消散重选（§五.7）/ 兽潮 + 连环清账 / 表现层事件</div>
+  <div class="arrow">↓</div>
+  <div class="batch b3"><b>批3 · 受击簇（CP20~CP21）</b><br/>DamagePipeline 受击窗口（免伤前乘 / 余震反弹后置 / 穿甲参数位）/ 旧疤受击计数（3 刀 1 层、6 层封顶、只认普攻）</div>
+  <div class="arrow">↓</div>
+  <div class="batch b4"><b>批4 · 开局/条件/附带（CP22~CP27）</b><br/>开局 TRAITS 谓词 + 群星响应（开局能量 +50 / 施法后 +20）/ 卫队战吼定时触发 + 范围嘲讽索敌 override / 盾墙拦截（只拦普攻弹）/ 法术穿甲 / 普攻附带状态 / 收割条件增伤 / 三连装填（必暴覆写 ×2.0）</div>
+  <div class="arrow">↓</div>
+  <div class="batch b5"><b>批5 · 实施报告 + 全量自测（CP28）</b><br/>implementation report（改动清单 / 分节说明 / 图形颜色映射表及理由 / 未实施项 / 遗留风险）+ 全量回归 + 手动冒烟清单</div>
+</div>
+
+<div class="gate"><b>每批验证门（主人红线①）</b>：gradle 构建退出码 0 + <code>core/build/test-results/test/TEST-*.xml</code> 聚合计数核对（gradle 成功时控制台零输出——用退出码与 XML 计数，不信控制台文本）；<b>每批独立可构建</b>、conventional commits 分批提交（feat:/test:/docs:，无 attribution）。</div>
+
+<table>
+  <tr><th>批</th><th>CP</th><th>内容一句话</th><th>批内关键验证点</th></tr>
+  <tr><td>批0</td><td><b>CP1</b></td><td>StatKey 暴击属性化（CRIT_CHANCE / CRIT_DAMAGE）</td><td>既有战斗回归：默认 20% / ×1.5 行为逐位不变</td></tr>
+  <tr><td>批0</td><td><b>CP2</b></td><td>词表与数据类扩展（BURN / GAIN_ENERGY / KNOCKBACK / BANISH / SynergyMechanic / DeathrattleSpec / UndyingSpec / CastCondition）</td><td>纯数据类单测</td></tr>
+  <tr><td>批0</td><td><b>CP3</b></td><td>JsonLoader 三通道解析与校验</td><td>校验失败用例（未知键 / 缺参 / 三通道互斥）</td></tr>
+  <tr><td>批0</td><td><b>CP4</b></td><td>synergies.json 8 条全量重写（替换制）</td><td>全量加载零报错 + 档位快照测试</td></tr>
+  <tr><td>批0</td><td><b>CP5</b></td><td>units.json 24 子 + skills.json +13</td><td>费阶 10/9/5、传奇 cost=3、矩阵行列各 6 快照</td></tr>
+  <tr><td>批0</td><td><b>CP6</b></td><td>scenes.json shopUnlocks / enemyPool 重排</td><td>三场景校验 + 传奇不入商店池断言</td></tr>
+  <tr><td>批0</td><td><b>CP7</b></td><td>D10 敌方档位截断（resolve 计数上限）</td><td>r1 / r6 / r13 / r20 四档截断单测</td></tr>
+  <tr><td>批0</td><td><b>CP8</b></td><td>放逐原语 + BANISH / GAIN_ENERGY / KNOCKBACK 执行 + BURN 心跳</td><td>依账除名条件施放、放逐零死亡事件断言</td></tr>
+  <tr><td>批1</td><td><b>CP9</b></td><td>UnitShapeKit + StarColors（纯 JVM）</td><td>24 子映射表全覆盖断言</td></tr>
+  <tr><td>批1</td><td><b>CP10</b></td><td>PlaceholderArt 形状绘制（小步 1 子 → 铺开）</td><td><span class="red">红线</span> lwjgl3:run 人工冒烟两次（1 子 / 24 子）</td></tr>
+  <tr><td>批1</td><td><b>CP11</b></td><td>星级 tint 接线（UnitView / BattleRenderer / ShopBar）</td><td>冒烟：敌我可辨、同族异职可辨、星级色可辨</td></tr>
+  <tr><td>批2</td><td><b>CP12</b></td><td>CombatCounters 计数通道（遗物 / 旧疤 / 普攻计数）</td><td>有效值读取点加算 / 乘算分列单测</td></tr>
+  <tr><td>批2</td><td><b>CP13</b></td><td>击杀归因 lastDamagerId + UNIT_DIED killer</td><td>普攻 / DOT / 亡语三类致死归因断言</td></tr>
+  <tr><td>批2</td><td><b>CP14</b></td><td>DeathSystem 两遍式级联清扫（C2 / C9）</td><td>同 tick 互灭、级联死亡、快照先于清状态</td></tr>
+  <tr><td>批2</td><td><b>CP15</b></td><td>亡语执行器（4 kind + 双响 C5）</td><td>五亡语逐一 + 双响两发同 tick 断言</td></tr>
+  <tr><td>批2</td><td><b>CP16</b></td><td>阵亡名册 + 大公点算（C8 / C11）</td><td>继承者资格 / 等距 id 小 / <25% 线 / 无目标不触发</td></tr>
+  <tr><td>批2</td><td><b>CP17</b></td><td>undying 倒地全链（C7 五项 + 四过滤点 + 时钟冻结）</td><td>倒地不可索敌 / 不可伤 / DOT 冻结 / 1.0s 复活回满能</td></tr>
+  <tr><td>批2</td><td><b>CP18</b></td><td>亡语源弹道（deathrattleBorn 真伤路由 + 消散重选）</td><td>§五.7：普攻弹维持 fizzle、亡语弹 LOWEST_HP 重选</td></tr>
+  <tr><td>批2</td><td><b>CP19</b></td><td>兽潮 + 连环清账 + 渲染新事件消费</td><td>敌死触发兽潮、刺客击杀回满能、放逐不触发</td></tr>
+  <tr><td>批3</td><td><b>CP20</b></td><td>受击窗口（免伤前乘 / 反弹后置 / 穿甲参数 / 事件序）</td><td>免伤只作用直伤、反弹真伤回攻击者可致死</td></tr>
+  <tr><td>批3</td><td><b>CP21</b></td><td>旧疤（SCAR：3 刀 1 层、6 层封顶、只认普攻）</td><td>DOT / 反弹不喂层断言</td></tr>
+  <tr><td>批4</td><td><b>CP22</b></td><td>开局 TRAITS 谓词 + OPENING_ENERGY + AFTER_CAST_ENERGY</td><td>群星响应：开局 +50、施法后 +20</td></tr>
+  <tr><td>批4</td><td><b>CP23</b></td><td>TimedTriggerSystem + 卫队战吼范围嘲讽</td><td>6s 触发、3s 豁免重评估、目标死立即失效</td></tr>
+  <tr><td>批4</td><td><b>CP24</b></td><td>盾墙拦截（只拦普攻弹道）</td><td>技能弹 / 近战不受限、附带落空</td></tr>
+  <tr><td>批4</td><td><b>CP25</b></td><td>普攻附带状态挂点（BURN / SLOW）</td><td>近战 / 弹道两路、盾墙拦截后附带落空</td></tr>
+  <tr><td>批4</td><td><b>CP26</b></td><td>收割条件增伤（EXECUTE &lt;35% +40%）</td><td>阈值上下伤害断言、与穿甲叠加序</td></tr>
+  <tr><td>批4</td><td><b>CP27</b></td><td>三连装填（计数 + 必暴覆写 + ×2.0）</td><td>RNG 消耗序不变（同 seed 对拍）、第 3 刀必暴</td></tr>
+  <tr><td>批5</td><td><b>CP28</b></td><td>实施报告 + 全量回归 + 冒烟清单</td><td>报告结构完整性 + 全部测试绿</td></tr>
+</table>
+
+<div class="note">依据：docs/planning/units_synergies_design_v5.md（D11）｜ 计划：docs/spec_plan/2026-11-21_units_synergies_v5.md §6/§7</div>
+</div>
+</body>
+</html>

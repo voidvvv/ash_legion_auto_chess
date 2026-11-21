@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>棋子与羁绊 v5 落地——机制接线架构图</title>
+<style>
+  body { background:#171a21; color:#d8dce4; font-family:"Microsoft YaHei",sans-serif; margin:0; padding:24px; }
+  h1 { font-size:20px; color:#f1c40f; margin:0 0 4px; }
+  .sub { color:#8b93a3; font-size:12px; margin-bottom:16px; }
+  .wrap { max-width:1120px; margin:0 auto; }
+  .lane { display:flex; gap:10px; margin-bottom:10px; }
+  .box { border-radius:8px; padding:10px 14px; font-size:12px; line-height:1.7; }
+  .box b { display:block; font-size:13px; margin-bottom:4px; }
+  .data { background:#15241d; border:1px solid #27ae60; flex:1; } .data b { color:#a9e8bd; }
+  .loader { background:#1c2230; border:1px solid #5dade2; } .loader b { color:#9dcbf0; }
+  .resolve { background:#1c2230; border:1px solid #5dade2; } .resolve b { color:#9dcbf0; }
+  .unit { background:#2b2b3a; border:1px solid #a569bd; } .unit b { color:#dcc8ee; }
+  .loop { background:#241a1c; border:1px dashed #c0392b; } .loop b { color:#e8a9a9; }
+  .dmg { background:#3a3221; border:1px dashed #f1c40f; } .dmg b { color:#f5e6b8; }
+  .banish { background:#2b2b3a; border:1px solid #a569bd; } .banish b { color:#dcc8ee; }
+  .render { background:#1e3a2a; border:1px solid #27ae60; } .render b { color:#a9e8bd; }
+  .arrow { text-align:center; color:#6c7382; font-size:14px; margin:2px 0 10px; }
+  .phase { border-left:3px solid #c0392b; padding:6px 12px; margin:6px 0; font-size:12px; background:#1d1517; border-radius:0 6px 6px 0; }
+  .phase b { color:#e8a9a9; }
+  .phase small { color:#9aa1af; }
+  table { width:100%; border-collapse:collapse; font-size:12px; margin-top:8px; }
+  th, td { border:1px solid #333a46; padding:5px 10px; text-align:left; }
+  th { background:#1f2633; color:#9dcbf0; }
+  td small { color:#9aa1af; }
+  .note { font-size:11px; color:#6c7382; margin-top:14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>棋子与羁绊 v5 落地——机制接线架构图</h1>
+<div class="sub">实施计划配图 ｜ 2026-11-21 ｜ 规格：docs/planning/units_synergies_design_v5.md（v5 终稿）</div>
+
+<div class="lane">
+  <div class="box data"><b>units.json（批0）</b>24 子全量重排 + 6 新增<br/>deathrattle（4 kind）/ undying 字段</div>
+  <div class="box data"><b>skills.json（批0）</b>+13 技能<br/>BURN / GAIN_ENERGY / KNOCKBACK / BANISH / condition</div>
+  <div class="box data"><b>synergies.json（批0）</b>8 条 × 2/4/6 替换制全量档<br/>stat ｜ effect(SHIELD) ｜ mechanic 三通道</div>
+  <div class="box data"><b>scenes.json（批0）</b>shopUnlocks：墓穴 6 亡灵 / 雪山 5 巨人<br/>enemyPool 主题重排（D10）</div>
+</div>
+<div class="arrow">↓ JsonLoader（CP3）：词表扩展与三通道校验</div>
+<div class="lane">
+  <div class="box loader" style="flex:1"><b>开战结算（BattleSystem.startBattle）</b>
+  SynergySystem.resolve + D10 敌方计数截断（r1-5:0 / r6-12:≤2 / r13-19:≤4 / r20+:≤6）→
+  SynergySnapshot：statModifiers（基准快照，现有）｜ openingEffects（开局通道，CP22 扩 TRAITS 谓词 + OPENING_ENERGY）｜ mechanics（按 trait 过滤下发到 BattleUnit）
+  </div>
+</div>
+<div class="arrow">↓</div>
+<div class="lane">
+  <div class="box unit" style="flex:1"><b>BattleUnit 运行态</b>
+  mechanics（不可变，trait 过滤） ｜ CombatCounters（CP12：遗物攻/血 ADD、旧疤层数、普攻计数——不走 StatusType、不走开战快照） ｜ downed/undying（CP17） ｜ lastDamagerId（CP13）
+  </div>
+</div>
+<div class="arrow">↓</div>
+<div class="lane">
+  <div class="box loop" style="flex:2"><b>主循环五阶段（battle §二，顺序不变）</b>
+    <div class="phase"><b>① 状态推进</b> BURN 心跳（CP8）· downed 状态时钟冻结（CP17）</div>
+    <div class="phase"><b>② 弹道推进</b> 盾墙拦截普攻弹（CP24，只拦 skill==null）· 亡语源弹道 LOWEST_HP 重选（CP18，§五.7）</div>
+    <div class="phase"><b>③ 行动链</b> 暴击 roll 读 CRIT_CHANCE/CRIT_DAMAGE（CP1）· 三连装填计数覆写（CP27）· 嘲讽 override + 2s 重评估豁免（CP23）· TimedTriggerSystem 卫队战吼 6s（CP23）</div>
+    <div class="phase"><b>④ DeathSystem 两遍式级联清扫（CP14，C2）</b> 标记+攻击快照（先于 markCleaned）→ id 序结算：亡语×双响（CP15）· 阵亡名册（CP16）· 大公点算（CP16）· 兽潮/连环清账（CP19）· undying→倒地（CP17）→ 级联收敛后才进 ⑤</div>
+    <div class="phase"><b>⑤ 胜负判定</b> 玩家全灭从严在先（口径 #15）· 未清扫存活含倒地（S 列口径）</div>
+  </div>
+  <div class="box dmg" style="flex:1"><b>DamagePipeline（CP20 受击窗口）</b>
+    受击前：免伤 ×(1−15%)（DOT/真伤豁免）<br/>
+    公式：×100/(100+甲×(1−穿甲))（CP31 法术穿甲仅技能直伤）<br/>
+    受击后：旧疤计数（只认普攻，CP21）· 余震反弹（甲后×18~20% 真伤回攻击者，CP20）· 普攻附带状态挂点（CP25）· lastDamagerId 归因（CP13）
+  </div>
+</div>
+<div class="lane">
+  <div class="box banish" style="flex:1"><b>Banish 独立移除路径（CP8）</b>
+  依账除名（<20% 条件施放）与大公点算（<25%）共用；不走伤害管线与清扫——不触发亡语/不死/名册/点算/击杀（C10/C12/C13）
+  </div>
+</div>
+<div class="arrow">↓ 逻辑层事件流（UNIT_DIED+killer / UNIT_BANISHED / UNIT_DOWNED / UNIT_REVIVED）</div>
+<div class="lane">
+  <div class="box render" style="flex:2"><b>渲染表达层（批1，像素素材到位前的程序员表达，可整体替换）</b>
+  UnitShapeKit：种族=图形族（兽人三角 / 野兽菱形 / 亡灵五边 / 巨人六边 / 其他+Boss兜底五角星），职业=族内变体（战士顶带 / 法师核点 / 刺客斜切 / 游侠空心）<br/>
+  StarColors：星级=颜色（1★ 骨白 / 2★ 金 / 3★ 紫），与图形正交；敌我区分 = SideColors 蓝/红色框（不变）<br/>
+  PlaceholderArt.paintUnit 形状化（小步：先 1 子验证再铺开）+ UnitView / BattleRenderer / ShopBar 星级 tint
+  </div>
+</div>
+
+<table>
+  <tr><th>口径</th><th>出处</th><th>落点 CP</th></tr>
+  <tr><td>C2 两遍式级联（亡语致死并入下一轮，收敛后进 ⑤）</td><td>v5 §3.3</td><td>CP14</td></tr>
+  <tr><td>C5 双响同 tick 两发 / 坏账凶手转移 / 绝响 LOWEST_HP 重选</td><td>v5 §3.3</td><td>CP15 / CP18</td></tr>
+  <tr><td>C7 倒地五项 + 四过滤点 + 状态时钟冻结</td><td>v5 §3.3</td><td>CP17</td></tr>
+  <tr><td>C8 最近继承 = 可行动存活亡灵，等距 id 小</td><td>v5 §3.3</td><td>CP16</td></tr>
+  <tr><td>C10/C13 放逐与点算移除 = 非死亡事件</td><td>v5 §3.3</td><td>CP8 / CP16</td></tr>
+  <tr><td>遗物/旧疤计数通道：不走 StatusType（同 type 取大）、不走开战快照</td><td>v5 §4.1</td><td>CP12</td></tr>
+  <tr><td>盾墙只拦普攻弹道（Projectile.skill == null 现成分界）</td><td>v5 §4.1</td><td>CP24</td></tr>
+  <tr><td>必暴仍消耗 RNG 序、仅覆写结果（零新增 RNG 点）</td><td>v5 §一.8</td><td>CP27</td></tr>
+  <tr><td>D10 敌方档位截断（WaveGenerator 组阵后、resolve 前）</td><td>v5 §4.1</td><td>CP7</td></tr>
+</table>
+
+<div class="note">依据：docs/planning/units_synergies_design_v5.md（v5 终稿）｜ 计划：docs/spec_plan/2026-11-21_units_synergies_v5.md</div>
+</div>
+</body>
+</html>

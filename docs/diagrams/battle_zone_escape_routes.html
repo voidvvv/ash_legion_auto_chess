@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>格子棋子设计空间：逃逸路线图</title>
+<style>
+  body { background:#171a21; color:#d8dce4; font-family:"Microsoft YaHei",sans-serif; margin:0; padding:24px; }
+  h1 { font-size:20px; color:#f1c40f; margin:0 0 4px; }
+  .sub { color:#8b93a3; font-size:12px; margin-bottom:20px; }
+  .dilemma { background:#3a3221; border:2px solid #f1c40f; border-radius:8px; padding:12px 16px; max-width:960px; margin:0 auto 16px; text-align:center; }
+  .dilemma b { color:#f5e6b8; font-size:15px; }
+  .dilemma div { font-size:12px; color:#cfc6a5; margin-top:4px; }
+  .cols { display:flex; gap:16px; max-width:960px; margin:0 auto 16px; }
+  .col { flex:1; display:flex; flex-direction:column; gap:10px; }
+  .col-title { font-size:13px; font-weight:bold; text-align:center; padding:4px; border-radius:4px; }
+  .rejected .col-title { background:#3a2226; color:#e8a9a9; border:1px dashed #c0392b; }
+  .escape .col-title { background:#1e3a2a; color:#bfe8d0; border:1px solid #27ae60; }
+  .card { border-radius:8px; padding:10px 12px; font-size:12px; line-height:1.55; }
+  .card b { display:block; font-size:13px; margin-bottom:4px; }
+  .rejected .card { background:#2a1c1f; border:1px dashed #c0392b; color:#d9b3b3; }
+  .rejected .card b { color:#e8a9a9; }
+  .escape .card { background:#16281f; border:1px solid #27ae60; color:#c4dccb; }
+  .escape .card b { color:#a9e8bd; }
+  .tag { display:inline-block; font-size:11px; padding:1px 8px; border-radius:9px; margin-right:5px; }
+  .tag.ctl { background:#1f2c3a; color:#9dcbf0; border:1px solid #5dade2; }
+  .tag.cost { background:#33281f; color:#e8c39e; border:1px solid #d69a5d; }
+  .phase { background:#1f2c3a; border:1px solid #5dade2; border-radius:8px; padding:10px 16px; max-width:960px; margin:0 auto 16px; font-size:12px; }
+  .phase b { color:#9dcbf0; }
+  .steps { display:flex; align-items:center; gap:8px; margin-top:6px; flex-wrap:wrap; }
+  .step { background:#182430; border-radius:6px; padding:6px 10px; line-height:1.5; }
+  .step small { color:#8b93a3; }
+  .arrow { color:#5dade2; font-size:16px; }
+  .boost { background:#2b2b3a; border:1px solid #a569bd; border-radius:8px; padding:10px 16px; max-width:960px; margin:0 auto 16px; font-size:12px; color:#dcc8ee; }
+  .boost b { color:#e4d1f2; }
+  .note { max-width:960px; margin:0 auto; font-size:11px; color:#6c7382; }
+</style>
+</head>
+<body>
+<h1>格子棋子设计空间：逃逸路线图</h1>
+<div class="sub">讨论稿配图 ｜ 2026-09-23 ｜ 详见 docs/planning/battle_zone_pieces.md</div>
+
+<div class="dilemma">
+  <b>核心困境：战斗期空间不可控 × 格子效果需要空间确定性</b>
+  <div>移动 = 贪婪步自动走位（MovementSystem），玩家控制权全部在战前（侦察→布阵→开战），效果却设计在战中</div>
+</div>
+
+<div class="cols">
+  <div class="col rejected">
+    <div class="col-title">已否路线（用户裁决关闭，仅留档）</div>
+    <div class="card">
+      <b>① 全员固定 → 滑向《背包乱斗》</b>
+      最近对位距离 2 &gt; 近战 range 1 → <b>近战全废</b>；够不着 → 60s 超时判负；移动 / 索敌 / 弹道三系统悬空。<br/>
+      启发保留：位置触发 = 强构筑感（低密度版用路线 A 实现）。
+    </div>
+    <div class="card">
+      <b>② 我固定 · 敌移动 → 滑向《植物大战僵尸》</b>
+      玩家侧移速收益全废（刺客 / 野兽羁绊）；敌方"排队走过来"使敌阵站位信息贬值 → 侦察价值砍半。<br/>
+      启发保留：固定 vs 推进的对抗可作为<b>棋子子类</b>存在（路线 C），不能成全场规则。
+    </div>
+  </div>
+  <div class="col escape">
+    <div class="col-title">逃逸路线（不消灭移动，把确定性还给格子）</div>
+    <div class="card">
+      <b>A 开战快照光环</b>
+      开战瞬间按初始站位结算邻接效果，之后不随移动变化。<br/>
+      <span class="tag ctl">控制点：布阵期（谁挨着谁）</span><span class="tag cost">成本 低-中</span><br/>
+      咬合双实体快照架构；顺手销账"光环装备待 schema 扩展"旧债。
+    </div>
+    <div class="card">
+      <b>C 不动子类棋子（图腾 / 驻守单位）</b>
+      immobile 属性：全员可动、唯独它不动——天然空间锚点；仍占格、仍可被攻击索敌。<br/>
+      <span class="tag ctl">控制点：布阵期（放哪就在哪）</span><span class="tag cost">成本 低(机制)+中(内容)</span><br/>
+      加载校验禁止"纯近战不动棋"（moveSpeed=0 且 range&lt;2）。
+    </div>
+    <div class="card">
+      <b>B 持续地面区域</b>
+      效果挂格子不挂棋子，踩上即生效（持续 APPLY_STATUS）。<br/>
+      <span class="tag ctl">控制点：布阵期 + 路径预判</span><span class="tag cost">成本 中-高</span><br/>
+      敌人路径可推演（确定性）→ 拒止 / 分割 / 诱导 = "不用控制也能控制"。<br/>
+      雏形：毒雾弹（AOE_2 + POISON）区域化；主要风险：贪婪步遇阻罚站 → 撞 60s 超时。
+    </div>
+  </div>
+</div>
+
+<div class="phase">
+  <b>分阶段落地（我的倾向，供参考）</b>
+  <div class="steps">
+    <div class="step"><b>第一阶段：A + C</b><br/><small>快照光环 + 2~3 个图腾棋子<br/>验证空间玩法手感</small></div>
+    <div class="arrow">→</div>
+    <div class="step"><b>第二阶段：B</b><br/><small>ZoneSystem 完全体<br/>"指定格子"投射布置在此实现</small></div>
+    <div class="arrow">→</div>
+    <div class="step"><b>后置</b><br/><small>姿态预设 D<br/>阻挡格（待寻路精化）</small></div>
+  </div>
+</div>
+
+<div class="boost">
+  <b>乘法优势（本项目独有，格子棋子最值钱的理由）</b><br/>
+  敌阵不变重试制（GDD §2.2）× 战斗确定性（随机仅暴击，architecture §六）= 布阵 → 验证 → 调整 → 同敌阵复验的<b>调优闭环</b>——多人自走棋（对手每轮变）给不了。
+</div>
+
+<div class="note">待拍板点 D1~D5 见 docs/planning/battle_zone_pieces.md「待你拍板的点」节。</div>
+</body>
+</html>
