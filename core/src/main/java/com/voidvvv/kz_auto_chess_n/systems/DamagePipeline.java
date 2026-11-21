@@ -32,8 +32,11 @@ public final class DamagePipeline {
                                float attackPower, float multiplier, boolean crit,
                                boolean basicAttack, String skillId) {
         Objects.requireNonNull(target, "target 不能为 null");
+        float critMultiplier = attacker == null
+                ? StatKey.CRIT_DAMAGE.baseStatsDefault() / 100f
+                : attacker.getEffective(StatKey.CRIT_DAMAGE) / 100f;
         float mitigated = attackPower * multiplier
-                * (crit ? GameBalance.CRIT_MULTIPLIER : 1f)
+                * (crit ? critMultiplier : 1f)
                 * 100f / (100f + target.getEffective(StatKey.ARMOR));
         float hpDamage = absorbShield(target, mitigated);
         target.modifyHp(-hpDamage);

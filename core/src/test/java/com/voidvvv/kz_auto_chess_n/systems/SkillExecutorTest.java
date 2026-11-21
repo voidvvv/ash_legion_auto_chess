@@ -1,5 +1,6 @@
 package com.voidvvv.kz_auto_chess_n.systems;
 
+import com.voidvvv.kz_auto_chess_n.data.CastCondition;
 import com.voidvvv.kz_auto_chess_n.data.Delivery;
 import com.voidvvv.kz_auto_chess_n.data.SkillData;
 import com.voidvvv.kz_auto_chess_n.data.SkillEffectType;
@@ -46,7 +47,7 @@ class SkillExecutorTest {
     private static BattleUnit u(int id, Side side, int x, int y, SkillData skill, float atk, int star) {
         UnitData template = tpl("u" + id);
         BattleUnit unit = new BattleUnit(id, template, star, side, skill,
-                new BattleStats(100f, atk, 0f, 1f, 1f, 1f, 0f, 100f, 0f));
+                new BattleStats(100f, atk, 0f, 1f, 1f, 1f, 0f, 100f, 0f, 20f, 150f));
         unit.setPosition(x, y);
         return unit;
     }
@@ -240,7 +241,7 @@ class SkillExecutorTest {
         BattleUnit caster = caster(skill("s13", SkillShape.SINGLE_TARGET, Delivery.MELEE_INSTANT,
                 effect(SkillEffectType.DAMAGE, 2f, null, null)));
         BattleUnit heavy = new BattleUnit(3, tpl("heavy"), 1, Side.ENEMY, caster.getSkill(),
-                new BattleStats(100f, 10f, 100f, 1f, 1f, 1f, 0f, 100f, 0f));
+                new BattleStats(100f, 10f, 100f, 1f, 1f, 1f, 0f, 100f, 0f, 20f, 150f));
         heavy.setPosition(3, 2);
         caster.setTargetId(3);
         BattleState state = state(caster, heavy);
@@ -257,7 +258,7 @@ class SkillExecutorTest {
         SkillData heal = skill("s14", SkillShape.LOWEST_ALLY, Delivery.MELEE_INSTANT,
                 effect(SkillEffectType.HEAL, 0.25f, null, null));
         BattleUnit casterSp = new BattleUnit(9, tpl("sp"), 2, Side.PLAYER, heal,
-                new BattleStats(100f, 10f, 0f, 1f, 1f, 1f, 0f, 100f, 20f));
+                new BattleStats(100f, 10f, 0f, 1f, 1f, 1f, 0f, 100f, 20f, 20f, 150f));
         casterSp.setPosition(2, 4);
         casterSp.modifyHp(-80f); // 20/100
         BattleState state = state(casterSp);
@@ -342,5 +343,96 @@ class SkillExecutorTest {
         EXECUTOR.applyAtImpact(state, caster, target, homing, 10f, 1f);
         assertThat(target.getCurrentHp()).isCloseTo(80f, within(1e-6f)); // 快照 10 × 2
         assertThat(state.getEvents().get(0).getSkillId()).isEqualTo("s20");
+    }
+
+    // —— v5 批0：施放条件 + BANISH / GAIN_ENERGY / KNOCKBACK 薄执行（CP8，K13） ——
+
+    private static SkillData repossess(float threshold) {
+        return new SkillData("sk_repossess", "依账除名", "", SkillShape.SINGLE_TARGET,
+                Delivery.MELEE_INSTANT,
+                java.util.Arrays.asList(effect(SkillEffectType.BANISH, null, null, null)),
+                new CastCondition(CastCondition.Type.TARGET_HP_BELOW, threshold));
+    }
+
+    @Test
+    @DisplayName("依账除名：目标 19% 血施放成功（放逐移除）；21% 延后能量保留")
+    void repossessConditionGatesCast() {
+        BattleUnit caster = caster(repossess(0.2f));
+        caster.setEnergy(100f);
+        BattleUnit target = enemy(2, 2, 2);
+        caster.setTargetId(2);
+        BattleState state = state(caster, target);
+
+        target.modifyHp(-81f); // 19/100 = 19% < 20%
+        assertThat(EXECUTOR.cast(state, caster)).isTrue();
+        assertThat(caster.getEnergy()).isEqualTo(0f);
+        assertThat(target.isCleaned()).isTrue();      // 放逐移除（非死亡）
+        assertThat(target.isBanished()).isTrue();
+        assertThat(state.getEvents()).noneMatch(e -> e.getType() == CombatEvent.Type.UNIT_DIED);
+        assertThat(state.getEvents()).anyMatch(e -> e.getType() == CombatEvent.Type.UNIT_BANISHED);
+
+        BattleUnit caster2 = caster(repossess(0.2f));
+        caster2.setEnergy(100f);
+        BattleUnit target2 = enemy(3, 2, 2);
+        caster2.setTargetId(3);
+        BattleState state2 = state(caster2, target2);
+        target2.modifyHp(-79f); // 21% ≥ 20% → 条件不满足
+        assertThat(EXECUTOR.cast(state2, caster2)).isFalse(); // 延后（持能等待）
+        assertThat(caster2.getEnergy()).isEqualTo(100f);      // 能量保留
+        assertThat(target2.isCleaned()).isFalse();
+    }
+
+    @Test
+    @DisplayName("GAIN_ENERGY：走回能管线受 energyGainRate 加权（egr 200 → +40）")
+    void gainEnergyWeightedByGainRate() {
+        SkillData payday = skill("sk_payday", SkillShape.ALL_ALLIES, Delivery.MELEE_INSTANT,
+                effect(SkillEffectType.GAIN_ENERGY, 20f, null, null));
+        BattleUnit caster = new BattleUnit(1, tpl("u1"), 1, Side.PLAYER, payday,
+                new BattleStats(100f, 10f, 0f, 1f, 1f, 1f, 0f, 200f, 0f, 20f, 150f)); // egr 200
+        caster.setPosition(2, 4);
+        caster.setEnergy(10f);
+        BattleState state = state(caster);
+        assertThat(EXECUTOR.cast(state, caster)).isTrue();
+        assertThat(caster.getEnergy()).isCloseTo(40f, within(1e-6f)); // 施放清零后 +20×2.0（egr 200 加权）
+    }
+
+    @Test
+    @DisplayName("KNOCKBACK：沿主轴推离施放者 1 格；目标格被占即止")
+    void knockbackPushesAlongMainAxis() {
+        SkillData stomp = skill("sk_break_stomp", SkillShape.SINGLE_TARGET, Delivery.MELEE_INSTANT,
+                effect(SkillEffectType.KNOCKBACK, 1f, null, null));
+        BattleUnit caster = caster(stomp); // (2,4)
+        BattleUnit target = enemy(2, 2, 2); // dx=0, dy=-2 → y 轴（远离 = y−）
+        caster.setTargetId(2);
+        BattleState state = state(caster, target);
+        assertThat(EXECUTOR.cast(state, caster)).isTrue();
+        assertThat(target.getGridX()).isEqualTo(2);
+        assertThat(target.getGridY()).isEqualTo(1); // 2 → 1
+        assertThat(state.unitAt(2, 1)).isSameAs(target); // 棋盘同步
+
+        // 被占即止：(3,1) 被占 → (3,2) 的目标推 x 向停在原地
+        BattleUnit caster2 = caster(stomp);
+        BattleUnit blocker = enemy(4, 3, 1);
+        BattleUnit target2 = enemy(5, 3, 2); // dx=1, dy=-2 → |dy|>|dx| → y 轴，(3,1) 被占
+        caster2.setTargetId(5);
+        BattleState state2 = state(caster2, blocker, target2);
+        assertThat(EXECUTOR.cast(state2, caster2)).isTrue();
+        assertThat(target2.getGridY()).isEqualTo(2); // 原地（推入格被占）
+    }
+
+    @Test
+    @DisplayName("BURN 入 DOT 词表：APPLY_STATUS power = 攻击快照 × value（同 POISON 惯例）")
+    void burnIsDotTypePoweredBySnapshot() {
+        SkillData ignite = skill("sk_ignite", SkillShape.SINGLE_TARGET, Delivery.MELEE_INSTANT,
+                effect(SkillEffectType.APPLY_STATUS, 0.3f, StatusType.BURN, 4f));
+        BattleUnit caster = caster(ignite); // atk 10
+        BattleUnit target = enemy(2, 2, 2);
+        caster.setTargetId(2);
+        BattleState state = state(caster, target);
+        assertThat(EXECUTOR.cast(state, caster)).isTrue();
+        ActiveStatus burn = target.getStatuses().get(0);
+        assertThat(burn.getType()).isEqualTo(StatusType.BURN);
+        assertThat(burn.getPower()).isCloseTo(3f, within(1e-6f)); // 10 × 0.3
+        assertThat(burn.getRemainingTime()).isEqualTo(4f);
     }
 }

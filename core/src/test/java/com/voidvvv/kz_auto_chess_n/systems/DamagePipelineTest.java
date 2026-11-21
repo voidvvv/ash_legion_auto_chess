@@ -78,6 +78,24 @@ class DamagePipelineTest {
     }
 
     @Test
+    @DisplayName("暴伤属性化（§五.5）：攻击者 critDamage 200 → 暴击 ×2.0；attacker=null 走缺省 ×1.5")
+    void critMultiplierFromEffectiveStat() {
+        BattleUnit atk = new BattleUnit(1, tpl("a"), 1, Side.PLAYER, melee(),
+                new BattleStats(100f, 10f, 0f, 1f, 1f, 1f, 0f, 100f, 0f, 20f, 200f)); // critDamage 200
+        atk.setPosition(2, 4);
+        BattleUnit zeroArmor = new BattleUnit(5, tpl("z"), 1, Side.ENEMY, melee(), stats(100, 10, 0f, 1f, 1f, 1f));
+        zeroArmor.setPosition(2, 2);
+        BattleState state = state(atk, zeroArmor);
+        pipeline(new RecordingTrigger()).applyDirectHit(state, atk, zeroArmor, 10f, 1f, true, true, null);
+        assertThat(zeroArmor.getCurrentHp()).isCloseTo(80f, within(1e-6f)); // 10 × 2.0
+
+        BattleUnit anonymous = new BattleUnit(6, tpl("n"), 1, Side.ENEMY, melee(), stats(100, 10, 0f, 1f, 1f, 1f));
+        anonymous.setPosition(4, 2);
+        pipeline(new RecordingTrigger()).applyDirectHit(state, null, anonymous, 10f, 1f, true, true, null);
+        assertThat(anonymous.getCurrentHp()).isCloseTo(85f, within(1e-6f)); // 缺省 ×1.5
+    }
+
+    @Test
     @DisplayName("先扣盾 → 盾尽透血：盾 30 吃 50 伤（armor5 折减 47.62）→ HP 只扣 17.62 且盾移除")
     void shieldAbsorbsBeforeHp() {
         BattleUnit atk = attacker();
@@ -117,10 +135,10 @@ class DamagePipelineTest {
     @DisplayName("回能乘获得者自身 egr：egr 115 → 攻击者 +11.5、受击者 +5.75")
     void energyScaledByOwnGainRate() {
         BattleUnit atk = new BattleUnit(1, tpl("a"), 1, Side.PLAYER, melee(),
-                new BattleStats(100f, 10f, 5f, 1f, 1f, 1f, 0f, 115f, 0f));
+                new BattleStats(100f, 10f, 5f, 1f, 1f, 1f, 0f, 115f, 0f, 20f, 150f));
         atk.setPosition(2, 4);
         BattleUnit target = new BattleUnit(2, tpl("t"), 1, Side.ENEMY, melee(),
-                new BattleStats(100f, 10f, 5f, 1f, 1f, 1f, 0f, 115f, 0f));
+                new BattleStats(100f, 10f, 5f, 1f, 1f, 1f, 0f, 115f, 0f, 20f, 150f));
         target.setPosition(2, 2);
         BattleState state = state(atk, target);
         pipeline(new RecordingTrigger()).applyDirectHit(state, atk, target, 10f, 1f, false, true, null);
@@ -155,7 +173,7 @@ class DamagePipelineTest {
     @DisplayName("吸血（Q3）：普攻命中回复 = 护甲后实际扣血 × lifesteal/100，不溢出 maxHp")
     void lifestealOnBasicAttack() {
         BattleUnit atk = new BattleUnit(1, tpl("a"), 1, Side.PLAYER, melee(),
-                new BattleStats(100f, 10f, 5f, 1f, 1f, 1f, 20f, 100f, 0f)); // lifesteal 20
+                new BattleStats(100f, 10f, 5f, 1f, 1f, 1f, 20f, 100f, 0f, 20f, 150f)); // lifesteal 20
         atk.modifyHp(-50f); // 50/100
         BattleUnit target = target(); // armor 5 → 10×100/105
         BattleState state = state(atk, target);
@@ -165,7 +183,7 @@ class DamagePipelineTest {
 
         // 不溢出：满血攻击者吸满也不再涨
         BattleUnit fullAtk = new BattleUnit(3, tpl("a2"), 1, Side.PLAYER, melee(),
-                new BattleStats(100f, 10f, 5f, 1f, 1f, 1f, 20f, 100f, 0f));
+                new BattleStats(100f, 10f, 5f, 1f, 1f, 1f, 20f, 100f, 0f, 20f, 150f));
         BattleUnit target2 = target();
         BattleState state2 = state(fullAtk, target2);
         pipeline(new RecordingTrigger()).applyDirectHit(state2, fullAtk, target2, 10f, 1f, false, true, null);
@@ -176,7 +194,7 @@ class DamagePipelineTest {
     @DisplayName("吸血仅普攻触发（Q3）：技能直伤（basicAttack=false）与 DOT 真伤不吸血")
     void lifestealOnlyForBasicAttack() {
         BattleUnit atk = new BattleUnit(1, tpl("a"), 1, Side.PLAYER, melee(),
-                new BattleStats(100f, 10f, 5f, 1f, 1f, 1f, 50f, 100f, 0f)); // lifesteal 50
+                new BattleStats(100f, 10f, 5f, 1f, 1f, 1f, 50f, 100f, 0f, 20f, 150f)); // lifesteal 50
         atk.modifyHp(-50f);
         BattleUnit target = target();
         BattleState state = state(atk, target);

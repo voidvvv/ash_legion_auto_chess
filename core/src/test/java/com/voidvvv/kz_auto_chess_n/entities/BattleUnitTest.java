@@ -28,7 +28,7 @@ class BattleUnitTest {
 
     private static UnitData tpl() {
         return new UnitData("u", "夹具兵", "兽人", "战士", 1,
-                new BaseStats(100, 10, 5, 1f, 1, 1f, 0, 100, 0), 1.8f,
+                new BaseStats(100, 10, 5, 1f, 1, 1f, 0, 100, 0, 20, 150), 1.8f,
                 TargetPriority.NEAREST, null, "sk", false);
     }
 
@@ -38,7 +38,7 @@ class BattleUnitTest {
     }
 
     private static BattleStats stats() {
-        return new BattleStats(100f, 10f, 5f, 1f, 1f, 1f, 0f, 100f, 0f);
+        return new BattleStats(100f, 10f, 5f, 1f, 1f, 1f, 0f, 100f, 0f, 20f, 150f);
     }
 
     private static BattleUnit unit() {
@@ -131,7 +131,7 @@ class BattleUnitTest {
     @DisplayName("attackInterval/moveCooldown 换算：aspd2 → 1/(2×0.6)s/击；ms2 → 0.5s/格（移动不吃系数）")
     void intervalConversions() {
         BattleUnit fast = new BattleUnit(2, tpl(), 1, Side.ENEMY, skill(),
-                new BattleStats(100f, 10f, 5f, 2f, 1f, 2f, 0f, 100f, 0f));
+                new BattleStats(100f, 10f, 5f, 2f, 1f, 2f, 0f, 100f, 0f, 20f, 150f));
         assertThat(fast.attackInterval())
                 .isCloseTo(1f / (2f * GameBalance.ATTACK_SPEED_GLOBAL_FACTOR), within(1e-6f));
         assertThat(fast.moveCooldown()).isCloseTo(0.5f, within(1e-6f)); // 口径 K5：移速不受攻速系数影响

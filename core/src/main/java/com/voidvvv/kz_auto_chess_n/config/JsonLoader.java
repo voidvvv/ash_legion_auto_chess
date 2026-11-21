@@ -3,6 +3,9 @@ package com.voidvvv.kz_auto_chess_n.config;
 import com.badlogic.gdx.files.FileHandle;
 import com.badlogic.gdx.utils.JsonValue;
 import com.voidvvv.kz_auto_chess_n.data.BaseStats;
+import com.voidvvv.kz_auto_chess_n.data.CastCondition;
+import com.voidvvv.kz_auto_chess_n.data.DeathrattleKind;
+import com.voidvvv.kz_auto_chess_n.data.DeathrattleSpec;
 import com.voidvvv.kz_auto_chess_n.data.Delivery;
 import com.voidvvv.kz_auto_chess_n.data.EffectData;
 import com.voidvvv.kz_auto_chess_n.data.EffectOp;
@@ -23,9 +26,11 @@ import com.voidvvv.kz_auto_chess_n.data.SkillShape;
 import com.voidvvv.kz_auto_chess_n.data.StatKey;
 import com.voidvvv.kz_auto_chess_n.data.StatusType;
 import com.voidvvv.kz_auto_chess_n.data.SynergyData;
+import com.voidvvv.kz_auto_chess_n.data.SynergyMechanic;
 import com.voidvvv.kz_auto_chess_n.data.SynergySource;
 import com.voidvvv.kz_auto_chess_n.data.TargetPriority;
 import com.voidvvv.kz_auto_chess_n.data.UnitData;
+import com.voidvvv.kz_auto_chess_n.data.UndyingSpec;
 import com.voidvvv.kz_auto_chess_n.data.Vocab;
 
 import java.util.ArrayList;
@@ -122,7 +127,8 @@ public final class JsonLoader {
                 fail(w, "id 全文件唯一，重复声明");
             }
             checkUnknownKeys(e, w, "id", "name", "race", "class", "cost", "baseStats",
-                    "upgradeMultiplier", "defaultPriority", "specialPriority", "skillId", "boss");
+                    "upgradeMultiplier", "defaultPriority", "specialPriority", "skillId", "boss",
+                    "deathrattle", "undying");
 
             String name = requireString(e, "name", w);
             String race = requireString(e, "race", w);
@@ -147,16 +153,98 @@ public final class JsonLoader {
             TargetPriority specialPriority = optionalVocab(e, "specialPriority", TargetPriority.class, w, null);
             String skillId = requireString(e, "skillId", w);
 
+            JsonValue deathrattleNode = e.get("deathrattle");
+            DeathrattleSpec deathrattle = deathrattleNode == null || deathrattleNode.isNull()
+                    ? null : parseDeathrattle(deathrattleNode, w + "deathrattle/");
+            JsonValue undyingNode = e.get("undying");
+            UndyingSpec undying = undyingNode == null || undyingNode.isNull()
+                    ? null : parseUndying(undyingNode, w + "undying/");
+
             result.put(id, new UnitData(id, name, race, unitClass, cost, baseStats,
-                    upgradeMultiplier, defaultPriority, specialPriority, skillId, boss));
+                    upgradeMultiplier, defaultPriority, specialPriority, skillId, boss,
+                    deathrattle, undying));
         }
         return result;
+    }
+
+    /** 亡语参数（units.json "deathrattle"，v5 亡灵线；kind 逐词必填校验） */
+    private static DeathrattleSpec parseDeathrattle(JsonValue node, String w) {
+        requireObject(node, w);
+        checkUnknownKeys(node, w, "kind", "ratio", "radius", "statusType", "statusPower",
+                "statusDuration", "regenRatio", "duration");
+        DeathrattleKind kind = requireVocab(node, "kind", DeathrattleKind.class, w);
+        float ratio = optionalFloat(node, "ratio", w, 0f);
+        int radius = optionalInt(node, "radius", w, 0);
+        StatusType statusType = optionalVocab(node, "statusType", StatusType.class, w, null);
+        float statusPower = optionalFloat(node, "statusPower", w, 0f);
+        float statusDuration = optionalFloat(node, "statusDuration", w, 0f);
+        float regenRatio = optionalFloat(node, "regenRatio", w, 0f);
+        float duration = optionalFloat(node, "duration", w, 0f);
+        switch (kind) {
+            case AREA_TRUE_DAMAGE:
+                if (ratio <= 0f) {
+                    fail(w + "ratio", "AREA_TRUE_DAMAGE 必须有 ratio > 0（攻击快照倍率）");
+                }
+                if (radius < 1) {
+                    fail(w + "radius", "AREA_TRUE_DAMAGE 必须有 radius ≥ 1（曼哈顿半径），实际=" + radius);
+                }
+                if (statusType == null) {
+                    if (statusPower != 0f || statusDuration != 0f) {
+                        fail(w, "附带状态必须三件套同给（statusType/statusPower/statusDuration）");
+                    }
+                } else if (statusPower <= 0f || statusDuration <= 0f) {
+                    fail(w, "附带状态必须给 statusPower > 0 与 statusDuration > 0");
+                }
+                if (regenRatio != 0f) {
+                    fail(w, "AREA_TRUE_DAMAGE 不携带 regenRatio");
+                }
+                break;
+            case KILLER_TRUE_DAMAGE:
+            case DEATH_VOLLEY:
+                if (ratio <= 0f) {
+                    fail(w + "ratio", kind.jsonName() + " 必须有 ratio > 0（攻击快照倍率）");
+                }
+                if (radius != 0 || statusType != null || regenRatio != 0f || duration != 0f) {
+                    fail(w, kind.jsonName() + " 仅携带 ratio");
+                }
+                break;
+            case ALLY_REGEN:
+                if (regenRatio <= 0f) {
+                    fail(w + "regenRatio", "ALLY_REGEN 必须有 regenRatio > 0（maxHp 比例/秒）");
+                }
+                if (duration <= 0f) {
+                    fail(w + "duration", "ALLY_REGEN 必须有 duration > 0（秒），实际=" + duration);
+                }
+                if (ratio != 0f || radius != 0 || statusType != null) {
+                    fail(w, "ALLY_REGEN 不携带 ratio/radius/statusType");
+                }
+                break;
+            default:
+                fail(w + "kind", "未知亡语 kind: " + kind);
+        }
+        return new DeathrattleSpec(kind, ratio, radius, statusType, statusPower, statusDuration,
+                regenRatio, duration);
+    }
+
+    /** 不死参数（units.json "undying"，誓约未竟） */
+    private static UndyingSpec parseUndying(JsonValue node, String w) {
+        requireObject(node, w);
+        checkUnknownKeys(node, w, "reviveDelaySeconds", "reviveHpRatio");
+        float reviveDelaySeconds = requireFloat(node, "reviveDelaySeconds", w);
+        float reviveHpRatio = requireFloat(node, "reviveHpRatio", w);
+        if (reviveDelaySeconds <= 0f) {
+            fail(w + "reviveDelaySeconds", "必须 > 0（秒），实际=" + reviveDelaySeconds);
+        }
+        if (reviveHpRatio <= 0f || reviveHpRatio > 1f) {
+            fail(w + "reviveHpRatio", "必须在 (0, 1]（复活生命比例），实际=" + reviveHpRatio);
+        }
+        return new UndyingSpec(reviveDelaySeconds, reviveHpRatio);
     }
 
     private static BaseStats parseBaseStats(JsonValue bs, String w) {
         requireObject(bs, w);
         checkUnknownKeys(bs, w, "hp", "attack", "armor", "attackSpeed", "range", "moveSpeed",
-                "lifesteal", "energyGainRate", "skillPower");
+                "lifesteal", "energyGainRate", "skillPower", "critChance", "critDamage");
 
         int hp = requireInt(bs, "hp", w);
         if (hp <= 0) {
@@ -182,16 +270,20 @@ public final class JsonLoader {
         if (moveSpeed <= 0) {
             fail(w + "moveSpeed", "必须 > 0，实际=" + moveSpeed);
         }
-        // 百分比三键（百分点整数刻度，data_schema §三 V1.4；缺省见 StatKey.baseStatsDefault()）
+        // 百分比五键（百分点整数刻度，data_schema §三 V1.4 + v5 §五.5 暴击两键；缺省见 StatKey.baseStatsDefault()）
         int lifesteal = optionalInt(bs, "lifesteal", w, StatKey.LIFESTEAL.baseStatsDefault());
         checkNonNegative(bs, "lifesteal", w, lifesteal);
         int energyGainRate = optionalInt(bs, "energyGainRate", w, StatKey.ENERGY_GAIN_RATE.baseStatsDefault());
         checkNonNegative(bs, "energyGainRate", w, energyGainRate);
         int skillPower = optionalInt(bs, "skillPower", w, StatKey.SKILL_POWER.baseStatsDefault());
         checkNonNegative(bs, "skillPower", w, skillPower);
+        int critChance = optionalInt(bs, "critChance", w, StatKey.CRIT_CHANCE.baseStatsDefault());
+        checkNonNegative(bs, "critChance", w, critChance);
+        int critDamage = optionalInt(bs, "critDamage", w, StatKey.CRIT_DAMAGE.baseStatsDefault());
+        checkNonNegative(bs, "critDamage", w, critDamage);
 
         return new BaseStats(hp, attack, armor, attackSpeed, range, moveSpeed,
-                lifesteal, energyGainRate, skillPower);
+                lifesteal, energyGainRate, skillPower, critChance, critDamage);
     }
 
     // ==================================================================
@@ -208,7 +300,7 @@ public final class JsonLoader {
             if (!ids.add(id)) {
                 fail(w, "id 全文件唯一，重复声明");
             }
-            checkUnknownKeys(e, w, "id", "name", "desc", "shape", "delivery", "effects");
+            checkUnknownKeys(e, w, "id", "name", "desc", "shape", "delivery", "effects", "condition");
 
             String name = requireString(e, "name", w);
             String desc = requireString(e, "desc", w);
@@ -227,9 +319,25 @@ public final class JsonLoader {
                 effects.add(parseSkillEffect(fe, w + "effects[" + effects.size() + "]/"));
             }
 
-            result.put(id, new SkillData(id, name, desc, shape, delivery, effects));
+            JsonValue conditionNode = e.get("condition");
+            CastCondition condition = conditionNode == null || conditionNode.isNull()
+                    ? null : parseCastCondition(conditionNode, w + "condition/");
+
+            result.put(id, new SkillData(id, name, desc, shape, delivery, effects, condition));
         }
         return result;
+    }
+
+    /** 施放条件（skills.json "condition"，可选）：本期一档 TARGET_HP_BELOW */
+    private static CastCondition parseCastCondition(JsonValue node, String w) {
+        requireObject(node, w);
+        checkUnknownKeys(node, w, "type", "value");
+        CastCondition.Type type = requireVocab(node, "type", CastCondition.Type.class, w);
+        float value = requireFloat(node, "value", w);
+        if (type == CastCondition.Type.TARGET_HP_BELOW && (value <= 0f || value > 1f)) {
+            fail(w + "value", "TARGET_HP_BELOW 必须有 0 < value ≤ 1（生命比例），实际=" + value);
+        }
+        return new CastCondition(type, value);
     }
 
     private static SkillEffect parseSkillEffect(JsonValue fe, String w) {
@@ -261,6 +369,27 @@ public final class JsonLoader {
                 }
                 if (value != null && value < 0) {
                     fail(w + "value", "不允许负值，实际=" + value);
+                }
+                break;
+            case GAIN_ENERGY:
+                if (value == null || value <= 0) {
+                    fail(w + "value", "GAIN_ENERGY 必须有 value > 0");
+                }
+                if (status != null || duration != null) {
+                    fail(w, "GAIN_ENERGY 不允许 status/duration");
+                }
+                break;
+            case KNOCKBACK:
+                if (value == null || value < 1f || value != Math.floor(value)) {
+                    fail(w + "value", "KNOCKBACK 必须有整数 value ≥ 1（格）");
+                }
+                if (status != null || duration != null) {
+                    fail(w, "KNOCKBACK 不允许 status/duration");
+                }
+                break;
+            case BANISH:
+                if (value != null || status != null || duration != null) {
+                    fail(w, "BANISH 不携带 value/status/duration（条件在技能级 condition）");
                 }
                 break;
             default:
@@ -329,25 +458,163 @@ public final class JsonLoader {
 
     private static EffectData parseSynergyEffect(JsonValue ee, String w) {
         requireObject(ee, w);
-        checkUnknownKeys(ee, w, "stat", "effect", "op", "value", "target");
+        checkUnknownKeys(ee, w, "stat", "effect", "mechanic", "op", "value", "value2",
+                "status", "duration", "target", "trait");
 
         JsonValue statNode = ee.get("stat");
         JsonValue effectNode = ee.get("effect");
+        JsonValue mechanicNode = ee.get("mechanic");
         boolean hasStat = statNode != null && !statNode.isNull();
         boolean hasEffect = effectNode != null && !effectNode.isNull();
-        if (hasStat == hasEffect) {
-            fail(w, "stat 与 effect 必须二选一（属性修正走 stat，特殊效果走 effect）");
+        boolean hasMechanic = mechanicNode != null && !mechanicNode.isNull();
+        if ((hasStat ? 1 : 0) + (hasEffect ? 1 : 0) + (hasMechanic ? 1 : 0) != 1) {
+            fail(w, "stat / effect / mechanic 必须三选一（属性修正走 stat，开局 SHIELD 走 effect，触发式机制走 mechanic）");
         }
 
-        float value = requireFloat(ee, "value", w);
+        Float value = optionalFloatObj(ee, "value", w);
+        Float value2 = optionalFloatObj(ee, "value2", w);
+        StatusType status = optionalVocab(ee, "status", StatusType.class, w, null);
+        Float duration = optionalFloatObj(ee, "duration", w);
         EffectTarget target = optionalVocab(ee, "target", EffectTarget.class, w, EffectTarget.ALLIES);
+        String trait = optionalString(ee, "trait", w);
+        if (target == EffectTarget.TRAITS && (trait == null || trait.trim().isEmpty())) {
+            fail(w + "trait", "target=TRAITS 时 trait 必填非空（race 或 class 名）");
+        }
+
         if (hasStat) {
+            if (value == null) {
+                fail(w + "value", "stat 通道必须有 value");
+            }
             StatKey stat = requireVocab(ee, "stat", StatKey.class, w);
             EffectOp op = requireVocab(ee, "op", EffectOp.class, w);
-            return new EffectData(stat, null, op, value, target);
+            return new EffectData(stat, null, null, op, value, null, null, null, target, null);
         }
-        StatusType effect = requireVocab(ee, "effect", StatusType.class, w);
-        return new EffectData(null, effect, null, value, target);
+        if (hasEffect) {
+            if (value == null) {
+                fail(w + "value", "effect 通道必须有 value");
+            }
+            StatusType effect = requireVocab(ee, "effect", StatusType.class, w);
+            return new EffectData(null, effect, null, null, value, null, null, null, target, null);
+        }
+        SynergyMechanic mechanic = requireVocab(ee, "mechanic", SynergyMechanic.class, w);
+        validateMechanicParams(mechanic, value, value2, status, duration, w);
+        return new EffectData(null, null, mechanic, null, value, value2, status, duration, target, trait);
+    }
+
+    /** 机制词逐词必填校验（K1 参数表；无参词禁止携带载荷） */
+    private static void validateMechanicParams(SynergyMechanic mechanic, Float value, Float value2,
+                                               StatusType status, Float duration, String w) {
+        switch (mechanic) {
+            case BASIC_ATTACK_STATUS:
+                if (status == null) {
+                    fail(w + "status", "BASIC_ATTACK_STATUS 必须有 status（SLOW/BURN）");
+                }
+                if (value == null || value <= 0f) {
+                    fail(w + "value", "BASIC_ATTACK_STATUS 必须有 value > 0");
+                }
+                if (duration == null || duration <= 0f) {
+                    fail(w + "duration", "BASIC_ATTACK_STATUS 必须有 duration > 0（秒），实际=" + duration);
+                }
+                break;
+            case SCAR:
+                if (value == null || value <= 0f) {
+                    fail(w + "value", "SCAR 必须有 value > 0（每层承受普攻次数）");
+                }
+                if (value2 == null || value2 <= 0f) {
+                    fail(w + "value2", "SCAR 必须有 value2 > 0（层数上限）");
+                }
+                rejectPayload(mechanic, status, duration, w);
+                break;
+            case DEATH_TAX:
+                if (value == null || value <= 0f) {
+                    fail(w + "value", "DEATH_TAX 必须有 value > 0（攻 ADD）");
+                }
+                if (value2 == null || value2 <= 0f) {
+                    fail(w + "value2", "DEATH_TAX 必须有 value2 > 0（生命上限 ADD）");
+                }
+                rejectPayload(mechanic, status, duration, w);
+                break;
+            case DOUBLE_DEATHRATTLE:
+            case KNOCKBACK_IMMUNE:
+            case SHIELD_WALL:
+            case KILL_ENERGY_REFUND:
+                if (value != null || value2 != null || status != null || duration != null) {
+                    fail(w, mechanic.jsonName() + " 为无参机制词，不携带 value/value2/status/duration");
+                }
+                break;
+            case DEATH_AUDIT:
+                if (value == null || value <= 0f || value >= 100f) {
+                    fail(w + "value", "DEATH_AUDIT 必须有 0 < value < 100（生命比例阈值百分点）");
+                }
+                if (value2 != null || status != null || duration != null) {
+                    fail(w, "DEATH_AUDIT 不携带 value2/status/duration");
+                }
+                break;
+            case ENEMY_DEATH_SURGE:
+                if (value == null || value <= 0f) {
+                    fail(w + "value", "ENEMY_DEATH_SURGE 必须有 value > 0（攻速增益百分点）");
+                }
+                if (duration == null || duration <= 0f) {
+                    fail(w + "duration", "ENEMY_DEATH_SURGE 必须有 duration > 0（秒）");
+                }
+                if (value2 != null || status != null) {
+                    fail(w, "ENEMY_DEATH_SURGE 不携带 value2/status");
+                }
+                break;
+            case REFLECT:
+            case DAMAGE_REDUCTION:
+            case SPELL_PEN:
+                if (value == null || value <= 0f || value >= 100f) {
+                    fail(w + "value", mechanic.jsonName() + " 必须有 0 < value < 100（百分比）");
+                }
+                if (value2 != null || status != null || duration != null) {
+                    fail(w, mechanic.jsonName() + " 不携带 value2/status/duration");
+                }
+                break;
+            case WARCRY_TAUNT:
+                if (value == null || value <= 0f) {
+                    fail(w + "value", "WARCRY_TAUNT 必须有 value > 0（开战延迟秒）");
+                }
+                if (value2 == null || value2 <= 0f) {
+                    fail(w + "value2", "WARCRY_TAUNT 必须有 value2 > 0（嘲讽持续秒）");
+                }
+                rejectPayload(mechanic, status, duration, w);
+                break;
+            case OPENING_ENERGY:
+            case AFTER_CAST_ENERGY:
+                if (value == null || value <= 0f) {
+                    fail(w + "value", mechanic.jsonName() + " 必须有 value > 0（能量值）");
+                }
+                rejectPayload(mechanic, status, duration, w);
+                break;
+            case EXECUTE:
+                if (value == null || value <= 0f) {
+                    fail(w + "value", "EXECUTE 必须有 value > 0（增伤百分比）");
+                }
+                if (value2 == null || value2 <= 0f || value2 >= 100f) {
+                    fail(w + "value2", "EXECUTE 必须有 0 < value2 < 100（生命比例阈值百分点）");
+                }
+                rejectPayload(mechanic, status, duration, w);
+                break;
+            case CRIT_RHYTHM:
+                if (value == null || value < 1f || value != Math.floor(value)) {
+                    fail(w + "value", "CRIT_RHYTHM 必须有整数 value ≥ 1（第 N 刀必暴）");
+                }
+                if (value2 == null || value2 <= 0f) {
+                    fail(w + "value2", "CRIT_RHYTHM 必须有 value2 > 0（必暴刀暴伤额外百分点）");
+                }
+                rejectPayload(mechanic, status, duration, w);
+                break;
+            default:
+                fail(w + "mechanic", "未知机制词: " + mechanic);
+        }
+    }
+
+    /** 带数值词禁止 status/duration 载荷（value/value2 之外的字段） */
+    private static void rejectPayload(SynergyMechanic mechanic, StatusType status, Float duration, String w) {
+        if (status != null || duration != null) {
+            fail(w, mechanic.jsonName() + " 不携带 status/duration");
+        }
     }
 
     // ==================================================================

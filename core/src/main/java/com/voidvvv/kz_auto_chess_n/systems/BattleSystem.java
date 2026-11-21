@@ -2,6 +2,7 @@ package com.voidvvv.kz_auto_chess_n.systems;
 
 import com.voidvvv.kz_auto_chess_n.config.GameBalance;
 import com.voidvvv.kz_auto_chess_n.data.EffectData;
+import com.voidvvv.kz_auto_chess_n.data.EffectTarget;
 import com.voidvvv.kz_auto_chess_n.data.EquipmentPassive;
 import com.voidvvv.kz_auto_chess_n.data.GameData;
 import com.voidvvv.kz_auto_chess_n.data.StatKey;
@@ -68,11 +69,22 @@ public final class BattleSystem {
     /**
      * 开战（带局外修正，Phase 6）：玩家侧羁绊结算吃增幅（「荆语」——CP10）；玩家侧派生
      * 修正源列表追加 RunModifiers（「战歌」全队回能 ADD 百分点，走 DamagePipeline 现成
-     * 管线——裁决 D13）；敌方侧恒不注入。
+     * 管线——裁决 D13）；敌方侧恒不注入。旧重载委托 round=TOTAL_ROUNDS（cap=6，对
+     * count≤6 阵容等效不截断——R7）。
      */
     public BattleState startBattle(Player player, List<WaveSpec> enemyWave,
                                    GameData data, RandomGenerator rng, IdIssuer idIssuer,
                                    RunModifiers modifiers) {
+        return startBattle(player, enemyWave, data, rng, idIssuer, modifiers, GameBalance.TOTAL_ROUNDS);
+    }
+
+    /**
+     * 开战（全参，v5 D10）：敌方羁绊档位按轮次截断（r1~5 无 / r6~12 ≤2 / r13~19 ≤4 / r20+ ≤6，
+     * {@link GameBalance#enemySynergyCountCap}）；玩家侧不截断。
+     */
+    public BattleState startBattle(Player player, List<WaveSpec> enemyWave,
+                                   GameData data, RandomGenerator rng, IdIssuer idIssuer,
+                                   RunModifiers modifiers, int round) {
         Objects.requireNonNull(player, "player 不能为 null");
         Objects.requireNonNull(enemyWave, "enemyWave 不能为 null");
         Objects.requireNonNull(data, "data 不能为 null");
@@ -87,7 +99,9 @@ public final class BattleSystem {
         for (WaveSpec spec : enemyWave) {
             enemyTemplates.add(spec.getTemplate());
         }
-        SynergySnapshot enemySynergies = synergySystem.resolve(enemyTemplates, data);
+        SynergySnapshot enemySynergies = synergySystem.resolve(enemyTemplates, data,
+                java.util.Collections.<String, Float>emptyMap(),
+                GameBalance.enemySynergyCountCap(round));
 
         List<BattleUnit> units = new ArrayList<BattleUnit>();
         List<Unit> rosterDeployed = player.getDeployedUnits(); // 与下方扫描同序（y↑x↑，口径 #16）
@@ -216,7 +230,8 @@ public final class BattleSystem {
             if (!unit.canActOnAttackTimer()) {
                 return; // 射程内 → 出手（冷却未到则等待）
             }
-            boolean crit = state.getRng().nextFloat() < GameBalance.CRIT_CHANCE;
+            boolean crit = state.getRng().nextFloat()
+                    < unit.getEffective(StatKey.CRIT_CHANCE) / 100f;
             state.record(CombatEvent.attackLaunched(state.getTick(), unit.getId(), target.getId()));
             if (unit.getEffective(StatKey.RANGE) >= 2f) {
                 state.spawnProjectile(new Projectile(unit.getId(), target.getId(),
@@ -271,7 +286,24 @@ public final class BattleSystem {
         BattleUnit unit = new BattleUnit(id, template, star, side,
                 data.getSkill(template.getSkillId()), baseStats); // 加载校验保证技能存在
         unit.setPosition(x, y);
+        List<EffectData> granted = new ArrayList<EffectData>();
+        for (EffectData effect : synergies.getMechanics()) {
+            if (effectAppliesTo(effect, unit)) {
+                granted.add(effect);
+            }
+        }
+        unit.setMechanics(granted); // framework-internal 写一次（ALLIES 全量 / TRAITS+trait 匹配 race 或 class）
         return unit;
+    }
+
+    /** target 谓词（K1）：ALLIES=该侧全体；TRAITS=race 或 class 命中 trait */
+    private static boolean effectAppliesTo(EffectData effect, BattleUnit unit) {
+        if (effect.getTarget() != EffectTarget.TRAITS) {
+            return true;
+        }
+        String trait = effect.getTrait();
+        return trait != null && (trait.equals(unit.getTemplate().getRace())
+                || trait.equals(unit.getTemplate().getUnitClass()));
     }
 
     /** 装备被动落地（data_schema §八：装备入口进 StatusSystem 的第二种形态）。

@@ -3,7 +3,9 @@ package com.voidvvv.kz_auto_chess_n.systems;
 import com.voidvvv.kz_auto_chess_n.config.GameBalance;
 import com.voidvvv.kz_auto_chess_n.data.BaseStats;
 import com.voidvvv.kz_auto_chess_n.data.Delivery;
+import com.voidvvv.kz_auto_chess_n.data.EffectData;
 import com.voidvvv.kz_auto_chess_n.data.EffectOp;
+import com.voidvvv.kz_auto_chess_n.data.EffectTarget;
 import com.voidvvv.kz_auto_chess_n.data.EquipmentData;
 import com.voidvvv.kz_auto_chess_n.data.EquipmentEffect;
 import com.voidvvv.kz_auto_chess_n.data.EquipmentPassive;
@@ -16,6 +18,7 @@ import com.voidvvv.kz_auto_chess_n.data.SkillShape;
 import com.voidvvv.kz_auto_chess_n.data.StatusType;
 import com.voidvvv.kz_auto_chess_n.data.StatKey;
 import com.voidvvv.kz_auto_chess_n.data.SynergyData;
+import com.voidvvv.kz_auto_chess_n.data.SynergyMechanic;
 import com.voidvvv.kz_auto_chess_n.data.SynergySource;
 import com.voidvvv.kz_auto_chess_n.data.TargetPriority;
 import com.voidvvv.kz_auto_chess_n.data.UnitData;
@@ -61,13 +64,13 @@ class BattleSystemTest {
 
     private static UnitData melee(String id, String race, float hp, float atk, float aspd) {
         return new UnitData(id, "夹具" + id, race, "战士", 1,
-                new BaseStats((int) hp, (int) atk, 0, aspd, 1, 1f, 0, 100, 0), 1.8f,
+                new BaseStats((int) hp, (int) atk, 0, aspd, 1, 1f, 0, 100, 0, 20, 150), 1.8f,
                 TargetPriority.NEAREST, null, "sk_hit", false);
     }
 
     private static UnitData ranged(String id, float hp, float atk, float aspd) {
         return new UnitData(id, "夹具" + id, "精灵", "游侠", 1,
-                new BaseStats((int) hp, (int) atk, 0, aspd, 3, 1f, 0, 100, 0), 1.8f,
+                new BaseStats((int) hp, (int) atk, 0, aspd, 3, 1f, 0, 100, 0, 20, 150), 1.8f,
                 TargetPriority.NEAREST, null, "sk_hit", false);
     }
 
@@ -358,7 +361,7 @@ class BattleSystemTest {
         GameData data = data();
         Player player = deployPlayer(data, melee("killer", "兽人", 100, 100, 1f), 2, 4);
         UnitData lowHpObserver = new UnitData("observer", "观察者", "精灵", "游侠", 1,
-                new BaseStats(100, 1, 0, 1f, 3, 1f, 0, 100, 0), 1.8f,
+                new BaseStats(100, 1, 0, 1f, 3, 1f, 0, 100, 0, 20, 150), 1.8f,
                 TargetPriority.NEAREST, TargetPriority.LOWEST_HP, "sk_hit", false);
         Unit observerUnit = new Unit(2, lowHpObserver, 1);
         player.addToBench(observerUnit);
@@ -384,7 +387,7 @@ class BattleSystemTest {
     void retargetEvery120Ticks() {
         GameData data = data();
         UnitData lowHpObserver = new UnitData("observer", "观察者", "精灵", "游侠", 1,
-                new BaseStats(10000, 1, 0, 1f, 3, 1f, 0, 100, 0), 1.8f,
+                new BaseStats(10000, 1, 0, 1f, 3, 1f, 0, 100, 0, 20, 150), 1.8f,
                 TargetPriority.NEAREST, TargetPriority.LOWEST_HP, "sk_hit", false);
         Player player = deployPlayer(data, lowHpObserver, 2, 4);
         List<WaveSpec> wave = waveOf(melee("e1", "哥布林", 1000, 1, 1f), 1f, 1, 0, 4, 0);
@@ -603,7 +606,7 @@ class BattleSystemTest {
     void energyGainStacksWithMageSynergy() {
         Map<String, UnitData> units = new LinkedHashMap<String, UnitData>();
         units.put("mage1", new UnitData("mage1", "夹具法师", "精灵", "法师", 1,
-                new BaseStats(100, 10, 0, 1f, 1, 1f, 0, 100, 0), 1.8f,
+                new BaseStats(100, 10, 0, 1f, 1, 1f, 0, 100, 0, 20, 150), 1.8f,
                 TargetPriority.NEAREST, null, "sk_hit", false));
         Map<String, SkillData> skills = new LinkedHashMap<String, SkillData>();
         skills.put("sk_hit", hitSkill());
@@ -682,5 +685,72 @@ class BattleSystemTest {
             ids.add(unit.getId());
         }
         return ids;
+    }
+
+    // —— v5 批0：D10 敌方羁绊档位截断（CP7）——
+
+    @Test
+    @DisplayName("D10 敌方档位截断：r2 双兽人不触发兽人(2)（cap 0）；r8 触发（cap 2 → hp+150）")
+    void enemySynergyCappedByRound() {
+        GameData data = data();
+        Player player = deployPlayer(data, melee("lone", "哥布林", 100, 10, 1f), 2, 4);
+        // 敌方两只兽人（夹具 syn_orc (2) 档 = hp ADD 150）
+        List<WaveSpec> wave = waveOf(data.getUnit("orc"), 1f, 2, 0, 3, 0);
+
+        BattleState round2 = SYSTEM.startBattle(player, wave, data,
+                new RandomGenerator(42L), new SequentialIdIssuer(), RunModifiers.EMPTY, 2);
+        assertThat(round2.getUnits().get(1).getBaseStats().get(StatKey.HP))
+                .isCloseTo(100f, within(1e-4f)); // cap 0 → 敌方无羁绊
+
+        BattleState round8 = SYSTEM.startBattle(player, wave, data,
+                new RandomGenerator(42L), new SequentialIdIssuer(), RunModifiers.EMPTY, 8);
+        assertThat(round8.getUnits().get(1).getBaseStats().get(StatKey.HP))
+                .isCloseTo(250f, within(1e-4f)); // cap 2 → (2) 档 hp+150
+        // 玩家侧不截断：旧六参重载委托 round=25（cap 6）与七参 25 输出全等
+        BattleState legacy = SYSTEM.startBattle(player, wave, data,
+                new RandomGenerator(42L), new SequentialIdIssuer());
+        BattleState round25 = SYSTEM.startBattle(player, wave, data,
+                new RandomGenerator(42L), new SequentialIdIssuer(), RunModifiers.EMPTY, 25);
+        assertThat(round25.getUnits().get(1).getBaseStats().get(StatKey.HP))
+                .isCloseTo(legacy.getUnits().get(1).getBaseStats().get(StatKey.HP), within(1e-6f));
+    }
+
+    @Test
+    @DisplayName("机制词下发（CP7 基建）：TRAITS 过滤——兽人(6) SCAR 只下发兽人侧兽人系，人类杂兵不入")
+    void mechanicsGrantedByTraitPredicate() {
+        Map<String, UnitData> units = new LinkedHashMap<String, UnitData>();
+        units.put("orc1", new UnitData("orc1", "夹具兽人", "兽人", "战士", 1,
+                new BaseStats(100, 10, 0, 1f, 1, 1f, 0, 100, 0, 20, 150), 1.8f,
+                TargetPriority.NEAREST, null, "sk_hit", false));
+        units.put("grunt", new UnitData("grunt", "夹具杂兵", "哥布林", "战士", 1,
+                new BaseStats(100, 10, 0, 1f, 1, 1f, 0, 100, 0, 20, 150), 1.8f,
+                TargetPriority.NEAREST, null, "sk_hit", false));
+        Map<String, SkillData> skills = new LinkedHashMap<String, SkillData>();
+        skills.put("sk_hit", hitSkill());
+        Map<String, SynergyData> synergies = new LinkedHashMap<String, SynergyData>();
+        synergies.put("syn_orc", new SynergyData("syn_orc", "兽人", SynergySource.RACE, "兽人",
+                Arrays.asList(new SynergyData.Threshold(2, Arrays.asList(
+                        new EffectData(null, null, SynergyMechanic.SCAR, null,
+                                3f, 6f, null, null, EffectTarget.TRAITS, "兽人"))))));
+        GameData data = new GameData(units, skills, synergies,
+                new LinkedHashMap<String, com.voidvvv.kz_auto_chess_n.data.SceneData>(), new ArrayList<String>());
+
+        Player player = new Player(10);
+        for (int i = 0; i < 2; i++) {
+            Unit unit = new Unit(100 + i, units.get("orc1"), 1);
+            player.addToBench(unit);
+            player.deploy(unit, i, 4);
+        }
+        Unit grunt = new Unit(200, units.get("grunt"), 1); // 同侧人类杂兵（职业战士）
+        player.addToBench(grunt);
+        player.deploy(grunt, 4, 4);
+        List<WaveSpec> wave = waveOf(units.get("grunt"), 1f, 2, 0);
+
+        BattleState state = SYSTEM.startBattle(player, wave, data,
+                new RandomGenerator(42L), new SequentialIdIssuer());
+        assertThat(state.getUnits().get(0).getMechanic(SynergyMechanic.SCAR)).isNotNull();  // 兽人命中
+        assertThat(state.getUnits().get(1).getMechanic(SynergyMechanic.SCAR)).isNotNull();
+        assertThat(state.getUnits().get(2).getMechanic(SynergyMechanic.SCAR)).isNull();     // 哥布林不入
+        assertThat(state.getUnits().get(3).getMechanic(SynergyMechanic.SCAR)).isNull();     // 敌方不入（玩家侧羁绊）
     }
 }

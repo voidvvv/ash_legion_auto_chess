@@ -16,8 +16,7 @@ public final class GameBalance {
     // —— 战斗 ——
     public static final float LOGIC_STEP = 1f / 60f;
     public static final float BATTLE_TIMEOUT = 60f;
-    public static final float CRIT_CHANCE = 0.20f;
-    public static final float CRIT_MULTIPLIER = 1.5f;
+    // 暴击两键已属性化（v5 §五.5）：缺省值以 StatKey.CRIT_CHANCE/CRIT_DAMAGE.baseStatsDefault() 为唯一事实源
 
     /** 全局攻速系数（battle §5.1：敌我对称、只在消耗点乘算——BattleUnit.attackInterval() 一处；1 = 关闭） */
     public static final float ATTACK_SPEED_GLOBAL_FACTOR = 0.6f;
@@ -155,6 +154,15 @@ public final class GameBalance {
     public static int enemyCount(int round) {
         checkRound(round);
         return Math.round(ENEMY_COUNT.valueAt(round));
+    }
+
+    /** D10 敌方羁绊档位上限（v5 §4.1 临时口径）：r1~5=0（无）、r6~12=2、r13~19=4、r20+=6 */
+    public static int enemySynergyCountCap(int round) {
+        checkRound(round);
+        if (round <= 5) { return 0; }
+        if (round <= 12) { return 2; }
+        if (round <= 19) { return 4; }
+        return 6;
     }
 
     /** 宝箱金币：3 + floor(轮/3)，封顶 12（修订二）；Boss 箱 ×2（GDD §3.2） */

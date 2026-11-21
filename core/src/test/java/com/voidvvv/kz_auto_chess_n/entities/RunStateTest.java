@@ -21,7 +21,7 @@ class RunStateTest {
 
     private static UnitData tpl(String id) {
         return new UnitData(id, "夹具" + id, "兽人", "战士", 1,
-                new BaseStats(100, 10, 5, 1f, 1, 1f, 0, 100, 0), 1.8f,
+                new BaseStats(100, 10, 5, 1f, 1, 1f, 0, 100, 0, 20, 150), 1.8f,
                 TargetPriority.NEAREST, null, "skill_warcry", false);
     }
 

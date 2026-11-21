@@ -74,7 +74,7 @@ class PlaceholderKeysTest {
                 "unit_x_attack_0", "unit_x_attack_1", "unit_x_attack_2",
                 "unit_x_cast_0", "unit_x_cast_1",
                 "unit_x_death_0", "unit_x_death_1", "unit_x_death_2");
-        assertThat(full).hasSize(12 + 2 + 9 + 10 + 4);
+        assertThat(full).hasSize(12 + 2 + 10 + 10 + 4); // 状态 fx 10（v5 增 BURN）
     }
 
     @Test

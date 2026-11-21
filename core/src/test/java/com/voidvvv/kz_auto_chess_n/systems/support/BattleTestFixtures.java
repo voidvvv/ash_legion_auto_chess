@@ -44,7 +44,8 @@ public final class BattleTestFixtures {
     // —— 模板与技能 ——
 
     public static BaseStats base(float hp, float atk, float armor, float aspd, float range, float ms) {
-        return new BaseStats((int) hp, (int) atk, (int) armor, aspd, (int) range, ms, 0, 100, 0);
+        return new BaseStats((int) hp, (int) atk, (int) armor, aspd, (int) range, ms,
+                0, 100, 0, StatKey.CRIT_CHANCE.baseStatsDefault(), StatKey.CRIT_DAMAGE.baseStatsDefault());
     }
 
     public static UnitData tpl(String id) {
@@ -80,11 +81,11 @@ public final class BattleTestFixtures {
     // —— 战斗实例 ——
 
     public static BattleStats stats(float hp, float atk) {
-        return new BattleStats(hp, atk, 5f, 1f, 1f, 1f, 0f, 100f, 0f);
+        return new BattleStats(hp, atk, 5f, 1f, 1f, 1f, 0f, 100f, 0f, 20f, 150f);
     }
 
     public static BattleStats stats(float hp, float atk, float armor, float aspd, float range, float ms) {
-        return new BattleStats(hp, atk, armor, aspd, range, ms, 0f, 100f, 0f);
+        return new BattleStats(hp, atk, armor, aspd, range, ms, 0f, 100f, 0f, 20f, 150f);
     }
 
     public static BattleUnit unit(int id, Side side, UnitData template, int x, int y) {
@@ -96,7 +97,8 @@ public final class BattleTestFixtures {
     private static BattleStats tplStats(UnitData template) {
         BaseStats b = template.getBaseStats();
         return new BattleStats(b.getHp(), b.getAttack(), b.getArmor(), b.getAttackSpeed(),
-                b.getRange(), b.getMoveSpeed(), b.getLifesteal(), b.getEnergyGainRate(), b.getSkillPower());
+                b.getRange(), b.getMoveSpeed(), b.getLifesteal(), b.getEnergyGainRate(), b.getSkillPower(),
+                b.getCritChance(), b.getCritDamage());
     }
 
     /** 空羁绊状态 + seed 42 的 RNG；单位按传入序落格 */

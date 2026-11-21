@@ -15,7 +15,7 @@ import java.util.Objects;
 public final class CombatEvent {
     public enum Type {
         ATTACK_LAUNCHED, HIT, CAST, STATUS_APPLIED, HEALED, SHIELDED,
-        UNIT_DIED, PROJECTILE_FIZZLED, BATTLE_ENDED
+        UNIT_DIED, PROJECTILE_FIZZLED, BATTLE_ENDED, UNIT_BANISHED
     }
 
     private final int tick;
@@ -78,6 +78,11 @@ public final class CombatEvent {
     /** 单位死亡：sourceId = 亡者 id */
     public static CombatEvent unitDied(int tick, int unitId) {
         return new CombatEvent(tick, Type.UNIT_DIED, unitId, -1, 0f, 0f, false, null, null, null);
+    }
+
+    /** 放逐移除（非死亡事件，C10）：sourceId = -1，targetId = 被放逐者 */
+    public static CombatEvent unitBanished(int tick, int targetId) {
+        return new CombatEvent(tick, Type.UNIT_BANISHED, -1, targetId, 0f, 0f, false, null, null, null);
     }
 
     /** 在途弹消散（目标先一步被清扫） */

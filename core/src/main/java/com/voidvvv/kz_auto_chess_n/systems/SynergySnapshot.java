@@ -12,25 +12,33 @@ import java.util.Objects;
  * 羁绊结算快照（{@link SynergySystem} 的不可变产物），实现 {@link StatModifierSource}
  * （Q4 修正源列表：本期属性管线唯一源）。
  *
- * <p>三部分：actives（达档羁绊与档位信息，供 UI 与测试断言）、statModifiers（stat 通道
+ * <p>四部分：actives（达档羁绊与档位信息，供 UI 与测试断言）、statModifiers（stat 通道
  * ΣADD/ΣPCT，进第一级基准派生）、openingEffects（effect 通道如兽人 6 的开局盾，
- * startBattle 落地，口径 #17）。
+ * startBattle 落地，口径 #17；CP22 起 OPENING_ENERGY 并入）、mechanics（触发式机制词，
+ * v5 §4.1 第三通道 K1——startBattle 按 target 谓词下发到 BattleUnit）。
  */
 public final class SynergySnapshot implements StatModifierSource {
     /** 无任何达档羁绊的空快照（resolve 对未达最低档输入返回此单例） */
     public static final SynergySnapshot EMPTY = new SynergySnapshot(
             Collections.<ActiveSynergy>emptyList(), StatModifierBlock.empty(),
-            Collections.<EffectData>emptyList());
+            Collections.<EffectData>emptyList(), Collections.<EffectData>emptyList());
 
     private final List<ActiveSynergy> actives;
     private final StatModifierBlock statModifiers;
     private final List<EffectData> openingEffects;
+    private final List<EffectData> mechanics;
 
     public SynergySnapshot(List<ActiveSynergy> actives, StatModifierBlock statModifiers,
                            List<EffectData> openingEffects) {
+        this(actives, statModifiers, openingEffects, Collections.<EffectData>emptyList());
+    }
+
+    public SynergySnapshot(List<ActiveSynergy> actives, StatModifierBlock statModifiers,
+                           List<EffectData> openingEffects, List<EffectData> mechanics) {
         this.actives = Collections.unmodifiableList(new java.util.ArrayList<ActiveSynergy>(actives));
         this.statModifiers = Objects.requireNonNull(statModifiers, "statModifiers 不能为 null");
         this.openingEffects = Collections.unmodifiableList(new java.util.ArrayList<EffectData>(openingEffects));
+        this.mechanics = Collections.unmodifiableList(new java.util.ArrayList<EffectData>(mechanics));
     }
 
     /** 修正源接口：stat 通道修正块 */
@@ -46,6 +54,9 @@ public final class SynergySnapshot implements StatModifierSource {
 
     /** 开局效果（effect 通道，ALLIES 目标语义：对该侧全部单位生效） */
     public List<EffectData> getOpeningEffects() { return openingEffects; }
+
+    /** 触发式机制词（mechanic 通道全量；下发过滤见 BattleSystem.effectAppliesTo，K1） */
+    public List<EffectData> getMechanics() { return mechanics; }
 
     public boolean isEmpty() {
         return actives.isEmpty();

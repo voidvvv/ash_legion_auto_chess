@@ -44,7 +44,7 @@ class MetaServiceTest {
     private static GameData data() {
         Map<String, UnitData> units = new LinkedHashMap<String, UnitData>();
         units.put("u_a", new UnitData("u_a", "夹具a", "人类", "战士", 1,
-                new BaseStats(100, 10, 5, 1f, 1, 1f, 0, 100, 0), 1.8f,
+                new BaseStats(100, 10, 5, 1f, 1, 1f, 0, 100, 0, 20, 150), 1.8f,
                 TargetPriority.NEAREST, null, "sk_a", false));
         Map<Integer, String> bosses = new LinkedHashMap<Integer, String>();
         bosses.put(7, "u_a");

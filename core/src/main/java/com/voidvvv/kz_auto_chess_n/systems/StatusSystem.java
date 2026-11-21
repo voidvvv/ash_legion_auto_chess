@@ -90,6 +90,7 @@ public final class StatusSystem {
 
     private void tickHeartbeats(BattleState state, BattleUnit owner, ActiveStatus status, float dt) {
         if (status.getType() != StatusType.BLEED && status.getType() != StatusType.POISON
+                && status.getType() != StatusType.BURN
                 && status.getType() != StatusType.REGEN) {
             return; // 非 DOT/HOT 类无心跳
         }

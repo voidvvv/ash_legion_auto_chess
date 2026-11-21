@@ -66,7 +66,7 @@ class RunFlowSystemTest {
 
     private static UnitData unit(String id, int hp, int atk, int range, boolean boss) {
         return new UnitData(id, "演示" + id, "兽人", "战士", 1,
-                new BaseStats(hp, atk, 0, 1f, range, 1f, 0, 100, 0), 1.8f,
+                new BaseStats(hp, atk, 0, 1f, range, 1f, 0, 100, 0, 20, 150), 1.8f,
                 TargetPriority.NEAREST, null, "sk_" + id, boss);
     }
 

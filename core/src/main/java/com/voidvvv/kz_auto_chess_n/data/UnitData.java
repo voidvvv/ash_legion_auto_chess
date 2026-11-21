@@ -21,11 +21,23 @@ public final class UnitData {
     private final TargetPriority specialPriority;
     private final String skillId;
     private final boolean boss;
+    /** 个人亡语（可选，v5 亡灵线）；null = 无 */
+    private final DeathrattleSpec deathrattle;
+    /** 不死参数（可选，誓约未竟）；null = 无 */
+    private final UndyingSpec undying;
 
     public UnitData(String id, String name, String race, String unitClass, int cost,
                     BaseStats baseStats, float upgradeMultiplier,
                     TargetPriority defaultPriority, TargetPriority specialPriority,
                     String skillId, boolean boss) {
+        this(id, name, race, unitClass, cost, baseStats, upgradeMultiplier,
+                defaultPriority, specialPriority, skillId, boss, null, null);
+    }
+
+    public UnitData(String id, String name, String race, String unitClass, int cost,
+                    BaseStats baseStats, float upgradeMultiplier,
+                    TargetPriority defaultPriority, TargetPriority specialPriority,
+                    String skillId, boolean boss, DeathrattleSpec deathrattle, UndyingSpec undying) {
         this.id = id;
         this.name = name;
         this.race = race;
@@ -37,6 +49,8 @@ public final class UnitData {
         this.specialPriority = specialPriority;
         this.skillId = skillId;
         this.boss = boss;
+        this.deathrattle = deathrattle;
+        this.undying = undying;
     }
 
     public String getId() { return id; }
@@ -54,4 +68,8 @@ public final class UnitData {
     /** 引用 skills.json 的技能 id（加载期校验必存在） */
     public String getSkillId() { return skillId; }
     public boolean isBoss() { return boss; }
+    /** 个人亡语参数；null = 无（批0 仅解析入模板，批2 CP15 执行） */
+    public DeathrattleSpec getDeathrattle() { return deathrattle; }
+    /** 不死参数；null = 无（批0 仅解析入模板，批2 CP17 执行） */
+    public UndyingSpec getUndying() { return undying; }
 }

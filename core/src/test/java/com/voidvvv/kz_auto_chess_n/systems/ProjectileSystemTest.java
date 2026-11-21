@@ -47,7 +47,7 @@ class ProjectileSystemTest {
         BattleUnit unit = new BattleUnit(id, tpl("u" + id), 1, side, skill(
                 "sk_" + id, SkillShape.SINGLE_TARGET, Delivery.MELEE_INSTANT,
                 effect(SkillEffectType.DAMAGE, 1f, null, null)),
-                new com.voidvvv.kz_auto_chess_n.entities.BattleStats(100f, 10f, 0f, 1f, 3f, 1f, 0f, 100f, 0f));
+                new com.voidvvv.kz_auto_chess_n.entities.BattleStats(100f, 10f, 0f, 1f, 3f, 1f, 0f, 100f, 0f, 20f, 150f));
         unit.setPosition(x, y);
         return unit;
     }
@@ -190,7 +190,7 @@ class ProjectileSystemTest {
         SkillData melee = skill("sk_m", SkillShape.SINGLE_TARGET, Delivery.MELEE_INSTANT,
                 effect(SkillEffectType.DAMAGE, 2f, null, null));
         BattleUnit caster = new BattleUnit(1, tpl("c"), 1, Side.PLAYER, melee,
-                new com.voidvvv.kz_auto_chess_n.entities.BattleStats(100f, 10f, 0f, 1f, 1f, 1f, 0f, 100f, 0f));
+                new com.voidvvv.kz_auto_chess_n.entities.BattleStats(100f, 10f, 0f, 1f, 1f, 1f, 0f, 100f, 0f, 20f, 150f));
         caster.setPosition(2, 4);
         BattleUnit target = u(2, Side.ENEMY, 2, 2);
         caster.setTargetId(2);

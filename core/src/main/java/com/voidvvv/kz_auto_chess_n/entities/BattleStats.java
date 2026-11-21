@@ -5,10 +5,10 @@ import com.voidvvv.kz_auto_chess_n.data.StatKey;
 import java.util.Objects;
 
 /**
- * 不可变 9 键属性块（battle §八两级管线的产物：第一级基准 / 第二级有效）。
+ * 不可变 11 键属性块（battle §八两级管线的产物：第一级基准 / 第二级有效；v5 §五.5 暴击 +2 键）。
  *
  * <p>float 全精度直存（口径 #7：无中间取整，显示层取整留 Phase 4）。
- * 百分比类键（lifesteal / energyGainRate / skillPower）仍以百分点刻度存储，
+ * 百分比类键（lifesteal / energyGainRate / skillPower / critChance / critDamage）仍以百分点刻度存储，
  * 结算处统一 ÷100（StatKey.isPercentScale 约定）。
  */
 public final class BattleStats {
@@ -21,9 +21,12 @@ public final class BattleStats {
     private final float lifesteal;
     private final float energyGainRate;
     private final float skillPower;
+    private final float critChance;
+    private final float critDamage;
 
     public BattleStats(float hp, float attack, float armor, float attackSpeed, float range, float moveSpeed,
-                       float lifesteal, float energyGainRate, float skillPower) {
+                       float lifesteal, float energyGainRate, float skillPower,
+                       float critChance, float critDamage) {
         this.hp = hp;
         this.attack = attack;
         this.armor = armor;
@@ -33,9 +36,11 @@ public final class BattleStats {
         this.lifesteal = lifesteal;
         this.energyGainRate = energyGainRate;
         this.skillPower = skillPower;
+        this.critChance = critChance;
+        this.critDamage = critDamage;
     }
 
-    /** 按词表键取值（9 键全覆盖，互不串键） */
+    /** 按词表键取值（11 键全覆盖，互不串键） */
     public float get(StatKey key) {
         switch (key) {
             case HP: return hp;
@@ -47,6 +52,8 @@ public final class BattleStats {
             case LIFESTEAL: return lifesteal;
             case ENERGY_GAIN_RATE: return energyGainRate;
             case SKILL_POWER: return skillPower;
+            case CRIT_CHANCE: return critChance;
+            case CRIT_DAMAGE: return critDamage;
             default:
                 throw new IllegalArgumentException("未知 StatKey: " + key);
         }
@@ -64,6 +71,10 @@ public final class BattleStats {
     public float getEnergyGainRate() { return energyGainRate; }
     /** 技能数值幅度加成，百分点 */
     public float getSkillPower() { return skillPower; }
+    /** 暴击率，百分点（20 = 20%；§五.5 属性化迁移） */
+    public float getCritChance() { return critChance; }
+    /** 暴击伤害倍率，百分点（150 = ×1.5） */
+    public float getCritDamage() { return critDamage; }
 
     /** 值语义判等（测试断言"empty 恒等"等场景用；float 按位比较） */
     @Override
@@ -83,7 +94,9 @@ public final class BattleStats {
                 && Float.floatToIntBits(moveSpeed) == Float.floatToIntBits(s.moveSpeed)
                 && Float.floatToIntBits(lifesteal) == Float.floatToIntBits(s.lifesteal)
                 && Float.floatToIntBits(energyGainRate) == Float.floatToIntBits(s.energyGainRate)
-                && Float.floatToIntBits(skillPower) == Float.floatToIntBits(s.skillPower);
+                && Float.floatToIntBits(skillPower) == Float.floatToIntBits(s.skillPower)
+                && Float.floatToIntBits(critChance) == Float.floatToIntBits(s.critChance)
+                && Float.floatToIntBits(critDamage) == Float.floatToIntBits(s.critDamage);
     }
 
     @Override
@@ -97,6 +110,8 @@ public final class BattleStats {
         result = 31 * result + Float.floatToIntBits(lifesteal);
         result = 31 * result + Float.floatToIntBits(energyGainRate);
         result = 31 * result + Float.floatToIntBits(skillPower);
+        result = 31 * result + Float.floatToIntBits(critChance);
+        result = 31 * result + Float.floatToIntBits(critDamage);
         return result;
     }
 
@@ -104,6 +119,7 @@ public final class BattleStats {
     public String toString() {
         return "BattleStats{hp=" + hp + ", attack=" + attack + ", armor=" + armor
                 + ", aspd=" + attackSpeed + ", range=" + range + ", ms=" + moveSpeed
-                + ", ls=" + lifesteal + ", egr=" + energyGainRate + ", sp=" + skillPower + "}";
+                + ", ls=" + lifesteal + ", egr=" + energyGainRate + ", sp=" + skillPower
+                + ", cc=" + critChance + ", cd=" + critDamage + "}";
     }
 }

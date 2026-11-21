@@ -76,7 +76,7 @@ public final class RunFlowSystem {
             }
             BattleState state = battleSystem.startBattle(ctx.getPlayer(), runState.getEnemyWave(),
                     ctx.getGameData(), ctx.getRng(), runState.getIdIssuer(),
-                    runState.getModifiers()); // 零棋子允许开战；局外修正透传（Phase 6）
+                    runState.getModifiers(), runState.getRound()); // 零棋子允许开战；D10 敌方档位随轮次截断
             ctx.setBattleState(state);
             runState.setPhase(GamePhase.BATTLE);
             return true;

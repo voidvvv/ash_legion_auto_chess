@@ -1,9 +1,11 @@
 package com.voidvvv.kz_auto_chess_n.entities;
 
 import com.voidvvv.kz_auto_chess_n.config.GameBalance;
+import com.voidvvv.kz_auto_chess_n.data.EffectData;
 import com.voidvvv.kz_auto_chess_n.data.SkillData;
 import com.voidvvv.kz_auto_chess_n.data.StatKey;
 import com.voidvvv.kz_auto_chess_n.data.StatusType;
+import com.voidvvv.kz_auto_chess_n.data.SynergyMechanic;
 import com.voidvvv.kz_auto_chess_n.data.UnitData;
 import com.voidvvv.kz_auto_chess_n.systems.StatPipeline;
 
@@ -41,6 +43,9 @@ public final class BattleUnit {
     private BattleStats effectiveStats;
     private boolean statsDirty;
     private boolean cleaned;
+    /** 命中的机制词（K1：startBattle 按 target 谓词过滤后写一次；批0 惰性数据，批2~4 消费） */
+    private List<EffectData> mechanics = Collections.emptyList();
+    private boolean banished;
 
     public BattleUnit(int id, UnitData template, int star, Side side,
                       SkillData skill, BattleStats baseStats) {
@@ -209,6 +214,38 @@ public final class BattleUnit {
         cleaned = true;
         statuses.clear();
         targetId = -1;
+    }
+
+    /** framework-internal：放逐移除（C10 非死亡）——同清扫清场，但额外携带 banished 标记供表现层区分 */
+    public void markBanished() {
+        markCleaned();
+        banished = true;
+    }
+
+    /** 放逐移除标记（仅表现层读取；机制语义全部由「非死亡事件」口径保证） */
+    public boolean isBanished() {
+        return banished;
+    }
+
+    /** framework-internal：机制词下发（K1：startBattle 派生时按 target 谓词过滤后写一次） */
+    public void setMechanics(List<EffectData> granted) {
+        Objects.requireNonNull(granted, "granted 不能为 null");
+        this.mechanics = Collections.unmodifiableList(new ArrayList<EffectData>(granted));
+    }
+
+    /** 命中的机制词全量（不可变视图；批2~4 各系统消费） */
+    public List<EffectData> getMechanics() {
+        return mechanics;
+    }
+
+    /** 本单位命中的机制词（K1：按 target 谓词过滤后下发；无=null） */
+    public EffectData getMechanic(SynergyMechanic kind) {
+        for (EffectData effect : mechanics) {
+            if (effect.getMechanic() == kind) {
+                return effect;
+            }
+        }
+        return null;
     }
 
     private static float clampEnergy(float value) {

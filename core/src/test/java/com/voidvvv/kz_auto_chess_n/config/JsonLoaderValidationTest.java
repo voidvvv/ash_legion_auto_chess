@@ -361,21 +361,30 @@ class JsonLoaderValidationTest {
     }
 
     @Test
-    @DisplayName("羁绊效果 stat 与 effect 必须二选一")
+    @DisplayName("羁绊效果 stat / effect / mechanic 必须三选一")
     void synergyEffectStatXorEffect() {
         String both = VALID_SYNERGY.replace(
                 "{ \"stat\": \"hp\", \"op\": \"ADD\", \"value\": 10 }",
                 "{ \"stat\": \"hp\", \"op\": \"ADD\", \"value\": 10, \"effect\": \"SHIELD\" }");
         assertThatThrownBy(() -> load(null, null, both))
                 .isInstanceOf(DataValidationException.class)
-                .hasMessageContaining("二选一");
+                .hasMessageContaining("三选一");
 
         String neither = VALID_SYNERGY.replace(
                 "{ \"stat\": \"hp\", \"op\": \"ADD\", \"value\": 10 }",
                 "{ \"value\": 10 }");
         assertThatThrownBy(() -> load(null, null, neither))
                 .isInstanceOf(DataValidationException.class)
-                .hasMessageContaining("二选一");
+                .hasMessageContaining("三选一");
+
+        // stat + mechanic 双选同罪（v5 第三通道互斥）
+        String statAndMechanic = VALID_SYNERGY.replace(
+                "{ \"stat\": \"hp\", \"op\": \"ADD\", \"value\": 10 }",
+                "{ \"stat\": \"hp\", \"op\": \"ADD\", \"value\": 10,"
+                + " \"mechanic\": \"DOUBLE_DEATHRATTLE\" }");
+        assertThatThrownBy(() -> load(null, null, statAndMechanic))
+                .isInstanceOf(DataValidationException.class)
+                .hasMessageContaining("三选一");
     }
 
     @Test
@@ -388,6 +397,154 @@ class JsonLoaderValidationTest {
                 .isInstanceOf(DataValidationException.class)
                 .hasMessageContaining("op")
                 .hasMessageContaining("缺必填字段");
+    }
+
+    // —— v5 批0：机制三通道 / 亡语 / 不死 / 施放条件 逐词校验 ——
+
+    @Test
+    @DisplayName("机制通道正向：逐词参数解析通过（K1 参数表）")
+    void mechanicChannelPositive() throws IOException {
+        String synergies = "[{ \"id\": \"syn1\", \"name\": \"兽人\", \"desc\": \"试作\", \"source\": \"RACE\", \"key\": \"兽人\","
+                + " \"thresholds\": [ { \"count\": 2, \"effects\": ["
+                + " { \"mechanic\": \"BASIC_ATTACK_STATUS\", \"status\": \"BURN\", \"value\": 30, \"duration\": 3,"
+                + " \"target\": \"TRAITS\", \"trait\": \"兽人\" },"
+                + " { \"mechanic\": \"DEATH_TAX\", \"value\": 4, \"value2\": 20 },"
+                + " { \"mechanic\": \"DOUBLE_DEATHRATTLE\", \"target\": \"TRAITS\", \"trait\": \"兽人\" },"
+                + " { \"mechanic\": \"DEATH_AUDIT\", \"value\": 25 } ] } ] }]";
+        GameData data = load(null, null, synergies);
+        assertThat(data.getSynergy("syn1").getThresholds().get(0).getEffects()).hasSize(4);
+    }
+
+    @Test
+    @DisplayName("机制通道负向：target=TRAITS 缺 trait 即死；无参词带 value 即死；BASIC_ATTACK_STATUS 缺 status 即死")
+    void mechanicChannelValidation() {
+        String missingTrait = VALID_SYNERGY.replace(
+                "{ \"stat\": \"hp\", \"op\": \"ADD\", \"value\": 10 }",
+                "{ \"mechanic\": \"DEATH_TAX\", \"value\": 4, \"value2\": 20,"
+                + " \"target\": \"TRAITS\" }");
+        assertThatThrownBy(() -> load(null, null, missingTrait))
+                .isInstanceOf(DataValidationException.class)
+                .hasMessageContaining("syn1/thresholds[0]/effects[0]/trait")
+                .hasMessageContaining("TRAITS");
+
+        String noParamWordWithValue = VALID_SYNERGY.replace(
+                "{ \"stat\": \"hp\", \"op\": \"ADD\", \"value\": 10 }",
+                "{ \"mechanic\": \"SHIELD_WALL\", \"value\": 3 }");
+        assertThatThrownBy(() -> load(null, null, noParamWordWithValue))
+                .isInstanceOf(DataValidationException.class)
+                .hasMessageContaining("SHIELD_WALL")
+                .hasMessageContaining("无参机制词");
+
+        String missingStatus = VALID_SYNERGY.replace(
+                "{ \"stat\": \"hp\", \"op\": \"ADD\", \"value\": 10 }",
+                "{ \"mechanic\": \"BASIC_ATTACK_STATUS\", \"value\": 30, \"duration\": 3 }");
+        assertThatThrownBy(() -> load(null, null, missingStatus))
+                .isInstanceOf(DataValidationException.class)
+                .hasMessageContaining("BASIC_ATTACK_STATUS")
+                .hasMessageContaining("status");
+    }
+
+    @Test
+    @DisplayName("机制词未知值即死（requireVocab 列合法值）")
+    void unknownMechanicWordRejected() {
+        String broken = VALID_SYNERGY.replace(
+                "{ \"stat\": \"hp\", \"op\": \"ADD\", \"value\": 10 }",
+                "{ \"mechanic\": \"NO_SUCH_MECHANIC\" }");
+        assertThatThrownBy(() -> load(null, null, broken))
+                .isInstanceOf(DataValidationException.class)
+                .hasMessageContaining("mechanic")
+                .hasMessageContaining("DEATH_TAX");
+    }
+
+    @Test
+    @DisplayName("skills 新词校验：GAIN_ENERGY 缺 value / KNOCKBACK 小数 / BANISH 带 value 均即死")
+    void newSkillEffectWordsValidated() {
+        String gainNoValue = "[{ \"id\": \"sk1\", \"name\": \"x\", \"desc\": \"x\", \"shape\": \"SELF\","
+                + " \"effects\": [ { \"effect\": \"GAIN_ENERGY\" } ] }]";
+        assertThatThrownBy(() -> load(null, gainNoValue, null))
+                .isInstanceOf(DataValidationException.class)
+                .hasMessageContaining("GAIN_ENERGY 必须有 value > 0");
+
+        String knockbackFraction = "[{ \"id\": \"sk1\", \"name\": \"x\", \"desc\": \"x\", \"shape\": \"SINGLE_TARGET\","
+                + " \"effects\": [ { \"effect\": \"KNOCKBACK\", \"value\": 1.5 } ] }]";
+        assertThatThrownBy(() -> load(null, knockbackFraction, null))
+                .isInstanceOf(DataValidationException.class)
+                .hasMessageContaining("KNOCKBACK")
+                .hasMessageContaining("整数 value ≥ 1");
+
+        String banishWithValue = "[{ \"id\": \"sk1\", \"name\": \"x\", \"desc\": \"x\", \"shape\": \"SINGLE_TARGET\","
+                + " \"effects\": [ { \"effect\": \"BANISH\", \"value\": 2 } ] }]";
+        assertThatThrownBy(() -> load(null, banishWithValue, null))
+                .isInstanceOf(DataValidationException.class)
+                .hasMessageContaining("BANISH 不携带 value/status/duration");
+    }
+
+    @Test
+    @DisplayName("condition 校验：缺 value 即死；value 越界（>1）即死")
+    void castConditionValidated() {
+        String missingValue = "[{ \"id\": \"sk1\", \"name\": \"x\", \"desc\": \"x\", \"shape\": \"SINGLE_TARGET\","
+                + " \"effects\": [ { \"effect\": \"BANISH\" } ],"
+                + " \"condition\": { \"type\": \"TARGET_HP_BELOW\" } }]";
+        assertThatThrownBy(() -> load(null, missingValue, null))
+                .isInstanceOf(DataValidationException.class)
+                .hasMessageContaining("condition/value")
+                .hasMessageContaining("缺必填字段");
+
+        String outOfRange = "[{ \"id\": \"sk1\", \"name\": \"x\", \"desc\": \"x\", \"shape\": \"SINGLE_TARGET\","
+                + " \"effects\": [ { \"effect\": \"BANISH\" } ],"
+                + " \"condition\": { \"type\": \"TARGET_HP_BELOW\", \"value\": 1.5 } }]";
+        assertThatThrownBy(() -> load(null, outOfRange, null))
+                .isInstanceOf(DataValidationException.class)
+                .hasMessageContaining("TARGET_HP_BELOW")
+                .hasMessageContaining("0 < value ≤ 1");
+    }
+
+    @Test
+    @DisplayName("deathrattle 校验：未知 kind 即死；ALLY_REGEN 缺 duration 即死")
+    void deathrattleValidated() {
+        String unknownKind = VALID_UNIT.replace("\"skillId\": \"sk1\"",
+                "\"skillId\": \"sk1\", \"deathrattle\": { \"kind\": \"NOPE\", \"ratio\": 1.0 }");
+        assertThatThrownBy(() -> load(unknownKind, null, null))
+                .isInstanceOf(DataValidationException.class)
+                .hasMessageContaining("u1/deathrattle/kind");
+
+        String missingDuration = VALID_UNIT.replace("\"skillId\": \"sk1\"",
+                "\"skillId\": \"sk1\", \"deathrattle\": { \"kind\": \"ALLY_REGEN\", \"regenRatio\": 0.02 }");
+        assertThatThrownBy(() -> load(missingDuration, null, null))
+                .isInstanceOf(DataValidationException.class)
+                .hasMessageContaining("ALLY_REGEN")
+                .hasMessageContaining("duration");
+    }
+
+    @Test
+    @DisplayName("undying 校验：负数/零即死；reviveHpRatio 越 (0,1] 界即死")
+    void undyingValidated() {
+        String negative = VALID_UNIT.replace("\"skillId\": \"sk1\"",
+                "\"skillId\": \"sk1\", \"undying\": { \"reviveDelaySeconds\": -1.0, \"reviveHpRatio\": 0.4 }");
+        assertThatThrownBy(() -> load(negative, null, null))
+                .isInstanceOf(DataValidationException.class)
+                .hasMessageContaining("u1/undying/reviveDelaySeconds")
+                .hasMessageContaining("必须 > 0");
+
+        String ratioTooBig = VALID_UNIT.replace("\"skillId\": \"sk1\"",
+                "\"skillId\": \"sk1\", \"undying\": { \"reviveDelaySeconds\": 1.0, \"reviveHpRatio\": 1.2 }");
+        assertThatThrownBy(() -> load(ratioTooBig, null, null))
+                .isInstanceOf(DataValidationException.class)
+                .hasMessageContaining("reviveHpRatio")
+                .hasMessageContaining("(0, 1]");
+    }
+
+    @Test
+    @DisplayName("baseStats 暴击两键显式覆写解析（§五.5）：critChance 35 / critDamage 200")
+    void critKeysExplicitOverwrite() throws IOException {
+        String overwritten = VALID_UNITS.replace(
+                "\"range\": 1, \"moveSpeed\": 1.0 }",
+                "\"range\": 1, \"moveSpeed\": 1.0, \"critChance\": 35, \"critDamage\": 200 }");
+        GameData data = load(overwritten, null, null);
+        assertThat(data.getUnit("u1").getBaseStats().getCritChance()).isEqualTo(35);
+        assertThat(data.getUnit("u1").getBaseStats().getCritDamage()).isEqualTo(200);
+        assertThat(data.getUnit("u2").getBaseStats().getCritChance()).isEqualTo(20); // 缺省（range 3 不匹配替换锚点）
+        assertThat(data.getUnit("u2").getBaseStats().getCritDamage()).isEqualTo(150);
     }
 
     // —— 文件级 ——

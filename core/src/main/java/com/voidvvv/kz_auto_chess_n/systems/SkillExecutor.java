@@ -1,6 +1,7 @@
 package com.voidvvv.kz_auto_chess_n.systems;
 
 import com.voidvvv.kz_auto_chess_n.config.GameBalance;
+import com.voidvvv.kz_auto_chess_n.data.CastCondition;
 import com.voidvvv.kz_auto_chess_n.data.Delivery;
 import com.voidvvv.kz_auto_chess_n.data.SkillData;
 import com.voidvvv.kz_auto_chess_n.data.SkillEffect;
@@ -8,6 +9,7 @@ import com.voidvvv.kz_auto_chess_n.data.SkillEffectType;
 import com.voidvvv.kz_auto_chess_n.data.SkillShape;
 import com.voidvvv.kz_auto_chess_n.data.StatKey;
 import com.voidvvv.kz_auto_chess_n.data.StatusType;
+import com.voidvvv.kz_auto_chess_n.data.SynergyMechanic;
 import com.voidvvv.kz_auto_chess_n.entities.BattleState;
 import com.voidvvv.kz_auto_chess_n.entities.BattleUnit;
 import com.voidvvv.kz_auto_chess_n.entities.CombatEvent;
@@ -57,6 +59,9 @@ public final class SkillExecutor {
         BattleUnit mainTarget = resolveMainTarget(state, caster, skill);
         if (mainTarget == null) {
             return false; // 延后（口径 #18）
+        }
+        if (!castConditionMet(skill, mainTarget)) {
+            return false; // 条件不满足 → 延后（依账除名「持能等待」）
         }
 
         float attackSnapshot = caster.getEffective(StatKey.ATTACK);
@@ -239,13 +244,70 @@ public final class SkillExecutor {
                 statusSystem.apply(state, target, status, power, duration, caster.getId());
                 break;
             }
+            case GAIN_ENERGY:
+                damagePipeline.gainEnergy(state, target, value); // 走回能管线（受 energyGainRate 加权）
+                break;
+            case KNOCKBACK:
+                applyKnockback(state, target, caster, (int) value);
+                break;
+            case BANISH:
+                Banish.execute(state, target);
+                break;
             default:
                 throw new IllegalArgumentException("未知 SkillEffectType: " + effect.getEffect());
         }
     }
 
+    /** 技能级施放条件（v5「依账除名」）：condition 为 null 恒满足 */
+    private static boolean castConditionMet(SkillData skill, BattleUnit mainTarget) {
+        CastCondition condition = skill.getCondition();
+        if (condition == null) {
+            return true;
+        }
+        if (condition.getType() == CastCondition.Type.TARGET_HP_BELOW) {
+            return mainTarget.hpRatio() < condition.getValue();
+        }
+        throw new IllegalArgumentException("未知施放条件: " + condition.getType());
+    }
+
+    /**
+     * 击退（薄执行，K13）：KNOCKBACK_IMMUNE 机制（经 startBattle 下发）或已倒地（CP17 起判定）/清扫者不动；
+     * 方向 = 主轴远离施放者（|dx|≥|dy| 取 x 向，否则 y 向；同格不动），
+     * 逐格 removeFromGrid+placeUnit，目标格被占/越界即止（保留已推进格）。
+     */
+    private static void applyKnockback(BattleState state, BattleUnit target, BattleUnit caster, int distance) {
+        if (target.isCleaned() || target.getMechanic(SynergyMechanic.KNOCKBACK_IMMUNE) != null) {
+            return;
+        }
+        int dx = target.getGridX() - caster.getGridX();
+        int dy = target.getGridY() - caster.getGridY();
+        if (dx == 0 && dy == 0) {
+            return; // 同格不动
+        }
+        boolean alongX = Math.abs(dx) >= Math.abs(dy);
+        int stepX = alongX ? Integer.signum(dx) : 0;
+        int stepY = alongX ? 0 : Integer.signum(dy);
+        int fromX = target.getGridX();
+        int fromY = target.getGridY();
+        int x = fromX;
+        int y = fromY;
+        state.removeFromGrid(target);
+        for (int i = 0; i < distance; i++) {
+            int nextX = x + stepX;
+            int nextY = y + stepY;
+            if (nextX < 0 || nextX >= GameBalance.BOARD_COLS
+                    || nextY < 0 || nextY >= GameBalance.BOARD_ROWS
+                    || state.unitAt(nextX, nextY) != null) {
+                break; // 越界或被占即止
+            }
+            x = nextX;
+            y = nextY;
+        }
+        state.placeUnit(target, x, y); // 一步未进时 x/y = from，原地放回
+    }
+
     private static boolean isDotType(StatusType status) {
-        return status == StatusType.BLEED || status == StatusType.POISON;
+        return status == StatusType.BLEED || status == StatusType.POISON || status == StatusType.BURN;
     }
 
     private static List<BattleUnit> singleList(BattleUnit unit) {

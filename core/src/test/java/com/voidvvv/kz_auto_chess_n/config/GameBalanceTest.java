@@ -261,8 +261,7 @@ class GameBalanceTest {
         assertThat(GameBalance.BOSS_ROUNDS).containsExactly(7, 15, 25);
         assertThat(GameBalance.LOGIC_STEP).isCloseTo(1f / 60f, within(1e-8f));
         assertThat(GameBalance.BATTLE_TIMEOUT).isEqualTo(60f);
-        assertThat(GameBalance.CRIT_CHANCE).isEqualTo(0.20f);
-        assertThat(GameBalance.CRIT_MULTIPLIER).isEqualTo(1.5f);
+        // 暴击两键已属性化（v5 §五.5）：缺省值走 StatKey（见 StatPipelineTest / JsonLoaderTest）
         assertThat(GameBalance.ENERGY_MAX).isEqualTo(100);
         assertThat(GameBalance.ENERGY_PER_HIT).isEqualTo(10);
         assertThat(GameBalance.ENERGY_PER_HIT_TAKEN).isEqualTo(5);
@@ -288,6 +287,20 @@ class GameBalanceTest {
         for (int round = 1; round <= 25; round++) {
             boolean expected = Arrays.binarySearch(new int[]{7, 15, 25}, round) >= 0;
             assertThat(GameBalance.isBossRound(round)).isEqualTo(expected);
+        }
+    }
+
+    @Test
+    @DisplayName("D10 敌方羁绊档位上限：r1~5=0 / r6~12=2 / r13~19=4 / r20+=6（v5 §4.1 临时口径）")
+    void enemySynergyCountCapByRound() {
+        int[] expected = new int[25];
+        for (int round = 1; round <= 25; round++) {
+            expected[round - 1] = round <= 5 ? 0 : round <= 12 ? 2 : round <= 19 ? 4 : 6;
+        }
+        for (int round = 1; round <= 25; round++) {
+            assertThat(GameBalance.enemySynergyCountCap(round))
+                    .as("第 %d 轮档位上限", round)
+                    .isEqualTo(expected[round - 1]);
         }
     }
 }

@@ -10,6 +10,7 @@ import com.voidvvv.kz_auto_chess_n.entities.BattleUnit;
 import com.voidvvv.kz_auto_chess_n.entities.CombatEvent;
 import com.voidvvv.kz_auto_chess_n.entities.IdIssuer;
 import com.voidvvv.kz_auto_chess_n.entities.Player;
+import com.voidvvv.kz_auto_chess_n.entities.RunModifiers;
 import com.voidvvv.kz_auto_chess_n.entities.SequentialIdIssuer;
 import com.voidvvv.kz_auto_chess_n.entities.Side;
 import com.voidvvv.kz_auto_chess_n.entities.Unit;
@@ -64,7 +65,8 @@ public final class BattleConsoleMain {
         buyAndDeploy(player, idIssuer, data, "unit_ranger_01", 2, 6);
 
         BattleSystem battleSystem = new BattleSystem();
-        BattleState state = battleSystem.startBattle(player, wave, data, rng, idIssuer);
+        BattleState state = battleSystem.startBattle(player, wave, data, rng, idIssuer,
+                RunModifiers.EMPTY, round); // D10：敌方羁绊档位随轮次截断
         battleSystem.runToEnd(state, MAX_TICKS);
 
         System.out.println("=== 余烬军团 · 整场战斗模拟（seed=" + seed + ", round=" + round + ", scene=" + sceneId + "）===");

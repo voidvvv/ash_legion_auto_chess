@@ -44,7 +44,7 @@ class UnitInfoTextTest {
 
     private static UnitData tpl(String id, String race, String unitClass) {
         return new UnitData(id, "夹具" + id, race, unitClass, 1,
-                new BaseStats(100, 10, 5, 1f, 1, 1f, 0, 100, 0), 1.8f,
+                new BaseStats(100, 10, 5, 1f, 1, 1f, 0, 100, 0, 20, 150), 1.8f,
                 TargetPriority.NEAREST, null, "sk_" + id, false);
     }
 

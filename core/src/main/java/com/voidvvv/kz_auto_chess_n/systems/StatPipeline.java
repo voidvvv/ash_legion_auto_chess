@@ -45,7 +45,9 @@ public final class StatPipeline {
 
         float[] values = new float[StatKey.values().length];
         for (StatKey key : StatKey.values()) {
-            float raw = templateValue(base, key) * starMult * scale;
+            // Q1 裁决 2026-11-21（计划 CP1 缺陷已修）：v5 §〇 锚点 ×k 仅血/攻/甲/攻速；敌方暴击保持模板值
+            float effectiveScale = (key == StatKey.CRIT_CHANCE || key == StatKey.CRIT_DAMAGE) ? 1f : scale;
+            float raw = templateValue(base, key) * starMult * effectiveScale;
             values[key.ordinal()] = combine(raw, merged.addOf(key), merged.pctOf(key));
         }
         return build(values);
@@ -119,7 +121,8 @@ public final class StatPipeline {
                 byOrdinal[StatKey.ARMOR.ordinal()], byOrdinal[StatKey.ATTACK_SPEED.ordinal()],
                 byOrdinal[StatKey.RANGE.ordinal()], byOrdinal[StatKey.MOVE_SPEED.ordinal()],
                 byOrdinal[StatKey.LIFESTEAL.ordinal()], byOrdinal[StatKey.ENERGY_GAIN_RATE.ordinal()],
-                byOrdinal[StatKey.SKILL_POWER.ordinal()]);
+                byOrdinal[StatKey.SKILL_POWER.ordinal()],
+                byOrdinal[StatKey.CRIT_CHANCE.ordinal()], byOrdinal[StatKey.CRIT_DAMAGE.ordinal()]);
     }
 
     private static float templateValue(BaseStats base, StatKey key) {
@@ -133,6 +136,8 @@ public final class StatPipeline {
             case LIFESTEAL: return base.getLifesteal();
             case ENERGY_GAIN_RATE: return base.getEnergyGainRate();
             case SKILL_POWER: return base.getSkillPower();
+            case CRIT_CHANCE: return base.getCritChance();
+            case CRIT_DAMAGE: return base.getCritDamage();
             default:
                 throw new IllegalArgumentException("未知 StatKey: " + key);
         }

@@ -32,7 +32,7 @@ class StatPipelineTest {
     /** 基准夹具模板：hp100 / atk10 / armor5 / aspd1.0 / range3 / ms1.0 / ls0 / egr100 / sp0 */
     private static UnitData tpl() {
         return new UnitData("u", "夹具兵", "兽人", "战士", 1,
-                new BaseStats(100, 10, 5, 1f, 3, 1f, 0, 100, 0), 1.8f,
+                new BaseStats(100, 10, 5, 1f, 3, 1f, 0, 100, 0, 20, 150), 1.8f,
                 TargetPriority.NEAREST, null, "skill_warcry", false);
     }
 
@@ -141,9 +141,9 @@ class StatPipelineTest {
     }
 
     @Test
-    @DisplayName("9 键齐全：get 覆盖全部 StatKey 且互不串键")
-    void allNineKeysReachable() {
-        BattleStats stats = new BattleStats(1f, 2f, 3f, 4f, 5f, 6f, 7f, 8f, 9f);
+    @DisplayName("11 键齐全：get 覆盖全部 StatKey 且互不串键（v5 §五.5 暴击 +2）")
+    void allElevenKeysReachable() {
+        BattleStats stats = new BattleStats(1f, 2f, 3f, 4f, 5f, 6f, 7f, 8f, 9f, 10f, 11f);
         assertThat(stats.get(StatKey.HP)).isEqualTo(1f);
         assertThat(stats.get(StatKey.ATTACK)).isEqualTo(2f);
         assertThat(stats.get(StatKey.ARMOR)).isEqualTo(3f);
@@ -153,6 +153,46 @@ class StatPipelineTest {
         assertThat(stats.get(StatKey.LIFESTEAL)).isEqualTo(7f);
         assertThat(stats.get(StatKey.ENERGY_GAIN_RATE)).isEqualTo(8f);
         assertThat(stats.get(StatKey.SKILL_POWER)).isEqualTo(9f);
+        assertThat(stats.get(StatKey.CRIT_CHANCE)).isEqualTo(10f);
+        assertThat(stats.get(StatKey.CRIT_DAMAGE)).isEqualTo(11f);
+    }
+
+    // —— v5 §五.5 暴击属性化（CP1）——
+
+    @Test
+    @DisplayName("Q1 裁决锁定：敌方 k=3.4 只乘血/攻/甲，暴击两键保持模板值（20%/×1.5）")
+    void enemyScaleSkipsCritKeys() {
+        BattleStats scaled = StatPipeline.deriveBaseline(tpl(), 1, 3.4f, Collections.<StatModifierSource>emptyList());
+        assertThat(scaled.get(StatKey.HP)).isCloseTo(340f, within(1e-4f));    // 100 × 3.4
+        assertThat(scaled.get(StatKey.ATTACK)).isCloseTo(34f, within(1e-4f)); // 10 × 3.4
+        assertThat(scaled.get(StatKey.ARMOR)).isCloseTo(17f, within(1e-4f));  // 5 × 3.4
+        assertThat(scaled.get(StatKey.CRIT_CHANCE)).isEqualTo(20f);  // 模板值（v5 锚点 ×k 不含暴击）
+        assertThat(scaled.get(StatKey.CRIT_DAMAGE)).isEqualTo(150f); // 模板值（全局基线 ×1.5）
+    }
+
+    @Test
+    @DisplayName("暴击两键缺省 20/150；走 ADD/PCT 修正与既有键同构（先加后乘）")
+    void critKeysDefaultAndModifiers() {
+        BattleStats plain = StatPipeline.deriveBaseline(tpl(), 1, 1f, Collections.<StatModifierSource>emptyList());
+        assertThat(plain.get(StatKey.CRIT_CHANCE)).isEqualTo(20f);
+        assertThat(plain.get(StatKey.CRIT_DAMAGE)).isEqualTo(150f);
+
+        // 游侠 (4)/(6) 档形态：critChance ADD 15 → 35；critDamage PCT 50 → 225
+        StatModifierBlock ranger4 = StatModifierBlock.of(StatKey.CRIT_CHANCE, EffectOp.ADD, 15f);
+        assertThat(StatPipeline.deriveBaseline(tpl(), 1, 1f,
+                Collections.singletonList(source(ranger4))).get(StatKey.CRIT_CHANCE))
+                .isCloseTo(35f, within(1e-6f));
+
+        StatModifierBlock ranger6 = StatModifierBlock.of(StatKey.CRIT_CHANCE, EffectOp.ADD, 20f)
+                .plus(StatModifierBlock.of(StatKey.CRIT_DAMAGE, EffectOp.PCT, 50f));
+        BattleStats effective = StatPipeline.deriveBaseline(tpl(), 1, 1f,
+                Collections.singletonList(source(ranger6)));
+        assertThat(effective.get(StatKey.CRIT_CHANCE)).isCloseTo(40f, within(1e-6f));
+        assertThat(effective.get(StatKey.CRIT_DAMAGE)).isCloseTo(225f, within(1e-4f)); // (150+0)×1.5
+
+        // 第二级透传：无状态修正时有效值 = 基准
+        assertThat(StatPipeline.deriveEffective(plain, StatModifierBlock.empty())
+                .get(StatKey.CRIT_CHANCE)).isEqualTo(20f);
     }
 
     // —— 口径 #8：StatusType → StatKey 映射表 ——

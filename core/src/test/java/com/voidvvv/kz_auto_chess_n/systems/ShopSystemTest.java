@@ -50,7 +50,7 @@ class ShopSystemTest {
 
     private static UnitData unit(String id, int cost, boolean boss) {
         return new UnitData(id, "兵" + id, "兽人", "战士", cost,
-                new BaseStats(100, 10, 5, 1f, 1, 1f, 0, 100, 0), 1.8f,
+                new BaseStats(100, 10, 5, 1f, 1, 1f, 0, 100, 0, 20, 150), 1.8f,
                 TargetPriority.NEAREST, null, "sk_" + id, boss);
     }
 

@@ -1,10 +1,11 @@
 package com.voidvvv.kz_auto_chess_n.data;
 
-/** 异常状态类型（data_schema §三 StatusType，MVP 集 9 种；扩展需登记 battle_design §七）。 */
+/** 异常状态类型（data_schema §三 StatusType，MVP 集 9 种 + v5 BURN；扩展需登记 battle_design §七）。 */
 public enum StatusType implements Vocab {
     STUN("STUN"),
     BLEED("BLEED"),
     POISON("POISON"),
+    BURN("BURN"),
     SLOW("SLOW"),
     ATK_UP("ATK_UP"),
     ATK_DOWN("ATK_DOWN"),
