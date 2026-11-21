@@ -264,6 +264,9 @@ class GameBalanceTest {
         // 暴击两键已属性化（v5 §五.5）：缺省值走 StatKey（见 StatPipelineTest / JsonLoaderTest）
         // UI 整体缩小档位（2026-11-21 主人整改）：1.0 = 恢复原大小
         assertThat(GameBalance.RENDER_GLOBAL_SCALE).isEqualTo(0.8f);
+        // 测试期开局金临时覆盖（TODO 正式版恢复 10；生产路径 BattleScreen 独享，测试仍走 START_GOLD=10）
+        assertThat(GameBalance.TEST_PERIOD_START_GOLD_OVERRIDE).isEqualTo(999);
+        assertThat(GameBalance.START_GOLD).isEqualTo(10); // 正式口径不动摇
         assertThat(GameBalance.ENERGY_MAX).isEqualTo(100);
         assertThat(GameBalance.ENERGY_PER_HIT).isEqualTo(10);
         assertThat(GameBalance.ENERGY_PER_HIT_TAKEN).isEqualTo(5);

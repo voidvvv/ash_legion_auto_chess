@@ -501,7 +501,9 @@ public final class BattleScreen implements Screen {
         String sceneId = selectedSceneId != null && data.getScene(selectedSceneId) != null
                 ? selectedSceneId : data.getScenes().keySet().iterator().next(); // 防御回退首场景
         RunModifiers modifiers = metaService.resolveRunModifiers(selectedHeroId, data);
-        return new RunContext(new Player(GameBalance.START_GOLD + modifiers.getStartGoldBonus()),
+        // 测试期临时开局金（生产路径独享；单元测试/控制台仍走 START_GOLD=10——一键恢复见常量注释）
+        int startGold = GameBalance.TEST_PERIOD_START_GOLD_OVERRIDE + modifiers.getStartGoldBonus();
+        return new RunContext(new Player(startGold),
                 new RunState(runSeed, sceneId, selectedHeroId, modifiers, new SequentialIdIssuer()),
                 data, new RandomGenerator(runSeed), shopSystem);
     }

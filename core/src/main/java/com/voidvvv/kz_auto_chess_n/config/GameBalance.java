@@ -75,6 +75,10 @@ public final class GameBalance {
 
     // —— 经济 ——
     public static final int START_GOLD = 10;
+    /** 测试期开局金币覆盖（生产路径 BattleScreen.newContext 独享；TODO(测试期临时值，正式版恢复 10)——
+     *  单元测试/控制台仍走 START_GOLD=10 正式口径，经济类断言不受影响。
+     *  一键恢复：本常量改回 10（或 BattleScreen 调用点换回 START_GOLD）即回正式值。 */
+    public static final int TEST_PERIOD_START_GOLD_OVERRIDE = 999; // TODO(测试期临时值，正式版恢复 10)
     public static final int SHOP_REFRESH_COST = 2;
     public static final int BUY_EXP_COST = 4;
     public static final int BUY_EXP_GAIN = 4;
