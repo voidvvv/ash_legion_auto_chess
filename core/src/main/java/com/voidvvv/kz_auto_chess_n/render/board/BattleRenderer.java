@@ -18,6 +18,7 @@ import com.voidvvv.kz_auto_chess_n.render.Assets;
 import com.voidvvv.kz_auto_chess_n.render.EventInbox;
 import com.voidvvv.kz_auto_chess_n.render.FloatTextFormat;
 import com.voidvvv.kz_auto_chess_n.render.PlaceholderKeys;
+import com.voidvvv.kz_auto_chess_n.render.StarColors;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -175,7 +176,7 @@ public final class BattleRenderer {
                     int[] center = BoardGeometry.cellCenter(x, y);
                     drawUnitFrame(batch, unit.getTemplate().getId(),
                             PlaceholderKeys.ANIM_IDLE, 0, center[0], center[1], false,
-                            chromeFadeAlpha, SideColors.PLAYER);
+                            chromeFadeAlpha, unit.getStar(), SideColors.PLAYER);
                 }
             }
         }
@@ -197,13 +198,13 @@ public final class BattleRenderer {
             int[] center = BoardGeometry.benchSlotCenter(slot);
             drawUnitFrame(batch, bench.get(slot).getTemplate().getId(),
                     PlaceholderKeys.ANIM_IDLE, 0, (int) (center[0] + benchOffsetX), center[1],
-                    false, 1f, SideColors.PLAYER);
+                    false, 1f, bench.get(slot).getStar(), SideColors.PLAYER);
         }
-        for (WaveSpec spec : ctx.getRunState().getEnemyWave()) { // 敌阵侦察虚影（红框 + 半透明，P1b；转场随层淡出）
+        for (WaveSpec spec : ctx.getRunState().getEnemyWave()) { // 敌阵侦察虚影（红框 + 半透明，P1b；转场随层淡出；恒 1★ 骨白）
             int[] center = BoardGeometry.cellCenter(spec.getGridX(), spec.getGridY());
             drawUnitFrame(batch, spec.getTemplate().getId(), PlaceholderKeys.ANIM_IDLE, 0,
                     center[0], center[1], true, SideColors.ENEMY_PREVIEW_ALPHA * chromeFadeAlpha,
-                    SideColors.ENEMY);
+                    1, SideColors.ENEMY);
         }
         drawSellZone(batch, chromeFadeAlpha);
         drawShoppingHint(batch, chromeFadeAlpha);
@@ -333,18 +334,17 @@ public final class BattleRenderer {
         return HitShakeAxis.resolve(attacker.virtualX(renderClock), targetX, event.getTargetId());
     }
 
-    /** 占位单位帧绘制（中心定位；enemyFace = 水平翻转；border 敌我色框，null 不画；alpha 整体透明度） */
+    /** 占位单位帧绘制（中心定位；enemyFace = 水平翻转；star 星级色 tint；border 敌我色框，null 不画；alpha 整体透明度） */
     private void drawUnitFrame(SpriteBatch batch, String unitId, String anim, int frame,
-                               int cx, int cy, boolean enemyFace, float alpha,
+                               int cx, int cy, boolean enemyFace, float alpha, int star,
                                com.badlogic.gdx.graphics.Color border) {
         TextureRegion region = assets.region(PlaceholderKeys.unitFrame(unitId, anim, frame));
         boolean wasFlip = region.isFlipX();
         if (enemyFace != wasFlip) {
             region.flip(true, false); // 用后即还（region 共享，铁律：不残留状态）
         }
-        if (alpha < 1f) {
-            batch.setColor(1f, 1f, 1f, alpha);
-        }
+        com.badlogic.gdx.graphics.Color tint = StarColors.of(star);
+        batch.setColor(tint.r, tint.g, tint.b, alpha);
         batch.draw(region, cx - BoardGeometry.CELL / 2f, cy - BoardGeometry.CELL / 2f,
                 BoardGeometry.CELL, BoardGeometry.CELL);
         batch.setColor(com.badlogic.gdx.graphics.Color.WHITE);
@@ -395,10 +395,12 @@ public final class BattleRenderer {
             }
         }
         batch.setColor(com.badlogic.gdx.graphics.Color.WHITE);
-        String templateId = findTemplateId(ctx.getPlayer(), input.getDragUnitId());
-        if (templateId != null) { // ghost：拖拽单位半透明跟随
-            batch.setColor(1f, 1f, 1f, 0.65f);
-            batch.draw(assets.region(PlaceholderKeys.unitFrame(templateId, PlaceholderKeys.ANIM_IDLE, 0)),
+        Unit dragged = findUnit(ctx.getPlayer(), input.getDragUnitId());
+        if (dragged != null) { // ghost：拖拽单位半透明跟随（带被拖单位星级色，CP11）
+            com.badlogic.gdx.graphics.Color tint = StarColors.of(dragged.getStar());
+            batch.setColor(tint.r, tint.g, tint.b, 0.65f);
+            batch.draw(assets.region(PlaceholderKeys.unitFrame(
+                            dragged.getTemplate().getId(), PlaceholderKeys.ANIM_IDLE, 0)),
                     input.getDragVirtualX() - BoardGeometry.CELL / 2f,
                     input.getDragVirtualY() - BoardGeometry.CELL / 2f,
                     BoardGeometry.CELL, BoardGeometry.CELL);
@@ -406,16 +408,16 @@ public final class BattleRenderer {
         }
     }
 
-    /** 名单查模板 id（bench + 部署表；名单小线性可） */
-    private static String findTemplateId(Player player, int unitId) {
+    /** 名单查单位（bench + 部署表；名单小线性可）——模板 id 与星级同源 */
+    private static Unit findUnit(Player player, int unitId) {
         for (Unit unit : player.getBench()) {
             if (unit.getId() == unitId) {
-                return unit.getTemplate().getId();
+                return unit;
             }
         }
         for (Unit unit : player.getDeployedUnits()) {
             if (unit.getId() == unitId) {
-                return unit.getTemplate().getId();
+                return unit;
             }
         }
         return null;

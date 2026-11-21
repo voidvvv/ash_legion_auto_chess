@@ -9,6 +9,7 @@ import com.voidvvv.kz_auto_chess_n.entities.Side;
 import com.voidvvv.kz_auto_chess_n.config.GameBalance;
 import com.voidvvv.kz_auto_chess_n.render.Assets;
 import com.voidvvv.kz_auto_chess_n.render.PlaceholderKeys;
+import com.voidvvv.kz_auto_chess_n.render.StarColors;
 
 /**
  * 单位视图（render §六铁律 3：生命周期 = BattleState——rebuild 整体重建、clear 整体销毁）。
@@ -97,7 +98,8 @@ public final class UnitView {
         if (enemy != wasFlip) {
             region.flip(true, false);
         }
-        batch.setColor(1f, 1f, 1f, alpha);
+        Color star = StarColors.of(unit.getStar());
+        batch.setColor(star.r, star.g, star.b, alpha);
         drawBody(batch, region, cx, cy, size);
         if (anim.hitFlashRatio() > 0f) { // 受击白闪叠加层（与本体共用同一变换）
             batch.setColor(1f, 1f, 1f, anim.hitFlashRatio() * 0.8f * alpha);

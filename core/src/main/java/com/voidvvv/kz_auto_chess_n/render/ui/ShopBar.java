@@ -17,6 +17,7 @@ import com.voidvvv.kz_auto_chess_n.data.UnitData;
 import com.voidvvv.kz_auto_chess_n.entities.Unit;
 import com.voidvvv.kz_auto_chess_n.render.Assets;
 import com.voidvvv.kz_auto_chess_n.render.PlaceholderKeys;
+import com.voidvvv.kz_auto_chess_n.render.StarColors;
 
 import java.util.Objects;
 import java.util.function.Supplier;
@@ -158,9 +159,11 @@ public final class ShopBar extends Group {
             Color old = batch.getColor();
             batch.setColor(can ? 0.3f : 0.18f, can ? 0.32f : 0.18f, can ? 0.38f : 0.2f, parentAlpha);
             batch.draw(assets.region(PlaceholderKeys.PANEL_9SLICE), getX(), getY(), getWidth(), getHeight());
-            batch.setColor(old);
+            Color star = StarColors.of(1); // 商店预览恒 1★（骨白，CP11）
+            batch.setColor(star.r, star.g, star.b, parentAlpha);
             batch.draw(assets.region(PlaceholderKeys.unitFrame(template.getId(), PlaceholderKeys.ANIM_IDLE, 0)),
                     getX() + 4f, getY() + 18f, 32f, 32f);
+            batch.setColor(old);
             assets.font().draw(batch, template.getCost() + "金", getX() + 44f, getY() + 44f);
             assets.font().draw(batch, template.getName(), getX() + 6f, getY() + 12f);
         }
