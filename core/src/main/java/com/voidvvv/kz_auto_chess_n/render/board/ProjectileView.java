@@ -35,7 +35,7 @@ public final class ProjectileView {
             int px = Math.round(BoardGeometry.continuousCenterX(x) - SIZE / 2f);
             int py = Math.round(BoardGeometry.continuousCenterY(y) - SIZE / 2f);
             if (p.getSkill() != null) {
-                batch.draw(assets.region(PlaceholderKeys.skillFx(p.getSkill().getId())), px, py, SIZE, SIZE);
+                batch.draw(assets.regionFx(PlaceholderKeys.skillFx(p.getSkill().getId())), px, py, SIZE, SIZE);
             } else {
                 batch.setColor(1f, 0.95f, 0.7f, 1f);
                 batch.draw(assets.region(PlaceholderKeys.WHITE), px, py, SIZE, SIZE);

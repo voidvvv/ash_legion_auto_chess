@@ -3,6 +3,7 @@ package com.voidvvv.kz_auto_chess_n.render;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.voidvvv.kz_auto_chess_n.data.DeathrattleSpec;
 import com.voidvvv.kz_auto_chess_n.data.GameData;
 import com.voidvvv.kz_auto_chess_n.data.StatusType;
 import com.voidvvv.kz_auto_chess_n.data.UnitData;
@@ -43,6 +44,15 @@ public final class PlaceholderArt {
             put(PlaceholderKeys.skillFx(skillId), paintSkillFx(skillId));
             put(PlaceholderKeys.skillFxBurst(skillId), paintSkillBurst(skillId));
         }
+        // 亡语合成 skillId 落点键（2026-11-21 回归：直伤 causeId + 亡语弹命中；颜色走确定性 PalettePick）
+        for (UnitData tpl : data.getUnits().values()) {
+            if (tpl.getDeathrattle() != null) {
+                put(PlaceholderKeys.skillFxBurst(DeathrattleSpec.causeSkillId(tpl.getId())),
+                        paintSkillBurst(DeathrattleSpec.causeSkillId(tpl.getId())));
+            }
+        }
+        put(PlaceholderKeys.skillFxBurst(DeathrattleSpec.VOLLEY_SKILL_ID),
+                paintSkillBurst(DeathrattleSpec.VOLLEY_SKILL_ID));
         for (StatusType type : StatusType.values()) {
             put(PlaceholderKeys.statusFx(type), paintStatusFx(type));
         }

@@ -43,16 +43,17 @@ public final class FxLayer {
         this.assets = assets;
     }
 
-    /** 起手闪光：单位锚点 fx_{skillId}（无技能图则 cast 兜底） */
+    /** 起手闪光：单位锚点 fx_{skillId}（无技能图则 cast 兜底）；FX 软路径——缺键降级不崩局 */
     public void sparkCast(String skillId, float x, float y) {
-        TextureRegion region = assets.region(skillId != null
+        TextureRegion region = assets.regionFx(skillId != null
                 ? PlaceholderKeys.skillFx(skillId) : PlaceholderKeys.CAST_DEFAULT);
         spark(region, x, y);
     }
 
-    /** 落点闪光：区域锚点 fx_{skillId}_burst（普攻/治疗无技能图用 hit 兜底） */
+    /** 落点闪光：区域锚点 fx_{skillId}_burst（普攻/治疗无技能图用 hit 兜底；含亡语合成 id——
+     *  键集由 FxKeyCoverageTest 锁定，漏网走 regionFx 软降级）；FX 软路径不崩局 */
     public void sparkBurst(String skillId, float x, float y) {
-        TextureRegion region = assets.region(skillId != null
+        TextureRegion region = assets.regionFx(skillId != null
                 ? PlaceholderKeys.skillFxBurst(skillId) : PlaceholderKeys.HIT_DEFAULT);
         spark(region, x, y);
     }
@@ -105,7 +106,7 @@ public final class FxLayer {
             int cy = BoardGeometry.cellCenterY(unit.getGridY());
             int count = Math.min(MAX_STATUS_DOTS, statuses.size());
             for (int i = 0; i < count; i++) {
-                TextureRegion dot = assets.region(PlaceholderKeys.statusFx(statuses.get(i).getType()));
+                TextureRegion dot = assets.regionFx(PlaceholderKeys.statusFx(statuses.get(i).getType()));
                 batch.draw(dot, cx - count * 5f + i * 10f, cy + 22f);
             }
         }

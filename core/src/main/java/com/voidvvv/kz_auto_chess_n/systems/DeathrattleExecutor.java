@@ -83,7 +83,7 @@ final class DeathrattleExecutor {
     }
 
     private static String causeId(BattleUnit dead) {
-        return "deathrattle_" + dead.getTemplate().getId();
+        return DeathrattleSpec.causeSkillId(dead.getTemplate().getId()); // 约定单源（FX 键派生同源）
     }
 
     private void spawnVolleyShot(BattleState state, BattleUnit dead, DeathSystem.DeathRecord record,

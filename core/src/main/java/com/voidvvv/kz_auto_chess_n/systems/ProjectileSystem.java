@@ -1,6 +1,7 @@
 package com.voidvvv.kz_auto_chess_n.systems;
 
 import com.voidvvv.kz_auto_chess_n.config.GameBalance;
+import com.voidvvv.kz_auto_chess_n.data.DeathrattleSpec;
 import com.voidvvv.kz_auto_chess_n.data.SynergyMechanic;
 import com.voidvvv.kz_auto_chess_n.entities.BattleState;
 import com.voidvvv.kz_auto_chess_n.entities.BattleUnit;
@@ -68,7 +69,7 @@ public final class ProjectileSystem {
         BattleUnit caster = state.getUnitById(projectile.getSourceId()); // 可能已清扫——载荷取冻结值
         if (projectile.isDeathrattleBorn()) {
             damagePipeline.applyTrueDamage(state, caster, target,
-                    projectile.getAttackSnapshot(), "deathrattle_projectile"); // 真伤路由（C6）
+                    projectile.getAttackSnapshot(), DeathrattleSpec.VOLLEY_SKILL_ID); // 真伤路由（C6）
         } else if (projectile.getSkill() == null) {
             damagePipeline.applyDirectHit(state, caster, target,
                     projectile.getAttackSnapshot(), 1f, projectile.isCrit(),

@@ -55,8 +55,9 @@ class PlaceholderKeysTest {
                 Delivery.MELEE_INSTANT, BattleTestFixtures.effect(SkillEffectType.DAMAGE, 2f, null, null));
         GameData data = BattleTestFixtures.microData(skill);
         List<String> keys = PlaceholderKeys.enumerateFor(data);
-        // 单位帧：microData 无单位 → 0；技能 2（起手+落点）；状态 9；数字 10；通用件 4
+        // 单位帧：microData 无单位 → 0；技能 2（起手+落点）；亡语弹通用 1；状态 10；数字 10；通用件 4
         assertThat(keys).contains("fx_sk_melee", "fx_sk_melee_burst");
+        assertThat(keys).contains("fx_deathrattle_projectile_burst"); // 亡语合成 id（2026-11-21 回归补）
         assertThat(keys).contains("fx_status_shield", "fx_status_stun");
         assertThat(keys).contains("fx_digit_0", "fx_digit_9");
         assertThat(keys).contains("fx_cast_default", "fx_hit_default", "ui_panel_9slice", "fx_white");
@@ -74,7 +75,7 @@ class PlaceholderKeysTest {
                 "unit_x_attack_0", "unit_x_attack_1", "unit_x_attack_2",
                 "unit_x_cast_0", "unit_x_cast_1",
                 "unit_x_death_0", "unit_x_death_1", "unit_x_death_2");
-        assertThat(full).hasSize(12 + 2 + 10 + 10 + 4); // 状态 fx 10（v5 增 BURN）
+        assertThat(full).hasSize(12 + 2 + 1 + 10 + 10 + 4); // 状态 fx 10（v5 增 BURN）+ 亡语弹通用 1（回归补）
     }
 
     @Test
