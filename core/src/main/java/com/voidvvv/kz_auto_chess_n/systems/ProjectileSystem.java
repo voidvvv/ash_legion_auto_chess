@@ -13,7 +13,8 @@ import java.util.Objects;
 /**
  * 弹道系统（battle §5.3；主循环阶段②）。HOMING 唯一形态（Q2）：
  * 推进朝目标<b>当前格中心</b>欧氏直线逼近，速度 PROJECTILE_SPEED（6 格/秒）；
- * 本 tick 步长可达即命中（无需走满）。目标先一步被清扫 → 立即消散（Fizzled）；
+ * 本 tick 步长可达即命中（无需走满）。目标先一步被清扫/倒地 → 普攻与技能弹立即消散
+ * （Fizzled）；亡语源弹改按 LOWEST_HP 重选目标（C6/§五.7，无可选才消散）；
  * 施放者被清扫不影响在途弹（载荷已冻结，口径 #13/#14）。
  */
 public final class ProjectileSystem {
@@ -25,12 +26,21 @@ public final class ProjectileSystem {
         this.skillExecutor = Objects.requireNonNull(skillExecutor, "skillExecutor 不能为 null");
     }
 
-    /** 阶段②：推进所有在途弹并分发命中/消散 */
+    /** 阶段②：推进所有在途弹并分发命中/消散（亡语源弹目标失效改重选，C6/§五.7） */
     public void advanceAll(BattleState state, float dt) {
         List<Projectile> snapshot = new ArrayList<Projectile>(state.getProjectiles());
         for (Projectile projectile : snapshot) {
             BattleUnit target = state.getUnitById(projectile.getTargetId());
-            if (target == null || target.isCleaned()) {
+            if (target == null || !target.isActable()) {
+                if (projectile.isDeathrattleBorn()) { // §五.7：亡语源弹道按 LOWEST_HP 重选
+                    BattleUnit source = state.getUnitById(projectile.getSourceId());
+                    BattleUnit reselected = source == null ? null
+                            : DeathrattleExecutor.pickLowestHpActableEnemy(state, source);
+                    if (reselected != null) {
+                        projectile.retarget(reselected.getId());
+                        continue;
+                    }
+                }
                 state.record(CombatEvent.projectileFizzled(state.getTick(),
                         projectile.getSourceId(), projectile.getTargetId()));
                 state.removeProjectile(projectile);
@@ -49,7 +59,10 @@ public final class ProjectileSystem {
 
     private void impact(BattleState state, Projectile projectile, BattleUnit target) {
         BattleUnit caster = state.getUnitById(projectile.getSourceId()); // 可能已清扫——载荷取冻结值
-        if (projectile.getSkill() == null) {
+        if (projectile.isDeathrattleBorn()) {
+            damagePipeline.applyTrueDamage(state, caster, target,
+                    projectile.getAttackSnapshot(), "deathrattle_projectile"); // 真伤路由（C6）
+        } else if (projectile.getSkill() == null) {
             damagePipeline.applyDirectHit(state, caster, target,
                     projectile.getAttackSnapshot(), 1f, projectile.isCrit(), true, null);
         } else {

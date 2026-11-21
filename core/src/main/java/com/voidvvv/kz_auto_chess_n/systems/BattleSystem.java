@@ -46,6 +46,7 @@ public final class BattleSystem {
     private final StatusSystem statusSystem;
     private final SkillExecutor skillExecutor;
     private final ProjectileSystem projectileSystem;
+    private final DeathSystem deathSystem;
     /** 就地施放嵌套深度（口径 #19，单线程逻辑步内安全） */
     private int castDepth;
 
@@ -54,6 +55,7 @@ public final class BattleSystem {
         this.statusSystem = new StatusSystem(damagePipeline);
         this.skillExecutor = new SkillExecutor(damagePipeline, statusSystem);
         this.projectileSystem = new ProjectileSystem(damagePipeline, skillExecutor);
+        this.deathSystem = new DeathSystem(targeting, damagePipeline, statusSystem);
     }
 
     /**
@@ -163,6 +165,8 @@ public final class BattleSystem {
         for (BattleUnit unit : state.getUnits()) {
             if (!unit.isCleaned()) {
                 unit.advanceTimers(GameBalance.LOGIC_STEP); // 恒累计（口径 #4）
+                unit.advanceDownedTimer(GameBalance.LOGIC_STEP); // C7 ⑤：倒地计时（非倒地空操作）
+                UndyingRule.tryRevive(state, unit);
             }
         }
         for (BattleUnit unit : state.getUnits()) {
@@ -171,19 +175,8 @@ public final class BattleSystem {
             }
         }
 
-        // ④ 死亡清扫（H 语义：本 tick 内 HP≤0 者统一于此清除）
-        List<Integer> deadIds = new ArrayList<Integer>();
-        for (BattleUnit unit : state.getUnits()) {
-            if (!unit.isCleaned() && unit.getCurrentHp() <= 0f) {
-                unit.markCleaned();
-                state.removeFromGrid(unit);
-                state.record(CombatEvent.unitDied(state.getTick(), unit.getId()));
-                deadIds.add(unit.getId());
-            }
-        }
-        for (int deadId : deadIds) {
-            targeting.retargetOnDeath(state, deadId); // 清扫后立即重选（battle §三）
-        }
+        // ④ 死亡清扫（两遍式级联，C2/C9——battle §二 H 语义不变，收敛后才进 ⑤）
+        deathSystem.sweep(state);
 
         // ⑤ 胜负判定（口径 #15：玩家全灭从严 → 敌方全灭 → 超时）
         if (state.aliveCount(Side.PLAYER) == 0) {
@@ -267,8 +260,8 @@ public final class BattleSystem {
             return null;
         }
         BattleUnit target = state.getUnitById(unit.getTargetId());
-        if (target == null || target.isCleaned() || target.getSide() == unit.getSide()) {
-            return null;
+        if (target == null || !target.isActable() || target.getSide() == unit.getSide()) {
+            return null; // isActable = 未清扫且非倒地（C7 ③过滤点一）
         }
         return target;
     }

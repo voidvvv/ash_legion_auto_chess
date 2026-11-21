@@ -79,6 +79,18 @@ class FloatTextFormatTest {
     }
 
     @Test
+    @DisplayName("UNIT_BANISHED「除名」灰字（CP19）；UNIT_DOWNED/UNIT_REVIVED 不产飘字")
+    void banishedGrayTextAndDownedSilent() {
+        FloatTextFormat.Spec banished = FloatTextFormat.of(CombatEvent.unitBanished(3, 9));
+        assertThat(banished.text).isEqualTo("除名");
+        assertThat(banished.color).isSameAs(FloatTextFormat.BANISH_GRAY);
+        assertThat(banished.scale).isEqualTo(1f);
+
+        assertThat(FloatTextFormat.of(CombatEvent.unitDowned(3, 9))).isNull();
+        assertThat(FloatTextFormat.of(CombatEvent.unitRevived(3, 9))).isNull();
+    }
+
+    @Test
     @DisplayName("Spec 为不可变纯数据（同事件两次调用等价）")
     void specIsPure() {
         CombatEvent event = CombatEvent.hit(10, 1, 2, 12f, false, null);

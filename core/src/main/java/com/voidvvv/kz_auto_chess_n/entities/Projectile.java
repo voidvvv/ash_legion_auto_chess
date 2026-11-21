@@ -17,16 +17,23 @@ import java.util.Objects;
  */
 public final class Projectile {
     private final int sourceId;
-    private final int targetId;
+    private int targetId;                 // retarget 可变（亡语源弹道消散重选，CP18）
     private final float attackSnapshot;
     private final boolean crit;
     private final SkillData skill;        // null = 普攻弹
     private final float scaleFactor;     // 技能公共缩放因子；普攻 = 1
+    private final boolean deathrattleBorn; // 亡语源弹（C6/§五.7）：真伤路由 + 消散重选
     private float posX;
     private float posY;
 
     public Projectile(int sourceId, int targetId, float posX, float posY,
                       float attackSnapshot, boolean crit, SkillData skill, float scaleFactor) {
+        this(sourceId, targetId, posX, posY, attackSnapshot, crit, skill, scaleFactor, false);
+    }
+
+    public Projectile(int sourceId, int targetId, float posX, float posY,
+                      float attackSnapshot, boolean crit, SkillData skill, float scaleFactor,
+                      boolean deathrattleBorn) {
         this.sourceId = sourceId;
         this.targetId = targetId;
         this.posX = posX;
@@ -35,6 +42,7 @@ public final class Projectile {
         this.crit = crit;
         this.skill = skill;
         this.scaleFactor = scaleFactor;
+        this.deathrattleBorn = deathrattleBorn;
     }
 
     public int getSourceId() { return sourceId; }
@@ -49,6 +57,14 @@ public final class Projectile {
     public SkillData getSkill() { return skill; }
     /** 公共缩放因子：技能 = value 外的星级 × skillPower 部分；普攻 = 1 */
     public float getScaleFactor() { return scaleFactor; }
+
+    /** 亡语源弹（空弦绝响等）：消散改重选、命中走真伤（CP18，C6） */
+    public boolean isDeathrattleBorn() { return deathrattleBorn; }
+
+    /** framework-internal：亡语源弹道目标失效后的重选（systems 包推进） */
+    public void retarget(int newTargetId) {
+        this.targetId = newTargetId;
+    }
 
     /**
      * framework-internal：朝目标点直线推进一个 dt（是否到达由 ProjectileSystem 判定——

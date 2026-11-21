@@ -418,6 +418,55 @@ class BattleSystemTest {
         assertThat(state.getElapsed()).isGreaterThanOrEqualTo(GameBalance.BATTLE_TIMEOUT);
     }
 
+    // —— v5 undying 倒地全链（CP17，C1/C7）——
+
+    /** 死骑型模板：undying 1.0s / 40% 血 */
+    private static UnitData deathKnight() {
+        return new UnitData("dk", "夹具死骑", "亡灵", "战士", 3,
+                new BaseStats(200, 22, 13, 0.9f, 1, 1f, 0, 100, 0, 20, 150), 1.8f,
+                TargetPriority.NEAREST, null, "sk_hit", false,
+                null, new com.voidvvv.kz_auto_chess_n.data.UndyingSpec(1.0f, 0.4f));
+    }
+
+    @Test
+    @DisplayName("死骑倒地链（C7）：首倒 UNIT_DOWNED 非死亡不判负 → 1s 后 UNIT_REVIVED 满能施放 → 二次倒下 UNIT_DIED 真死")
+    void deathKnightDownsRevivesThenTrulyDies() {
+        GameData data = data();
+        Player player = deployPlayer(data, deathKnight(), 2, 4);
+        List<WaveSpec> wave = waveOf(melee("eslayer", "哥布林", 100000, 300, 1f), 1f, 2, 2);
+        BattleState state = start(data, player, wave, 42L);
+        state.skipIntroCountdown();
+
+        SYSTEM.runToEnd(state, 4000);
+
+        List<CombatEvent> events = state.getEvents();
+        long downedCount = events.stream()
+                .filter(e -> e.getType() == CombatEvent.Type.UNIT_DOWNED).count();
+        long revivedCount = events.stream()
+                .filter(e -> e.getType() == CombatEvent.Type.UNIT_REVIVED).count();
+        long diedCount = events.stream()
+                .filter(e -> e.getType() == CombatEvent.Type.UNIT_DIED).count();
+        assertThat(downedCount).isEqualTo(1); // 首倒分流
+        assertThat(revivedCount).isEqualTo(1); // 1.0s 后站起
+        assertThat(diedCount).isEqualTo(1);    // 二次 HP≤0 真死（仅一条 UNIT_DIED）
+
+        // 复活后满能 → 下个行动 tick 施放（UNIT_REVIVED 之后存在死骑的 CAST）
+        int revivedIdx = -1;
+        int dkId = state.getUnits().get(0).getId();
+        for (int i = 0; i < events.size(); i++) {
+            if (events.get(i).getType() == CombatEvent.Type.UNIT_REVIVED) {
+                revivedIdx = i;
+            }
+        }
+        final int from = revivedIdx;
+        assertThat(events.stream().skip(from)
+                .anyMatch(e -> e.getType() == CombatEvent.Type.CAST && e.getSourceId() == dkId))
+                .isTrue();
+
+        assertThat(state.isOver()).isTrue();
+        assertThat(state.getOutcome()).isEqualTo(BattleOutcome.ENEMY_WIN); // 死骑真死 → 玩家全灭
+    }
+
     @Test
     @DisplayName("敌方全灭 → PLAYER_WIN")
     void enemyWipeWins() {

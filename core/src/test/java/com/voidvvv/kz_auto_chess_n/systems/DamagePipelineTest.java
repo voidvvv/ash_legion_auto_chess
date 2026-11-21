@@ -282,4 +282,75 @@ class DamagePipelineTest {
     private static com.voidvvv.kz_auto_chess_n.data.SkillData melee() {
         return com.voidvvv.kz_auto_chess_n.systems.support.BattleTestFixtures.meleeSkill();
     }
+
+    // —— v5 击杀归因（CP13，C5/C12 前提）——
+
+    @Test
+    @DisplayName("归因记录：直伤与真伤 hpDamage>0 记来源 id；匿名来源（null）不记")
+    void lastDamagerIdRecordedOnDamage() {
+        BattleUnit atk = attacker();
+        BattleUnit target = target();
+        BattleUnit anonymous = unit(9, Side.ENEMY, tpl("n"), 4, 2);
+        BattleState state = state(atk, target, anonymous);
+
+        pipeline(new RecordingTrigger()).applyDirectHit(state, atk, target, 10f, 1f, false, true, null);
+        assertThat(target.getLastDamagerId()).isEqualTo(atk.getId());
+
+        target.setLastDamagerId(-1); // 手动复位观察真伤路径
+        pipeline(new RecordingTrigger()).applyTrueDamage(state, atk, target, 10f);
+        assertThat(target.getLastDamagerId()).isEqualTo(atk.getId());
+
+        target.setLastDamagerId(-1);
+        pipeline(new RecordingTrigger()).applyDirectHit(state, null, target, 10f, 1f, false, true, null);
+        assertThat(target.getLastDamagerId()).isEqualTo(-1); // 匿名（回环反弹等）不记
+    }
+
+    @Test
+    @DisplayName("盾全额吸收（hpDamage=0）不记归因：有效伤害才更新 lastDamagerId")
+    void shieldFullAbsorbSkipsAttribution() {
+        BattleUnit atk = attacker();
+        BattleUnit target = target();
+        target.addStatus(new ActiveStatus(StatusType.SHIELD, -1, 999f, Float.POSITIVE_INFINITY));
+        BattleState state = state(atk, target);
+
+        pipeline(new RecordingTrigger()).applyDirectHit(state, atk, target, 10f, 1f, false, true, null);
+        assertThat(target.getCurrentHp()).isEqualTo(100f);
+        assertThat(target.getLastDamagerId()).isEqualTo(-1); // 未穿透到 HP → 无归因
+    }
+
+    @Test
+    @DisplayName("真伤带 causeId：发 HIT 事件（紫飘字载荷口径）；DOT 三参重载维持无事件（口径 #10）")
+    void trueDamageWithCauseIdRecordsHitEvent() {
+        BattleUnit atk = attacker();
+        BattleUnit target = target();
+        BattleState state = state(atk, target);
+        DamagePipeline pipeline = pipeline(new RecordingTrigger());
+
+        int before = state.getEvents().size();
+        pipeline.applyTrueDamage(state, atk, target, 12f, "deathrattle_unit_x");
+        assertThat(state.getEvents()).hasSize(before + 1);
+        CombatEvent event = state.getEvents().get(state.getEvents().size() - 1);
+        assertThat(event.getType()).isEqualTo(CombatEvent.Type.HIT);
+        assertThat(event.getSkillId()).isEqualTo("deathrattle_unit_x");
+        assertThat(event.getAmount()).isCloseTo(12f, within(1e-6f)); // 真伤全额（无护甲折减）
+        assertThat(event.isCrit()).isFalse();
+
+        pipeline.applyTrueDamage(state, atk, target, 5f); // DOT 路径：无事件、但归因仍记录
+        assertThat(state.getEvents()).hasSize(before + 1);
+        assertThat(target.getLastDamagerId()).isEqualTo(atk.getId());
+    }
+
+    @Test
+    @DisplayName("真伤带 causeId 且盾全吸收：hpDamage=0 → 无事件、无归因")
+    void trueDamageCauseIdShieldedNoEvent() {
+        BattleUnit atk = attacker();
+        BattleUnit target = target();
+        target.addStatus(new ActiveStatus(StatusType.SHIELD, -1, 999f, Float.POSITIVE_INFINITY));
+        BattleState state = state(atk, target);
+
+        int before = state.getEvents().size();
+        pipeline(new RecordingTrigger()).applyTrueDamage(state, atk, target, 10f, "deathrattle_unit_x");
+        assertThat(state.getEvents()).hasSize(before);
+        assertThat(target.getLastDamagerId()).isEqualTo(-1);
+    }
 }

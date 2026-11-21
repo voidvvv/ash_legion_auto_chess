@@ -25,8 +25,8 @@ public final class TargetingSystem {
         float bestKey = 0f;
         int bestDistance = 0;
         for (BattleUnit candidate : state.getUnits()) {
-            if (candidate.getSide() == self.getSide() || candidate.isCleaned()) {
-                continue;
+            if (candidate.getSide() == self.getSide() || !candidate.isActable()) {
+                continue; // 过滤点三（C7 ③）：倒地者不被索敌
             }
             float key = sortKey(priority, self, candidate);
             int distance = manhattan(self, candidate);

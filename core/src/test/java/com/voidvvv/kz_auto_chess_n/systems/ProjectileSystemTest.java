@@ -217,4 +217,88 @@ class ProjectileSystemTest {
         assertThat(state.getEvents().get(0).getType()).isEqualTo(CombatEvent.Type.HIT);
         assertThat(state.getEvents().get(0).getSkillId()).isEqualTo("sk_h");
     }
+
+    // —— v5 亡语源弹道（CP18，C6/§五.7）——
+
+    /** 亡语源弹场景：源（已亡）在 (2,5)、原目标 (2,2)、重选候选见各用例 */
+    private static Projectile rattleShot(int targetId) {
+        return new Projectile(1, targetId, 2.5f, 5.5f, 10f, false, null, 1f, true);
+    }
+
+    @Test
+    @DisplayName("亡语源弹目标清扫 → 无 FIZZLED：重选最低血可行动敌、命中走真伤（无视护甲）")
+    void deathrattleShotRetargetsOnCleanedTarget() {
+        BattleUnit source = u(1, Side.PLAYER, 2, 5);
+        source.markCleaned(); // 亡语主人已亡——载荷冻结照飞
+        BattleUnit gone = u(2, Side.ENEMY, 2, 2);
+        BattleUnit half = u(3, Side.ENEMY, 3, 2);
+        half.modifyHp(-40f); // 60% → hp 60
+        BattleUnit low = u(4, Side.ENEMY, 4, 2);
+        low.modifyHp(-50f);  // 50% ← LOWEST_HP → hp 50
+        BattleState state = state(source, gone, half, low);
+        state.spawnProjectile(rattleShot(2));
+        gone.markCleaned();
+
+        for (int i = 0; i < 60 && !state.getProjectiles().isEmpty(); i++) {
+            W.system.advanceAll(state, GameBalance.LOGIC_STEP);
+        }
+        assertThat(state.getProjectiles()).isEmpty();                 // 重选后命中而非消散
+        assertThat(state.getEvents())
+                .noneMatch(e -> e.getType() == CombatEvent.Type.PROJECTILE_FIZZLED);
+        assertThat(low.getCurrentHp()).isCloseTo(40f, within(1e-6f)); // 50 − 真伤 10 全额（无视护甲）
+        assertThat(half.getCurrentHp()).isEqualTo(60f);
+        CombatEvent hit = state.getEvents().get(state.getEvents().size() - 1);
+        assertThat(hit.getType()).isEqualTo(CombatEvent.Type.HIT);
+        assertThat(hit.getSkillId()).isEqualTo("deathrattle_projectile"); // 紫飘字载荷口径
+    }
+
+    @Test
+    @DisplayName("亡语源弹目标倒地 → 同清扫路径重选；普攻弹目标倒地 → 维持 FIZZLED")
+    void deathrattleShotRetargetsOnDownedTarget() {
+        BattleUnit source = u(1, Side.PLAYER, 2, 5);
+        source.markCleaned();
+        BattleUnit downed = u(2, Side.ENEMY, 2, 2);
+        BattleUnit other = u(3, Side.ENEMY, 3, 2);
+        BattleState state = state(source, downed, other);
+        state.spawnProjectile(rattleShot(2));
+        downed.enterDowned(1.0f); // 测试充当 systems 层（UndyingRule 写路径）
+
+        for (int i = 0; i < 60 && !state.getProjectiles().isEmpty(); i++) {
+            W.system.advanceAll(state, GameBalance.LOGIC_STEP);
+        }
+        assertThat(state.getProjectiles()).isEmpty();
+        assertThat(state.getEvents())
+                .noneMatch(e -> e.getType() == CombatEvent.Type.PROJECTILE_FIZZLED);
+        assertThat(other.getCurrentHp()).isCloseTo(90f, within(1e-6f)); // 重选命中倒地者旁的敌
+        assertThat(downed.getCurrentHp()).isEqualTo(100f);
+
+        // 对照：普攻弹（deathrattleBorn=false）目标倒地 → 维持既有消散口径
+        BattleUnit source2 = u(4, Side.PLAYER, 2, 5);
+        BattleUnit downed2 = u(5, Side.ENEMY, 2, 2);
+        BattleState state2 = state(source2, downed2);
+        state2.spawnProjectile(new Projectile(4, 5, 2.5f, 5.5f, 10f, false, null, 1f));
+        downed2.enterDowned(1.0f);
+        W.system.advanceAll(state2, GameBalance.LOGIC_STEP);
+        assertThat(state2.getProjectiles()).isEmpty();
+        assertThat(state2.getEvents().get(0).getType())
+                .isEqualTo(CombatEvent.Type.PROJECTILE_FIZZLED);
+    }
+
+    @Test
+    @DisplayName("亡语源弹无可选目标（全场无敌方可行动存活）→ FIZZLED")
+    void deathrattleShotFizzlesWithoutCandidates() {
+        BattleUnit source = u(1, Side.PLAYER, 2, 5);
+        source.markCleaned();
+        BattleUnit gone = u(2, Side.ENEMY, 2, 2);
+        BattleUnit downed = u(3, Side.ENEMY, 3, 2);
+        BattleState state = state(source, gone, downed);
+        state.spawnProjectile(rattleShot(2));
+        gone.markCleaned();
+        downed.enterDowned(1.0f);
+
+        W.system.advanceAll(state, GameBalance.LOGIC_STEP);
+        assertThat(state.getProjectiles()).isEmpty();
+        assertThat(state.getEvents().get(0).getType())
+                .isEqualTo(CombatEvent.Type.PROJECTILE_FIZZLED);
+    }
 }

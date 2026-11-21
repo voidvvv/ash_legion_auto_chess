@@ -90,6 +90,9 @@ public final class UnitView {
         int cx = virtualX(renderClock);
         int cy = virtualY(renderClock);
         float alpha = 1f - fade;
+        if (unit.isDowned()) {
+            alpha *= 0.55f; // 倒地半透明（C7 表现层：未清扫但不可行动，CP19）
+        }
         float size = BoardGeometry.CELL * (1f - 0.4f * fade); // 死亡缩放（例外允许）
 
         TextureRegion region = assets.region(PlaceholderKeys.unitFrame(

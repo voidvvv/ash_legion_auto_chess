@@ -1,5 +1,6 @@
 package com.voidvvv.kz_auto_chess_n.systems;
 
+import com.voidvvv.kz_auto_chess_n.config.GameBalance;
 import com.voidvvv.kz_auto_chess_n.data.BaseStats;
 import com.voidvvv.kz_auto_chess_n.data.EffectOp;
 import com.voidvvv.kz_auto_chess_n.data.StatKey;
@@ -8,6 +9,9 @@ import com.voidvvv.kz_auto_chess_n.data.TargetPriority;
 import com.voidvvv.kz_auto_chess_n.data.UnitData;
 import com.voidvvv.kz_auto_chess_n.entities.ActiveStatus;
 import com.voidvvv.kz_auto_chess_n.entities.BattleStats;
+import com.voidvvv.kz_auto_chess_n.entities.BattleUnit;
+import com.voidvvv.kz_auto_chess_n.entities.CombatCounters;
+import com.voidvvv.kz_auto_chess_n.entities.Side;
 import com.voidvvv.kz_auto_chess_n.entities.StatModifierBlock;
 import com.voidvvv.kz_auto_chess_n.entities.StatModifierSource;
 import org.junit.jupiter.api.DisplayName;
@@ -239,6 +243,63 @@ class StatPipelineTest {
         List<ActiveStatus> statuses = Arrays.asList(
                 status(StatusType.ATK_UP, 20f), status(StatusType.ATK_UP, 35f));
         assertThat(StatPipeline.statusModifiers(statuses).pctOf(StatKey.ATTACK)).isEqualTo(35f);
+    }
+
+    // —— v5 计数通道（CP12，K2：遗物/旧疤并入第二级，先加后乘）——
+
+    @Test
+    @DisplayName("遗物计数：atk ADD 4 / hp ADD 20 → 有效攻 (10+4)、有效血 (100+20)，与状态 PCT 先加后乘")
+    void relicCountersMergeIntoSecondLevel() {
+        BattleStats base = StatPipeline.deriveBaseline(tpl(), 1, 1f, Collections.<StatModifierSource>emptyList());
+        CombatCounters counters = new CombatCounters();
+        counters.addRelic(4f, 20f);
+
+        BattleStats plain = StatPipeline.deriveEffective(base, StatModifierBlock.empty(), counters);
+        assertThat(plain.get(StatKey.ATTACK)).isCloseTo(14f, within(1e-6f));
+        assertThat(plain.get(StatKey.HP)).isCloseTo(120f, within(1e-6f));
+
+        // 与状态 PCT 叠加序：ATK_UP 30 → (10+4)×1.3 = 18.2（先加后乘）
+        StatModifierBlock mods = StatPipeline.statusModifiers(
+                Collections.singletonList(status(StatusType.ATK_UP, 30f)));
+        BattleStats stacked = StatPipeline.deriveEffective(base, mods, counters);
+        assertThat(stacked.get(StatKey.ATTACK)).isCloseTo(18.2f, within(1e-4f));
+    }
+
+    @Test
+    @DisplayName("旧疤 3 层：攻 +15%（10×1.15）+ 甲 +9（5+9）；层数×常量进 ADD/PCT 通道")
+    void scarStacksApplyPerLayer() {
+        BattleStats base = StatPipeline.deriveBaseline(tpl(), 1, 1f, Collections.<StatModifierSource>emptyList());
+        CombatCounters counters = new CombatCounters();
+        counters.addScarStack();
+        counters.addScarStack();
+        counters.addScarStack();
+        assertThat(counters.getScarStacks()).isEqualTo(3);
+
+        BattleStats effective = StatPipeline.deriveEffective(base, StatModifierBlock.empty(), counters);
+        assertThat(effective.get(StatKey.ATTACK))
+                .isCloseTo(10f * (1f + 3 * GameBalance.SCAR_ATK_PCT_PER_STACK / 100f), within(1e-4f));
+        assertThat(effective.get(StatKey.ARMOR))
+                .isCloseTo(5f + 3 * GameBalance.SCAR_ARMOR_ADD_PER_STACK, within(1e-6f));
+    }
+
+    @Test
+    @DisplayName("零计数器 = 旧两参结果逐位相等（回归锚）；BattleUnit 计数通道接入 getEffective")
+    void zeroCountersMatchLegacyOverload() {
+        BattleStats base = StatPipeline.deriveBaseline(tpl(), 1, 1f, Collections.<StatModifierSource>emptyList());
+        StatModifierBlock mods = StatPipeline.statusModifiers(
+                Collections.singletonList(status(StatusType.ATK_UP, 30f)));
+        assertThat(StatPipeline.deriveEffective(base, mods)).isEqualTo(StatPipeline.deriveEffective(base, mods, new CombatCounters()));
+
+        // BattleUnit 侧：计数器入账 + 打脏后有效攻立即反映（framework-internal 写路径）
+        BattleUnit unit = new BattleUnit(1, tpl(), 1, Side.PLAYER,
+                com.voidvvv.kz_auto_chess_n.systems.support.BattleTestFixtures.meleeSkill(), base);
+        assertThat(unit.getEffective(StatKey.ATTACK)).isEqualTo(10f);
+        unit.getCombatCounters().addRelic(4f, 20f);
+        unit.invalidateStats();
+        assertThat(unit.getEffective(StatKey.ATTACK)).isCloseTo(14f, within(1e-6f));
+        assertThat(unit.getCombatCounters().getBasicAttackCount()).isEqualTo(0);
+        unit.getCombatCounters().addBasicAttack();
+        assertThat(unit.getCombatCounters().getBasicAttackCount()).isEqualTo(1);
     }
 
     @Test

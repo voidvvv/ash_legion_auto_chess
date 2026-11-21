@@ -15,13 +15,15 @@ import java.util.Objects;
 public final class CombatEvent {
     public enum Type {
         ATTACK_LAUNCHED, HIT, CAST, STATUS_APPLIED, HEALED, SHIELDED,
-        UNIT_DIED, PROJECTILE_FIZZLED, BATTLE_ENDED, UNIT_BANISHED
+        UNIT_DIED, PROJECTILE_FIZZLED, BATTLE_ENDED, UNIT_BANISHED,
+        UNIT_DOWNED, UNIT_REVIVED
     }
 
     private final int tick;
     private final Type type;
     private final int sourceId;
     private final int targetId;
+    private final int killerId;            // UNIT_DIED 专用：击杀者 unit id，-1 = 无有效归因
     private final float amount;
     private final float amount2;
     private final boolean crit;
@@ -31,10 +33,17 @@ public final class CombatEvent {
 
     private CombatEvent(int tick, Type type, int sourceId, int targetId, float amount, float amount2,
                         boolean crit, StatusType statusType, String skillId, BattleOutcome outcome) {
+        this(tick, type, sourceId, targetId, -1, amount, amount2, crit, statusType, skillId, outcome);
+    }
+
+    private CombatEvent(int tick, Type type, int sourceId, int targetId, int killerId,
+                        float amount, float amount2, boolean crit, StatusType statusType,
+                        String skillId, BattleOutcome outcome) {
         this.tick = tick;
         this.type = type;
         this.sourceId = sourceId;
         this.targetId = targetId;
+        this.killerId = killerId;
         this.amount = amount;
         this.amount2 = amount2;
         this.crit = crit;
@@ -75,14 +84,29 @@ public final class CombatEvent {
         return new CombatEvent(tick, Type.SHIELDED, sourceId, targetId, amount, 0f, false, null, null, null);
     }
 
-    /** 单位死亡：sourceId = 亡者 id */
+    /** 单位死亡：sourceId = 亡者 id（killer = -1，存量兼容） */
     public static CombatEvent unitDied(int tick, int unitId) {
-        return new CombatEvent(tick, Type.UNIT_DIED, unitId, -1, 0f, 0f, false, null, null, null);
+        return unitDied(tick, unitId, -1);
+    }
+
+    /** 单位死亡（带击杀归因，缺口①）：sourceId = 亡者 id，killerId = 击杀者（-1 = 无） */
+    public static CombatEvent unitDied(int tick, int unitId, int killerId) {
+        return new CombatEvent(tick, Type.UNIT_DIED, unitId, -1, killerId, 0f, 0f, false, null, null, null);
     }
 
     /** 放逐移除（非死亡事件，C10）：sourceId = -1，targetId = 被放逐者 */
     public static CombatEvent unitBanished(int tick, int targetId) {
         return new CombatEvent(tick, Type.UNIT_BANISHED, -1, targetId, 0f, 0f, false, null, null, null);
+    }
+
+    /** 倒地（C1 非真死，C7）：sourceId = 倒地者 id */
+    public static CombatEvent unitDowned(int tick, int unitId) {
+        return new CombatEvent(tick, Type.UNIT_DOWNED, unitId, -1, 0f, 0f, false, null, null, null);
+    }
+
+    /** 倒地期满站起（C7 ⑤）：sourceId = 复活者 id */
+    public static CombatEvent unitRevived(int tick, int unitId) {
+        return new CombatEvent(tick, Type.UNIT_REVIVED, unitId, -1, 0f, 0f, false, null, null, null);
     }
 
     /** 在途弹消散（目标先一步被清扫） */
@@ -99,6 +123,8 @@ public final class CombatEvent {
     public Type getType() { return type; }
     public int getSourceId() { return sourceId; }
     public int getTargetId() { return targetId; }
+    /** UNIT_DIED 专用：击杀者 unit id；-1 = 无有效归因（DOT 来源先亡等） */
+    public int getKillerId() { return killerId; }
     public float getAmount() { return amount; }
     public float getAmount2() { return amount2; }
     public boolean isCrit() { return crit; }
@@ -122,6 +148,7 @@ public final class CombatEvent {
                 && type == e.type
                 && sourceId == e.sourceId
                 && targetId == e.targetId
+                && killerId == e.killerId
                 && Float.floatToIntBits(amount) == Float.floatToIntBits(e.amount)
                 && Float.floatToIntBits(amount2) == Float.floatToIntBits(e.amount2)
                 && crit == e.crit
@@ -136,6 +163,7 @@ public final class CombatEvent {
         result = 31 * result + type.hashCode();
         result = 31 * result + sourceId;
         result = 31 * result + targetId;
+        result = 31 * result + killerId;
         result = 31 * result + Float.floatToIntBits(amount);
         result = 31 * result + Float.floatToIntBits(amount2);
         result = 31 * result + (crit ? 1 : 0);
@@ -154,6 +182,9 @@ public final class CombatEvent {
         }
         if (targetId > 0) {
             sb.append(" -> tgt ").append(targetId);
+        }
+        if (type == Type.UNIT_DIED && killerId > 0) {
+            sb.append(" | killer ").append(killerId);
         }
         if (amount != 0f) {
             sb.append(" | amount ").append(amount);

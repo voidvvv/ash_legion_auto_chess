@@ -158,17 +158,17 @@ public final class SkillExecutor {
             return null;
         }
         BattleUnit target = state.getUnitById(caster.getTargetId());
-        if (target == null || target.isCleaned() || target.getSide() == caster.getSide()) {
-            return null;
+        if (target == null || !target.isActable() || target.getSide() == caster.getSide()) {
+            return null; // 过滤点四（C7 ③）
         }
         return target;
     }
 
-    /** HP% 最低友军（含自己）；全满返回 null（延后）；平局取 id 小者 */
+    /** HP% 最低友军（含自己）；全满返回 null（延后）；平局取 id 小者（倒地者不可疗——C7 ③） */
     private static BattleUnit lowestAlly(BattleState state, BattleUnit caster) {
         BattleUnit best = null;
         for (BattleUnit unit : state.getUnits()) {
-            if (unit.getSide() != caster.getSide() || unit.isCleaned()) {
+            if (unit.getSide() != caster.getSide() || !unit.isActable()) {
                 continue;
             }
             if (unit.hpRatio() >= 1f) {
@@ -185,19 +185,19 @@ public final class SkillExecutor {
     private static List<BattleUnit> aliveEnemies(BattleState state, BattleUnit caster) {
         List<BattleUnit> enemies = new ArrayList<BattleUnit>();
         for (BattleUnit unit : state.getUnits()) {
-            if (unit.getSide() != caster.getSide() && unit.isAlive()) {
+            if (unit.getSide() != caster.getSide() && unit.isActable()) { // 过滤点四（C7 ③）
                 enemies.add(unit);
             }
         }
         return enemies;
     }
 
-    /** AOE_1 十字 / AOE_2 菱形（曼哈顿 ≤ radius，含边界格），命中区域内全部存活敌方 */
+    /** AOE_1 十字 / AOE_2 菱形（曼哈顿 ≤ radius，含边界格），命中区域内全部可行动存活敌方 */
     private static List<BattleUnit> enemiesWithin(BattleState state, BattleUnit caster,
                                                   int centerX, int centerY, int radius) {
         List<BattleUnit> hits = new ArrayList<BattleUnit>();
         for (BattleUnit unit : state.getUnits()) {
-            if (unit.getSide() == caster.getSide() || unit.isCleaned()) {
+            if (unit.getSide() == caster.getSide() || !unit.isActable()) { // 过滤点四（C7 ③）
                 continue;
             }
             int distance = Math.abs(unit.getGridX() - centerX) + Math.abs(unit.getGridY() - centerY);

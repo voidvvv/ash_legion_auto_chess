@@ -8,6 +8,7 @@ import com.voidvvv.kz_auto_chess_n.data.StatusType;
 import com.voidvvv.kz_auto_chess_n.data.UnitData;
 import com.voidvvv.kz_auto_chess_n.entities.ActiveStatus;
 import com.voidvvv.kz_auto_chess_n.entities.BattleStats;
+import com.voidvvv.kz_auto_chess_n.entities.CombatCounters;
 import com.voidvvv.kz_auto_chess_n.entities.StatModifierBlock;
 import com.voidvvv.kz_auto_chess_n.entities.StatModifierSource;
 
@@ -53,16 +54,32 @@ public final class StatPipeline {
         return build(values);
     }
 
-    /** 第二级：基准 + 状态修正块（先加后乘） */
+    /** 第二级：基准 + 状态修正块（先加后乘）；零计数器委托（存量调用不动） */
     public static BattleStats deriveEffective(BattleStats base, StatModifierBlock statusModifiers) {
+        return deriveEffective(base, statusModifiers, ZERO_COUNTERS);
+    }
+
+    /** 第二级全参：基准 + 状态修正块 + 战斗内计数器（K2：遗物攻/血 ADD、旧疤攻 PCT×层 + 甲 ADD×层，先加后乘） */
+    public static BattleStats deriveEffective(BattleStats base, StatModifierBlock statusModifiers,
+                                              CombatCounters counters) {
         Objects.requireNonNull(base, "base 不能为 null");
         Objects.requireNonNull(statusModifiers, "statusModifiers 不能为 null");
+        Objects.requireNonNull(counters, "counters 不能为 null");
+        StatModifierBlock merged = statusModifiers
+                .plus(StatModifierBlock.of(StatKey.ATTACK, EffectOp.ADD, counters.getRelicAtkAdd()))
+                .plus(StatModifierBlock.of(StatKey.HP, EffectOp.ADD, counters.getRelicHpAdd()))
+                .plus(StatModifierBlock.of(StatKey.ATTACK, EffectOp.PCT,
+                        counters.getScarStacks() * GameBalance.SCAR_ATK_PCT_PER_STACK))
+                .plus(StatModifierBlock.of(StatKey.ARMOR, EffectOp.ADD,
+                        counters.getScarStacks() * GameBalance.SCAR_ARMOR_ADD_PER_STACK));
         float[] values = new float[StatKey.values().length];
         for (StatKey key : StatKey.values()) {
-            values[key.ordinal()] = combine(base.get(key), statusModifiers.addOf(key), statusModifiers.pctOf(key));
+            values[key.ordinal()] = combine(base.get(key), merged.addOf(key), merged.pctOf(key));
         }
         return build(values);
     }
+
+    private static final CombatCounters ZERO_COUNTERS = new CombatCounters();
 
     /**
      * StatusType → StatKey 修正映射（口径 #8，写死于此单点）：

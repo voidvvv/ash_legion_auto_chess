@@ -32,6 +32,9 @@ public final class DamagePipeline {
                                float attackPower, float multiplier, boolean crit,
                                boolean basicAttack, String skillId) {
         Objects.requireNonNull(target, "target 不能为 null");
+        if (!target.isActable()) {
+            return; // C7 ③ 单点兜底：不可被伤害（倒地/已清扫）
+        }
         float critMultiplier = attacker == null
                 ? StatKey.CRIT_DAMAGE.baseStatsDefault() / 100f
                 : attacker.getEffective(StatKey.CRIT_DAMAGE) / 100f;
@@ -40,6 +43,9 @@ public final class DamagePipeline {
                 * 100f / (100f + target.getEffective(StatKey.ARMOR));
         float hpDamage = absorbShield(target, mitigated);
         target.modifyHp(-hpDamage);
+        if (hpDamage > 0f && attacker != null) {
+            target.setLastDamagerId(attacker.getId()); // 击杀归因（CP13，C5/C12）
+        }
         state.record(CombatEvent.hit(state.getTick(),
                 attacker == null ? -1 : attacker.getId(), target.getId(), hpDamage, crit, skillId));
 
@@ -51,14 +57,35 @@ public final class DamagePipeline {
         }
     }
 
-    /** DOT 真伤：无视护甲、先扣盾、可致死、无回能无吸血无事件（口径 #10） */
+    /** DOT 真伤：无视护甲、先扣盾、可致死、无回能无吸血无事件（口径 #10）；归因仍记录施加者 */
     public void applyTrueDamage(BattleState state, BattleUnit source, BattleUnit target, float amount) {
-        float hpDamage = absorbShield(target, amount);
-        target.modifyHp(-hpDamage);
+        applyTrueDamage(state, source, target, amount, null);
     }
 
-    /** 治疗：cap maxHp、溢出作废、Healed 事件（实际回复量；source 即受益者） */
+    /** 全参真伤：causeId = 亡语等真伤载荷的事件标注（null = DOT 静默）；hpDamage>0 记归因 + 发 HIT（紫飘字） */
+    public void applyTrueDamage(BattleState state, BattleUnit source, BattleUnit target,
+                                float amount, String causeId) {
+        Objects.requireNonNull(target, "target 不能为 null");
+        if (!target.isActable()) {
+            return; // C7 ③ 单点兜底：不可被伤害（倒地/已清扫）
+        }
+        float hpDamage = absorbShield(target, amount);
+        target.modifyHp(-hpDamage);
+        if (hpDamage > 0f && source != null) {
+            target.setLastDamagerId(source.getId()); // 亡语/DOT/反弹致死归因（CP13，K4）
+        }
+        if (hpDamage > 0f && causeId != null) {
+            state.record(CombatEvent.hit(state.getTick(),
+                    source == null ? -1 : source.getId(), target.getId(), hpDamage, false, causeId));
+        }
+    }
+
+    /** 治疗：cap maxHp、溢出作废、Healed 事件（实际回复量；source 即受益者）；倒地不可被治疗（C7 ③） */
     public void applyHeal(BattleState state, BattleUnit target, float amount) {
+        Objects.requireNonNull(target, "target 不能为 null");
+        if (!target.isActable()) {
+            return;
+        }
         float before = target.getCurrentHp();
         target.modifyHp(amount);
         float healed = target.getCurrentHp() - before;

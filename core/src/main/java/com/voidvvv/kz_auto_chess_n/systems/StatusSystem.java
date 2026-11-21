@@ -69,11 +69,12 @@ public final class StatusSystem {
                 type, power, duration));
     }
 
-    /** 阶段①：DOT/REGEN 1s 心跳 · 时长递减 · 到期移除（id 序逐单位推进） */
+    /** 阶段①：DOT/REGEN 1s 心跳 · 时长递减 · 到期移除（id 序逐单位推进；
+     *  倒地整体跳过 = 状态时钟冻结，C7 ③——防倒地中被毒死） */
     public void tickStatuses(BattleState state, float dt) {
         for (BattleUnit unit : state.getUnits()) {
-            if (unit.isCleaned()) {
-                continue;
+            if (!unit.isActable()) {
+                continue; // 清扫/倒地
             }
             List<ActiveStatus> snapshot = new ArrayList<ActiveStatus>(unit.getStatuses());
             for (ActiveStatus status : snapshot) {

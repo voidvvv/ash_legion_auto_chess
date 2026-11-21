@@ -41,6 +41,12 @@ public final class GameBalance {
     public static final float RETARGET_INTERVAL = 2f;
     public static final float DOT_TICK_INTERVAL = 1f;
 
+    // —— 旧疤（兽人(6) SCAR，v5 §4.1 计数通道；每层幅度全局常量，次数/封顶在 synergies.json value/value2）——
+    /** 每层攻击加成（百分点，有效攻 ×(1+0.05×层数)） */
+    public static final float SCAR_ATK_PCT_PER_STACK = 5f;
+    /** 每层护甲加成（ADD） */
+    public static final float SCAR_ARMOR_ADD_PER_STACK = 3f;
+
     // —— 技能 ——
     public static final int MAX_EFFECTS_PER_SKILL = 3;
     /** 就地施放重入深度上限（口径 #19）：能量跨百回调的嵌套施放链防御性保险，超限推迟到下一行动 tick */
