@@ -13,11 +13,13 @@ public final class CombatCounters {
     private float relicHpAdd;
     private int scarStacks;
     private int basicAttackCount;   // 三连装填计数（CP27 消费）
+    private int basicHitTakenCount; // 旧疤被击计数（CP21：每 SCAR.value 次进一层）
 
     public float getRelicAtkAdd() { return relicAtkAdd; }
     public float getRelicHpAdd() { return relicHpAdd; }
     public int getScarStacks() { return scarStacks; }
     public int getBasicAttackCount() { return basicAttackCount; }
+    public int getBasicHitTakenCount() { return basicHitTakenCount; }
 
     /** framework-internal：名册遗物入账（攻 ADD / 血 ADD） */
     public void addRelic(float atkAdd, float hpAdd) {
@@ -33,5 +35,15 @@ public final class CombatCounters {
     /** framework-internal：普攻出手 +1（三连装填） */
     public void addBasicAttack() {
         basicAttackCount++;
+    }
+
+    /** framework-internal：被普攻直伤命中 +1（旧疤进层计数，CP21） */
+    public void addBasicHitTaken() {
+        basicHitTakenCount++;
+    }
+
+    /** framework-internal：进层后清零重新累计（CP21） */
+    public void resetBasicHitTakenCount() {
+        basicHitTakenCount = 0;
     }
 }

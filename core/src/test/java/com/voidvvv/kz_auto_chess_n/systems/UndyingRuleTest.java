@@ -98,7 +98,7 @@ class UndyingRuleTest {
             }
         });
         int eventsBefore = state.getEvents().size();
-        pipeline.applyDirectHit(state, foe, dk, 50f, 1f, false, true, null);
+        pipeline.applyDirectHit(state, foe, dk, 50f, 1f, false, 0f, true, null, 0f);
         pipeline.applyTrueDamage(state, foe, dk, 50f);
         pipeline.applyHeal(state, dk, 50f);
         assertThat(dk.getCurrentHp()).isEqualTo(0f); // 不可伤不可疗（三路径全空返回）

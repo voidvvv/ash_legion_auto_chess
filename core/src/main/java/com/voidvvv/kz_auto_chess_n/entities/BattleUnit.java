@@ -316,4 +316,29 @@ public final class BattleUnit {
     public void setLastDamagerId(int damagerId) {
         this.lastDamagerId = damagerId;
     }
+
+    // —— 旧疤受击计数（CP21，K2 计数通道）——
+
+    /** framework-internal：被普攻直伤命中 +1 计数（DamagePipeline 普攻命中挂点调）——
+     *  每 SCAR.value 次进一层（封顶 value2），层数经 combatCounters 并入第二级有效值。
+     *  DOT/真伤/反弹不经此路径（豁免天然成立）；无 SCAR 机制时空操作。 */
+    public void onScarHit() {
+        EffectData scar = getMechanic(SynergyMechanic.SCAR);
+        if (scar == null || scar.getValue2() == null) {
+            return;
+        }
+        int perStack = Math.round(scar.getValue());
+        if (perStack <= 0) {
+            return; // 防御：value 非正不进层（加载校验已拦，测试夹具兜底）
+        }
+        combatCounters.addBasicHitTaken();
+        if (combatCounters.getBasicHitTakenCount() < perStack) {
+            return;
+        }
+        combatCounters.resetBasicHitTakenCount();
+        if (combatCounters.getScarStacks() < Math.round(scar.getValue2())) {
+            combatCounters.addScarStack();
+            invalidateStats();
+        }
+    }
 }

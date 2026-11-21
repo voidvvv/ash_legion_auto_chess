@@ -232,7 +232,7 @@ public final class BattleSystem {
                         unit.getEffective(StatKey.ATTACK), crit, null, 1f)); // 口径 #12：远程普攻 = HOMING 锁定弹
             } else {
                 damagePipeline.applyDirectHit(state, unit, target,
-                        unit.getEffective(StatKey.ATTACK), 1f, crit, true, null); // 近战即时结算
+                        unit.getEffective(StatKey.ATTACK), 1f, crit, 0f, true, null, 0f); // 近战即时结算
             }
             unit.consumeAttackTimer();
             return;

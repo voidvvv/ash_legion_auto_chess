@@ -1,8 +1,10 @@
 package com.voidvvv.kz_auto_chess_n.systems;
 
 import com.voidvvv.kz_auto_chess_n.config.GameBalance;
+import com.voidvvv.kz_auto_chess_n.data.EffectData;
 import com.voidvvv.kz_auto_chess_n.data.StatKey;
 import com.voidvvv.kz_auto_chess_n.data.StatusType;
+import com.voidvvv.kz_auto_chess_n.data.SynergyMechanic;
 import com.voidvvv.kz_auto_chess_n.entities.ActiveStatus;
 import com.voidvvv.kz_auto_chess_n.entities.BattleState;
 import com.voidvvv.kz_auto_chess_n.entities.BattleUnit;
@@ -12,12 +14,16 @@ import java.util.Objects;
 
 /**
  * 唯一伤害管线（battle §5.2；普攻与技能直伤共用）。结算序（每步事件/状态可观察）：
- * 伤害 = attackPower × multiplier × (crit ? 1.5 : 1) × 100/(100 + 目标命中时有效护甲)
+ * 伤害 = attackPower × multiplier × (1+收割增伤) × (crit ? 暴击倍率 : 1) × (1−免伤)
+ *        × 100/(100 + 目标命中时有效护甲 × (1−穿甲))
  * → 先扣盾 → 扣 HP（溢出作废）→ Hit 事件
  * → 攻击者 +10×回能率 / 受击者 +5×回能率（口径 #5/#6；控制期冻结；跨百就地回调）
- * → basicAttack 时吸血（Q3）：实际扣血量 × lifesteal/100，cap maxHp，Healed 事件。
+ * → basicAttack 时吸血（Q3）：实际扣血量 × lifesteal/100，cap maxHp，Healed 事件
+ * → 普攻命中落地挂点（旧疤计数 + 附带状态，CP21/CP25）→ 余震反弹（甲后扣血 ×ratio 真伤回攻击者）。
  *
- * <p>护甲按<b>命中时</b>目标有效护甲结算（口径 #13：roll 在发射、公式在命中）；
+ * <p>受击窗口序 K9（v5 §4.1 缺口②）；DOT/真伤不经 applyDirectHit——
+ * 免伤/反弹/旧疤对 DOT 与真伤全线豁免（天然成立）。
+ * 护甲按<b>命中时</b>目标有效护甲结算（口径 #13：roll 在发射、公式在命中）；
  * 数值 float 全精度直存（口径 #7）。
  */
 public final class DamagePipeline {
@@ -27,20 +33,25 @@ public final class DamagePipeline {
         this.castTrigger = Objects.requireNonNull(castTrigger, "castTrigger 不能为 null");
     }
 
-    /** 直伤命中（普攻与技能同路；skillId null = 普攻） */
+    /** 直伤命中（普攻与技能同路；skillId null = 普攻）。窗口序 K9：
+     *  收割(前) → 免伤(前,直伤专属) → 护甲(×(1−pen)) → 盾 → 血 → HIT → 回能 → 吸血
+     *  → 旧疤计数(仅普攻) → 余震反弹 → 普攻附带。DOT/真伤不经此（豁免天然成立）。 */
     public void applyDirectHit(BattleState state, BattleUnit attacker, BattleUnit target,
-                               float attackPower, float multiplier, boolean crit,
-                               boolean basicAttack, String skillId) {
+                               float attackPower, float multiplier, boolean crit, float critBonusPp,
+                               boolean basicAttack, String skillId, float armorPenRatio) {
         Objects.requireNonNull(target, "target 不能为 null");
         if (!target.isActable()) {
             return; // C7 ③ 单点兜底：不可被伤害（倒地/已清扫）
         }
         float critMultiplier = attacker == null
                 ? StatKey.CRIT_DAMAGE.baseStatsDefault() / 100f
-                : attacker.getEffective(StatKey.CRIT_DAMAGE) / 100f;
-        float mitigated = attackPower * multiplier
+                : attacker.getEffective(StatKey.CRIT_DAMAGE) / 100f + critBonusPp / 100f;
+        float executeAmp = executeAmpOf(attacker, target);                          // 收割：目标 <阈值 → +value%
+        float reduction = mechanicValueOf(target, SynergyMechanic.DAMAGE_REDUCTION); // 免伤（仅直伤）
+        float mitigated = attackPower * multiplier * (1f + executeAmp / 100f)
                 * (crit ? critMultiplier : 1f)
-                * 100f / (100f + target.getEffective(StatKey.ARMOR));
+                * (1f - reduction / 100f)
+                * 100f / (100f + target.getEffective(StatKey.ARMOR) * (1f - armorPenRatio));
         float hpDamage = absorbShield(target, mitigated);
         target.modifyHp(-hpDamage);
         if (hpDamage > 0f && attacker != null) {
@@ -55,6 +66,10 @@ public final class DamagePipeline {
         if (basicAttack && attacker != null) {
             applyLifesteal(state, attacker, hpDamage);
         }
+        if (basicAttack && hpDamage > 0f) {
+            onBasicAttackHit(state, attacker, target, attackPower, hpDamage); // 旧疤计数 + 普攻附带（CP21/CP25）
+        }
+        applyReflect(state, attacker, target, hpDamage); // 余震：甲后扣血 ×ratio 真伤回攻击者（可致死入级联）
     }
 
     /** DOT 真伤：无视护甲、先扣盾、可致死、无回能无吸血无事件（口径 #10）；归因仍记录施加者 */
@@ -119,6 +134,49 @@ public final class DamagePipeline {
         if (healed > 0f) {
             state.record(CombatEvent.healed(state.getTick(), attacker.getId(), attacker.getId(), healed));
         }
+    }
+
+    // —— v5 受击窗口机制（CP20/CP21，K9；全部经 mechanic 查询，无机制零开销） ——
+
+    /** 收割增伤（刺客4/6 EXECUTE）：目标 hpRatio < value2% → +value%；严格小于阈值（K9） */
+    private static float executeAmpOf(BattleUnit attacker, BattleUnit target) {
+        EffectData execute = attacker == null ? null : attacker.getMechanic(SynergyMechanic.EXECUTE);
+        if (execute == null || execute.getValue2() == null
+                || target.hpRatio() >= execute.getValue2() / 100f) {
+            return 0f;
+        }
+        return execute.getValue();
+    }
+
+    /** 机制值查询（无词/无单位 = 0；免伤/反弹共用） */
+    private static float mechanicValueOf(BattleUnit unit, SynergyMechanic kind) {
+        EffectData data = unit == null ? null : unit.getMechanic(kind);
+        return data == null ? 0f : data.getValue();
+    }
+
+    /** 余震（巨人4/6 REFLECT）：甲后实际扣血 ×value% 真伤给攻击者——可致死、入级联、归因 = 反弹者 */
+    private void applyReflect(BattleState state, BattleUnit attacker, BattleUnit target, float hpDamage) {
+        float ratio = mechanicValueOf(target, SynergyMechanic.REFLECT);
+        if (ratio <= 0f || hpDamage <= 0f || attacker == null || !attacker.isActable()) {
+            return;
+        }
+        applyTrueDamage(state, target, attacker, hpDamage * ratio / 100f, "reflect");
+    }
+
+    /** 普攻命中落地挂点（仅普攻直伤 hpDamage>0 时）：旧疤计数（CP21）+ 附带状态（CP25 充实）。
+     *  attackPower = 本发命中所用攻击力（近战 = 出手时有效攻；弹道 = 发射快照——由调用方传入） */
+    private void onBasicAttackHit(BattleState state, BattleUnit attacker, BattleUnit target,
+                                  float attackPower, float hpDamage) {
+        if (hpDamage > 0f) {
+            target.onScarHit(); // CP21：受击计数入层（无 SCAR 机制时空操作）
+        }
+        applyBasicAttackStatusOnPower(state, attacker, target, attackPower); // CP25 充实（批4）
+    }
+
+    /** 普攻附带状态（兽人灼烧/野兽围狩）：BURN 取 attackPower×value%、SLOW 取 value 百分点（CP25 充实） */
+    void applyBasicAttackStatusOnPower(BattleState state, BattleUnit attacker, BattleUnit target,
+                                       float attackPower) {
+        // CP25 充实（批4）
     }
 
     /** 先扣盾：返回穿透到 HP 的伤害量；盾耗尽移除并打脏标记（口径 #9） */

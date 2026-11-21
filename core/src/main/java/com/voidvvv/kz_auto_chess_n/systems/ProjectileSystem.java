@@ -64,7 +64,7 @@ public final class ProjectileSystem {
                     projectile.getAttackSnapshot(), "deathrattle_projectile"); // 真伤路由（C6）
         } else if (projectile.getSkill() == null) {
             damagePipeline.applyDirectHit(state, caster, target,
-                    projectile.getAttackSnapshot(), 1f, projectile.isCrit(), true, null);
+                    projectile.getAttackSnapshot(), 1f, projectile.isCrit(), 0f, true, null, 0f);
         } else {
             skillExecutor.applyAtImpact(state, caster, target, projectile.getSkill(),
                     projectile.getAttackSnapshot(), projectile.getScaleFactor());

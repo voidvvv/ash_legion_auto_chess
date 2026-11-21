@@ -226,7 +226,7 @@ public final class SkillExecutor {
         switch (effect.getEffect()) {
             case DAMAGE:
                 damagePipeline.applyDirectHit(state, caster, target, attackSnapshot,
-                        value * scaleFactor, false, false, skill.getId());
+                        value * scaleFactor, false, 0f, false, skill.getId(), 0f); // armorPenRatio 由 CP22~27 批接线
                 break;
             case HEAL:
                 damagePipeline.applyHeal(state, target,
