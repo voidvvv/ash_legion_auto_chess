@@ -3,6 +3,7 @@ package com.voidvvv.kz_auto_chess_n.systems;
 import com.voidvvv.kz_auto_chess_n.config.GameBalance;
 import com.voidvvv.kz_auto_chess_n.data.CastCondition;
 import com.voidvvv.kz_auto_chess_n.data.Delivery;
+import com.voidvvv.kz_auto_chess_n.data.EffectData;
 import com.voidvvv.kz_auto_chess_n.data.SkillData;
 import com.voidvvv.kz_auto_chess_n.data.SkillEffect;
 import com.voidvvv.kz_auto_chess_n.data.SkillEffectType;
@@ -79,6 +80,10 @@ public final class SkillExecutor {
         } else {
             List<BattleUnit> targets = resolveTargets(state, caster, skill, mainTarget);
             applyEffects(state, caster, skill, targets, attackSnapshot, scaleFactor);
+        }
+        EffectData afterCast = caster.getMechanic(SynergyMechanic.AFTER_CAST_ENERGY);
+        if (afterCast != null) {
+            damagePipeline.gainEnergy(state, caster, afterCast.getValue()); // 群星响应：施法后 +value（CP22）
         }
         return true;
     }
@@ -224,10 +229,13 @@ public final class SkillExecutor {
                                 float attackSnapshot, float scaleFactor) {
         float value = effect.getValue() == null ? 0f : effect.getValue();
         switch (effect.getEffect()) {
-            case DAMAGE:
+            case DAMAGE: {
+                // 穿甲（法师(4)/(6) SPELL_PEN）：技能直伤无视目标护甲 value%（CP20 遗留 → 批4 接线，K9）
+                float armorPenRatio = mechanicRatioOf(caster, SynergyMechanic.SPELL_PEN);
                 damagePipeline.applyDirectHit(state, caster, target, attackSnapshot,
-                        value * scaleFactor, false, 0f, false, skill.getId(), 0f); // armorPenRatio 由 CP22~27 批接线
+                        value * scaleFactor, false, 0f, false, skill.getId(), armorPenRatio);
                 break;
+            }
             case HEAL:
                 damagePipeline.applyHeal(state, target,
                         target.getEffective(StatKey.HP) * value * scaleFactor);
@@ -239,7 +247,7 @@ public final class SkillExecutor {
                 break;
             case APPLY_STATUS: {
                 StatusType status = effect.getStatus();
-                float power = isDotType(status) ? attackSnapshot * value : value;
+                float power = StatusSystem.isDotType(status) ? attackSnapshot * value : value;
                 float duration = effect.getDuration() == null ? 0f : effect.getDuration();
                 statusSystem.apply(state, target, status, power, duration, caster.getId());
                 break;
@@ -306,8 +314,10 @@ public final class SkillExecutor {
         state.placeUnit(target, x, y); // 一步未进时 x/y = from，原地放回
     }
 
-    private static boolean isDotType(StatusType status) {
-        return status == StatusType.BLEED || status == StatusType.POISON || status == StatusType.BURN;
+    /** 机制比例查询（SPELL_PEN 等，无词 = 0）——百分比刻度 ÷100 在结算点（约定） */
+    private static float mechanicRatioOf(BattleUnit unit, SynergyMechanic kind) {
+        EffectData data = unit == null ? null : unit.getMechanic(kind);
+        return data == null ? 0f : data.getValue() / 100f;
     }
 
     private static List<BattleUnit> singleList(BattleUnit unit) {

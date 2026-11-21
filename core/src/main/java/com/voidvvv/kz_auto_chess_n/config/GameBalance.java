@@ -47,6 +47,10 @@ public final class GameBalance {
     /** 每层护甲加成（ADD） */
     public static final float SCAR_ARMOR_ADD_PER_STACK = 3f;
 
+    // —— 卫队战吼（战士(4)/(6) WARCRY_TAUNT，CP23 K7；延迟/持续在 synergies.json value/value2）——
+    /** 战吼震慑半径（曼哈顿，格） */
+    public static final int WARCRY_TAUNT_RADIUS = 1;
+
     // —— 技能 ——
     public static final int MAX_EFFECTS_PER_SKILL = 3;
     /** 就地施放重入深度上限（口径 #19）：能量跨百回调的嵌套施放链防御性保险，超限推迟到下一行动 tick */

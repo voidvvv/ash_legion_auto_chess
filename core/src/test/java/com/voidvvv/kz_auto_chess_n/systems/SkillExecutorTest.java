@@ -435,4 +435,62 @@ class SkillExecutorTest {
         assertThat(burn.getPower()).isCloseTo(3f, within(1e-6f)); // 10 × 0.3
         assertThat(burn.getRemainingTime()).isEqualTo(4f);
     }
+
+    // —— v5 批4：群星响应回能（CP22）+ 穿甲接线（CP20 遗留 → 批4）——
+
+    @Test
+    @DisplayName("群星响应（AFTER_CAST_ENERGY 20，CP22）：施放成功后施放者 +20（走回能管线 egr 加权）")
+    void afterCastEnergyRefundsCaster() {
+        SkillData buff = skill("sk_star", SkillShape.SELF, Delivery.MELEE_INSTANT,
+                effect(SkillEffectType.APPLY_STATUS, 30f, StatusType.ATK_UP, 5f));
+        BattleUnit caster = caster(buff);
+        caster.setMechanics(java.util.Collections.singletonList(
+                new com.voidvvv.kz_auto_chess_n.data.EffectData(null, null,
+                        com.voidvvv.kz_auto_chess_n.data.SynergyMechanic.AFTER_CAST_ENERGY, null,
+                        20f, null, null, null, com.voidvvv.kz_auto_chess_n.data.EffectTarget.ALLIES, null)));
+        BattleState state = state(caster);
+        assertThat(EXECUTOR.cast(state, caster)).isTrue();
+        assertThat(caster.getEnergy()).isCloseTo(20f, within(1e-6f)); // 施放清零后 +20×egr100
+
+        // egr 加权：50% 回能率 → +10
+        BattleUnit slow = new BattleUnit(2, tpl("u2"), 1, Side.PLAYER, buff,
+                new BattleStats(100f, 10f, 0f, 1f, 1f, 1f, 0f, 50f, 0f, 20f, 150f)); // egr 50
+        slow.setPosition(3, 4);
+        slow.setMechanics(java.util.Collections.singletonList(
+                new com.voidvvv.kz_auto_chess_n.data.EffectData(null, null,
+                        com.voidvvv.kz_auto_chess_n.data.SynergyMechanic.AFTER_CAST_ENERGY, null,
+                        20f, null, null, null, com.voidvvv.kz_auto_chess_n.data.EffectTarget.ALLIES, null)));
+        BattleState state2 = state(slow);
+        assertThat(EXECUTOR.cast(state2, slow)).isTrue();
+        assertThat(slow.getEnergy()).isCloseTo(10f, within(1e-6f)); // +20×0.5
+    }
+
+    @Test
+    @DisplayName("穿甲接线（SPELL_PEN 50，CP20 遗留→批4）：技能直伤无视目标半甲（甲 100 → 有效 50）")
+    void spellPenHalvesArmorOnSkillDamage() {
+        SkillData exec = skill("sk_execute", SkillShape.SINGLE_TARGET, Delivery.MELEE_INSTANT,
+                effect(SkillEffectType.DAMAGE, 1f, null, null));
+        BattleUnit caster = caster(exec); // atk 10
+        caster.setMechanics(java.util.Collections.singletonList(
+                new com.voidvvv.kz_auto_chess_n.data.EffectData(null, null,
+                        com.voidvvv.kz_auto_chess_n.data.SynergyMechanic.SPELL_PEN, null,
+                        50f, null, null, null, com.voidvvv.kz_auto_chess_n.data.EffectTarget.ALLIES, null)));
+        BattleUnit armored = new BattleUnit(2, tpl("arm"), 1, Side.ENEMY, exec,
+                new BattleStats(1000f, 10f, 100f, 1f, 1f, 1f, 0f, 100f, 0f, 20f, 150f));
+        armored.setPosition(2, 2);
+        caster.setTargetId(2);
+        BattleState state = state(caster, armored);
+        assertThat(EXECUTOR.cast(state, caster)).isTrue();
+        assertThat(armored.getCurrentHp()).isCloseTo(1000f - 10f * 100f / 150f, within(1e-4f)); // 半甲
+
+        // 对照：无 SPELL_PEN → 全甲公式 100/(100+100)
+        BattleUnit plainCaster = caster(exec);
+        BattleUnit armored2 = new BattleUnit(4, tpl("arm2"), 1, Side.ENEMY, exec,
+                new BattleStats(1000f, 10f, 100f, 1f, 1f, 1f, 0f, 100f, 0f, 20f, 150f));
+        armored2.setPosition(2, 2);
+        plainCaster.setTargetId(4);
+        BattleState state2 = state(plainCaster, armored2);
+        assertThat(EXECUTOR.cast(state2, plainCaster)).isTrue();
+        assertThat(armored2.getCurrentHp()).isCloseTo(1000f - 10f * 100f / 200f, within(1e-4f));
+    }
 }

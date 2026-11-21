@@ -42,7 +42,9 @@ class DamagePipelineTest {
     }
 
     private static DamagePipeline pipeline(RecordingTrigger trigger) {
-        return new DamagePipeline(trigger);
+        DamagePipeline pipeline = new DamagePipeline(trigger);
+        pipeline.bindStatusSystem(new StatusSystem(pipeline)); // CP25：普攻附带状态经 StatusSystem 挂载
+        return pipeline;
     }
 
     private static BattleUnit attacker() {
@@ -530,5 +532,123 @@ class DamagePipelineTest {
 
         pipeline.applyDirectHit(state, atk, plain, 10f, 1f, false, 0f, true, null, 0f); // 无机制者空操作
         assertThat(plain.getCombatCounters().getScarStacks()).isZero();
+    }
+
+    // —— v5 批4：普攻附带状态（CP25）——
+
+    /** BASIC_ATTACK_STATUS 机制直授（status+value+duration） */
+    private static void grantStatus(BattleUnit unit, StatusType status, Float value, Float duration) {
+        unit.setMechanics(Collections.singletonList(new EffectData(null, null,
+                SynergyMechanic.BASIC_ATTACK_STATUS, null, value, null, status, duration,
+                EffectTarget.ALLIES, null)));
+    }
+
+    @Test
+    @DisplayName("普攻附带 BURN（兽人4，CP25）：power = 本发攻击 ×30%、时长 3s、同 type 刷新取大")
+    void basicAttackStatusBurnUsesAttackPower() {
+        BattleUnit atk = attacker();
+        grantStatus(atk, StatusType.BURN, 30f, 3f);
+        BattleUnit target = target();
+        BattleState state = state(atk, target);
+        DamagePipeline pipeline = pipeline(new RecordingTrigger());
+
+        pipeline.applyDirectHit(state, atk, target, 10f, 1f, false, 0f, true, null, 0f);
+        ActiveStatus burn = target.getStatuses().get(0);
+        assertThat(burn.getType()).isEqualTo(StatusType.BURN);
+        assertThat(burn.getPower()).isCloseTo(3f, within(1e-6f));        // 10 × 30%
+        assertThat(burn.getRemainingTime()).isCloseTo(3f, within(1e-6f));
+
+        pipeline.applyDirectHit(state, atk, target, 20f, 1f, false, 0f, true, null, 0f);
+        assertThat(burn.getPower()).isCloseTo(6f, within(1e-6f));        // 20 × 30%——刷新取大
+    }
+
+    @Test
+    @DisplayName("普攻附带 SLOW（野兽4，CP25）：非 DOT power = value 百分点（30 / 2s）")
+    void basicAttackStatusSlowUsesValue() {
+        BattleUnit atk = attacker();
+        grantStatus(atk, StatusType.SLOW, 30f, 2f);
+        BattleUnit target = target();
+        BattleState state = state(atk, target);
+
+        pipeline(new RecordingTrigger()).applyDirectHit(state, atk, target, 10f, 1f, false, 0f, true, null, 0f);
+        ActiveStatus slow = target.getStatuses().get(0);
+        assertThat(slow.getType()).isEqualTo(StatusType.SLOW);
+        assertThat(slow.getPower()).isCloseTo(30f, within(1e-6f)); // 非 DOT：power = value
+        assertThat(slow.getRemainingTime()).isCloseTo(2f, within(1e-6f));
+    }
+
+    @Test
+    @DisplayName("弹道附带取发射快照（CP25）：attackPower=快照 10，命中时攻已涨 60 → BURN 仍 3 非 18")
+    void basicAttackStatusUsesSnapshotPower() {
+        BattleUnit atk = attacker();
+        grantStatus(atk, StatusType.BURN, 30f, 3f);
+        BattleUnit target = target();
+        BattleState state = state(atk, target);
+        atk.addStatus(new ActiveStatus(StatusType.ATK_UP, -1, 500f, 10f)); // 有效攻 ×6 = 60
+        assertThat(atk.getEffective(StatKey.ATTACK)).isCloseTo(60f, within(1e-4f));
+
+        pipeline(new RecordingTrigger()).applyDirectHit(state, atk, target, 10f, 1f, false, 0f, true, null, 0f);
+        assertThat(target.getStatuses().get(0).getPower()).isCloseTo(3f, within(1e-6f)); // 快照 10 × 30%
+    }
+
+    @Test
+    @DisplayName("DOT/真伤不触发附带（CP25）：applyTrueDamage 命中无 BURN（非普攻路径）")
+    void basicAttackStatusNotTriggeredByTrueDamage() {
+        BattleUnit atk = attacker();
+        grantStatus(atk, StatusType.BURN, 30f, 3f);
+        BattleUnit target = target();
+        BattleState state = state(atk, target);
+
+        pipeline(new RecordingTrigger()).applyTrueDamage(state, atk, target, 10f);
+        assertThat(target.getStatuses()).isEmpty();
+    }
+
+    // —— v5 批4：收割专项（CP26——接线在 CP20，本组为验证收口）——
+
+    @Test
+    @DisplayName("收割边界与技能路径（CP26）：恰 35% 不增伤（严格小于）；技能直伤同吃收割")
+    void executeStrictBoundaryAndSkillPath() {
+        BattleUnit atk = attacker();
+        grant(atk, SynergyMechanic.EXECUTE, 40f, 35f);
+        BattleUnit edge = target();
+        edge.modifyHp(-65f); // 35/100 = 35% —— 恰等阈值，不增伤
+        BattleState state = state(atk, edge);
+
+        pipeline(new RecordingTrigger()).applyDirectHit(state, atk, edge, 10f, 1f, false, 0f, false, null, 0f);
+        assertThat(edge.getCurrentHp()).isCloseTo(35f - 10f * 100f / 105f, within(1e-4f)); // 无 ×1.4
+
+        BattleUnit low = unit(7, Side.ENEMY, tpl("l"), 4, 2);
+        low.modifyHp(-70f); // 30% < 35%
+        BattleState state2 = state(atk, low);
+        pipeline(new RecordingTrigger()).applyDirectHit(state2, atk, low, 10f, 2f, false, 0f, false,
+                "skill_execute", 0f); // 技能直伤（处决）
+        assertThat(low.getCurrentHp()).isCloseTo(30f - 20f * 1.4f * 100f / 105f, within(1e-4f)); // ×1.4 生效
+    }
+
+    @Test
+    @DisplayName("收割 × 免伤同乘法链（CP26）：×1.4 × ×0.85 互不影响")
+    void executeStacksWithReduction() {
+        BattleUnit atk = attacker();
+        grant(atk, SynergyMechanic.EXECUTE, 40f, 35f);
+        BattleUnit target = target(); // armor 5
+        grant(target, SynergyMechanic.DAMAGE_REDUCTION, 15f, null);
+        target.modifyHp(-70f); // 30% < 35%
+        BattleState state = state(atk, target);
+
+        pipeline(new RecordingTrigger()).applyDirectHit(state, atk, target, 10f, 1f, false, 0f, true, null, 0f);
+        assertThat(target.getCurrentHp()).isCloseTo(30f - 10f * 1.4f * 0.85f * 100f / 105f, within(1e-4f));
+    }
+
+    @Test
+    @DisplayName("收割对称（CP26）：敌方攻击者对玩家残血单位同样生效")
+    void executeSymmetricOnSides() {
+        BattleUnit atk = unit(1, Side.ENEMY, tpl("ea"), 2, 2);
+        grant(atk, SynergyMechanic.EXECUTE, 40f, 35f);
+        BattleUnit victim = unit(2, Side.PLAYER, tpl("pv"), 2, 4); // armor 5
+        victim.modifyHp(-80f); // 20% < 35%
+        BattleState state = state(atk, victim);
+
+        pipeline(new RecordingTrigger()).applyDirectHit(state, atk, victim, 10f, 1f, false, 0f, true, null, 0f);
+        assertThat(victim.getCurrentHp()).isCloseTo(20f - 10f * 1.4f * 100f / 105f, within(1e-4f));
     }
 }

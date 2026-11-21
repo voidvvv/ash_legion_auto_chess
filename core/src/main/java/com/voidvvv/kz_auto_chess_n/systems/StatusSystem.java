@@ -117,4 +117,9 @@ public final class StatusSystem {
         }
         return null;
     }
+
+    /** DOT 类判定（BLEED/POISON/BURN——SkillExecutor/DamagePipeline 共用，CP25 提升） */
+    static boolean isDotType(StatusType status) {
+        return status == StatusType.BLEED || status == StatusType.POISON || status == StatusType.BURN;
+    }
 }

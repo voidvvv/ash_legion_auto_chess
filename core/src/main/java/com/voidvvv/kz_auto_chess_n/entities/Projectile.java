@@ -20,6 +20,7 @@ public final class Projectile {
     private int targetId;                 // retarget 可变（亡语源弹道消散重选，CP18）
     private final float attackSnapshot;
     private final boolean crit;
+    private final float critBonusPp;      // 必暴刀暴伤加成（CP27 K10：随载荷冻结，impact 透传）
     private final SkillData skill;        // null = 普攻弹
     private final float scaleFactor;     // 技能公共缩放因子；普攻 = 1
     private final boolean deathrattleBorn; // 亡语源弹（C6/§五.7）：真伤路由 + 消散重选
@@ -34,12 +35,19 @@ public final class Projectile {
     public Projectile(int sourceId, int targetId, float posX, float posY,
                       float attackSnapshot, boolean crit, SkillData skill, float scaleFactor,
                       boolean deathrattleBorn) {
+        this(sourceId, targetId, posX, posY, attackSnapshot, crit, 0f, skill, scaleFactor, deathrattleBorn);
+    }
+
+    public Projectile(int sourceId, int targetId, float posX, float posY,
+                      float attackSnapshot, boolean crit, float critBonusPp,
+                      SkillData skill, float scaleFactor, boolean deathrattleBorn) {
         this.sourceId = sourceId;
         this.targetId = targetId;
         this.posX = posX;
         this.posY = posY;
         this.attackSnapshot = attackSnapshot;
         this.crit = crit;
+        this.critBonusPp = critBonusPp;
         this.skill = skill;
         this.scaleFactor = scaleFactor;
         this.deathrattleBorn = deathrattleBorn;
@@ -53,6 +61,9 @@ public final class Projectile {
     public float getAttackSnapshot() { return attackSnapshot; }
     /** 普攻发射时已 roll 的暴击标志；技能弹恒 false */
     public boolean isCrit() { return crit; }
+
+    /** 必暴刀暴伤加成（百分点；0 = 常规刀——CP27 K10） */
+    public float getCritBonusPp() { return critBonusPp; }
     /** @return 技能弹非 null，普攻弹为 null */
     public SkillData getSkill() { return skill; }
     /** 公共缩放因子：技能 = value 外的星级 × skillPower 部分；普攻 = 1 */

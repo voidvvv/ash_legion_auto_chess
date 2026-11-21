@@ -257,6 +257,7 @@ class SynergySystemTest {
                 Arrays.asList(
                         threshold(2, mechanic(com.voidvvv.kz_auto_chess_n.data.SynergyMechanic.DEATH_TAX, 4f, 20f)),
                         threshold(6, mechanic(com.voidvvv.kz_auto_chess_n.data.SynergyMechanic.OPENING_ENERGY, 50f, null),
+                                mechanic(com.voidvvv.kz_auto_chess_n.data.SynergyMechanic.AFTER_CAST_ENERGY, 20f, null),
                                 stat(StatKey.HP, EffectOp.ADD, 100f)))));
         return new GameData(new LinkedHashMap<String, UnitData>(), new LinkedHashMap<String, com.voidvvv.kz_auto_chess_n.data.SkillData>(),
                 synergies, new LinkedHashMap<String, com.voidvvv.kz_auto_chess_n.data.SceneData>(),
@@ -294,7 +295,7 @@ class SynergySystemTest {
     }
 
     @Test
-    @DisplayName("机制通道路由：mechanic 全量进 mechanics（含 OPENING_ENERGY——批0 惰性，CP22 并入开局）；stat 不进")
+    @DisplayName("机制通道路由（CP22）：OPENING_ENERGY 并入 openingEffects、AFTER_CAST_ENERGY 留 mechanics；stat 不进")
     void mechanicChannelRoutesToMechanics() {
         List<UnitData> six = new ArrayList<UnitData>();
         for (int i = 0; i < 6; i++) {
@@ -303,9 +304,12 @@ class SynergySystemTest {
         SynergySnapshot snapshot = SYSTEM.resolve(six, mechanicData());
         assertThat(snapshot.getMechanics()).hasSize(1);
         assertThat(snapshot.getMechanics().get(0).getMechanic())
+                .isEqualTo(com.voidvvv.kz_auto_chess_n.data.SynergyMechanic.AFTER_CAST_ENERGY);
+        assertThat(snapshot.getMechanics().get(0).getValue()).isEqualTo(20f);
+        assertThat(snapshot.getOpeningEffects()).hasSize(1); // OPENING_ENERGY 并入开局通道（CP22）
+        assertThat(snapshot.getOpeningEffects().get(0).getMechanic())
                 .isEqualTo(com.voidvvv.kz_auto_chess_n.data.SynergyMechanic.OPENING_ENERGY);
-        assertThat(snapshot.getMechanics().get(0).getValue()).isEqualTo(50f);
-        assertThat(snapshot.getOpeningEffects()).isEmpty(); // 批0 不并入（CP22 移交）
+        assertThat(snapshot.getOpeningEffects().get(0).getValue()).isEqualTo(50f);
         assertThat(snapshot.modifiers().addOf(StatKey.HP)).isEqualTo(100f); // stat 通道照常
         assertThat(SynergySnapshot.EMPTY.getMechanics()).isEmpty(); // EMPTY 空机制
     }

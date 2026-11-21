@@ -43,11 +43,15 @@ public final class TargetingSystem {
         return best;
     }
 
-    /** 每 120 tick（RETARGET_INTERVAL）全局强制重评估（id 序，含清空无候选者的目标） */
+    /** 每 120 tick（RETARGET_INTERVAL）全局强制重评估（id 序，含清空无候选者的目标；
+     *  嘲讽 override 期豁免——K7，旗手指向不被冲掉） */
     public void retargetAll(BattleState state) {
         for (BattleUnit unit : state.getUnits()) {
             if (unit.isCleaned()) {
                 continue;
+            }
+            if (unit.isTaunted(state.getTick())) {
+                continue; // 嘲讽期不参与全局重评估（CP23 K7）
             }
             BattleUnit target = findTarget(state, unit);
             unit.setTargetId(target == null ? -1 : target.getId());

@@ -38,6 +38,10 @@ class ProjectileSystemTest {
         final StatusSystem statusSystem = new StatusSystem(pipeline);
         final SkillExecutor executor = new SkillExecutor(pipeline, statusSystem);
         final ProjectileSystem system = new ProjectileSystem(pipeline, executor);
+
+        Wired() {
+            pipeline.bindStatusSystem(statusSystem); // CP25：普攻附带状态经 StatusSystem 挂载
+        }
     }
 
     private static final Wired W = new Wired();
@@ -300,5 +304,136 @@ class ProjectileSystemTest {
         assertThat(state.getProjectiles()).isEmpty();
         assertThat(state.getEvents().get(0).getType())
                 .isEqualTo(CombatEvent.Type.PROJECTILE_FIZZLED);
+    }
+
+    // —— v5 批4：盾墙拦截（CP24，K8——只拦普攻弹道）——
+
+    /** SHIELD_WALL 机制直授（无参词） */
+    private static void grantWall(BattleUnit unit) {
+        unit.setMechanics(java.util.Collections.singletonList(
+                new com.voidvvv.kz_auto_chess_n.data.EffectData(null, null,
+                        com.voidvvv.kz_auto_chess_n.data.SynergyMechanic.SHIELD_WALL, null,
+                        null, null, null, null, com.voidvvv.kz_auto_chess_n.data.EffectTarget.ALLIES, null)));
+    }
+
+    /** BASIC_ATTACK_STATUS 机制直授（普攻附带，联 CP25） */
+    private static void grantBurn(BattleUnit unit) {
+        unit.setMechanics(java.util.Collections.singletonList(
+                new com.voidvvv.kz_auto_chess_n.data.EffectData(null, null,
+                        com.voidvvv.kz_auto_chess_n.data.SynergyMechanic.BASIC_ATTACK_STATUS, null,
+                        30f, null, StatusType.BURN, 3f,
+                        com.voidvvv.kz_auto_chess_n.data.EffectTarget.ALLIES, null)));
+    }
+
+    @Test
+    @DisplayName("盾墙拦普攻弹（K8）：目标在战士身后 → 挡下（BLOCKED、无 HIT、双方零掉血）；敌我两侧对称")
+    void shieldWallBlocksBasicProjectile() {
+        // 玩家侧：敌射手 → 玩家后排（在玩家战士身后）
+        BattleUnit shooter = u(1, Side.ENEMY, 2, 2);
+        BattleUnit warrior = u(2, Side.PLAYER, 2, 4);
+        BattleUnit backline = u(3, Side.PLAYER, 2, 5); // y=5 > 4：身后
+        grantWall(warrior);
+        BattleState state = state(shooter, warrior, backline);
+        state.spawnProjectile(new Projectile(1, 3, 2.5f, 4.55f, 10f, false, null, 1f));
+
+        W.system.advanceAll(state, GameBalance.LOGIC_STEP);
+        assertThat(state.getProjectiles()).isEmpty();
+        assertThat(backline.getCurrentHp()).isEqualTo(100f);
+        assertThat(warrior.getCurrentHp()).isEqualTo(100f);
+        CombatEvent blocked = state.getEvents().get(0);
+        assertThat(blocked.getType()).isEqualTo(CombatEvent.Type.PROJECTILE_BLOCKED);
+        assertThat(blocked.getSourceId()).isEqualTo(warrior.getId());
+        assertThat(blocked.getTargetId()).isEqualTo(backline.getId());
+        assertThat(state.getEvents()).noneMatch(e -> e.getType() == CombatEvent.Type.HIT);
+
+        // 敌方镜像：玩家射手 → 敌后排（在敌战士身后：y 更小）
+        BattleUnit pShooter = u(4, Side.PLAYER, 2, 5);
+        BattleUnit eWarrior = u(5, Side.ENEMY, 2, 2);
+        BattleUnit eBackline = u(6, Side.ENEMY, 2, 1); // y=1 < 2：身后
+        grantWall(eWarrior);
+        BattleState state2 = state(pShooter, eWarrior, eBackline);
+        state2.spawnProjectile(new Projectile(4, 6, 2.5f, 2.45f, 10f, false, null, 1f));
+        W.system.advanceAll(state2, GameBalance.LOGIC_STEP);
+        assertThat(eBackline.getCurrentHp()).isEqualTo(100f);
+        assertThat(state2.getEvents().get(0).getType()).isEqualTo(CombatEvent.Type.PROJECTILE_BLOCKED);
+        assertThat(state2.getEvents().get(0).getSourceId()).isEqualTo(eWarrior.getId());
+    }
+
+    @Test
+    @DisplayName("技能弹与亡语源弹不受盾墙限制（K8 分界=普攻弹）：穿墙照常命中")
+    void shieldWallIgnoresSkillAndDeathrattleShots() {
+        SkillData homing = skill("sk_sp", SkillShape.SINGLE_TARGET, Delivery.HOMING,
+                effect(SkillEffectType.DAMAGE, 2f, null, null));
+        BattleUnit shooter = u(1, Side.ENEMY, 2, 2);
+        BattleUnit warrior = u(2, Side.PLAYER, 2, 4);
+        BattleUnit backline = u(3, Side.PLAYER, 2, 5);
+        grantWall(warrior);
+        BattleState state = state(shooter, warrior, backline);
+        state.spawnProjectile(new Projectile(1, 3, 2.5f, 4.55f, 10f, false, homing, 1f));
+        for (int i = 0; i < 40 && !state.getProjectiles().isEmpty(); i++) {
+            W.system.advanceAll(state, GameBalance.LOGIC_STEP);
+        }
+        assertThat(backline.getCurrentHp()).isCloseTo(80f, within(1e-6f)); // 技能弹命中
+        assertThat(state.getEvents()).noneMatch(e -> e.getType() == CombatEvent.Type.PROJECTILE_BLOCKED);
+
+        // 亡语源弹（deathrattleBorn=true，非普攻弹）同样穿墙
+        BattleUnit shooter2 = u(4, Side.ENEMY, 2, 2);
+        BattleUnit warrior2 = u(5, Side.PLAYER, 2, 4);
+        BattleUnit backline2 = u(6, Side.PLAYER, 2, 5);
+        grantWall(warrior2);
+        BattleState state2 = state(shooter2, warrior2, backline2);
+        state2.spawnProjectile(new Projectile(4, 6, 2.5f, 4.55f, 10f, false, null, 1f, true));
+        W.system.advanceAll(state2, GameBalance.LOGIC_STEP);
+        assertThat(state2.getEvents()).noneMatch(e -> e.getType() == CombatEvent.Type.PROJECTILE_BLOCKED);
+    }
+
+    @Test
+    @DisplayName("目标不在任何战士身后 → 不拦：普攻弹照常命中")
+    void shieldWallSkipsWhenTargetNotBehind() {
+        BattleUnit shooter = u(1, Side.ENEMY, 2, 1);
+        BattleUnit warrior = u(2, Side.PLAYER, 2, 4);
+        BattleUnit frontAlly = u(3, Side.PLAYER, 2, 3); // y=3 < 4：非身后
+        grantWall(warrior);
+        BattleState state = state(shooter, warrior, frontAlly);
+        state.spawnProjectile(new Projectile(1, 3, 2.5f, 3.45f, 10f, false, null, 1f));
+
+        for (int i = 0; i < 40 && !state.getProjectiles().isEmpty(); i++) {
+            W.system.advanceAll(state, GameBalance.LOGIC_STEP);
+        }
+        assertThat(frontAlly.getCurrentHp()).isCloseTo(90f, within(1e-6f));
+        assertThat(state.getEvents()).noneMatch(e -> e.getType() == CombatEvent.Type.PROJECTILE_BLOCKED);
+    }
+
+    @Test
+    @DisplayName("盾墙拦截后普攻附带落空（CP24×CP25 联测）：攻击者带 BURN，被拦目标无 BURN")
+    void shieldWallBlockDropsBasicAttackStatus() {
+        BattleUnit shooter = u(1, Side.ENEMY, 2, 2);
+        BattleUnit warrior = u(2, Side.PLAYER, 2, 4);
+        BattleUnit backline = u(3, Side.PLAYER, 2, 5);
+        grantWall(warrior);
+        grantBurn(shooter);
+        BattleState state = state(shooter, warrior, backline);
+        state.spawnProjectile(new Projectile(1, 3, 2.5f, 4.55f, 10f, false, null, 1f));
+
+        W.system.advanceAll(state, GameBalance.LOGIC_STEP);
+        assertThat(backline.getStatuses()).isEmpty(); // impact 未发生 → 附带不落地
+    }
+
+    @Test
+    @DisplayName("多战士取距目标最近者（K8/R8 参照=目标）：距 1 者优先于距 2 者")
+    void shieldWallPicksNearestToTarget() {
+        BattleUnit shooter = u(1, Side.ENEMY, 2, 2);
+        BattleUnit nearWall = u(2, Side.PLAYER, 2, 4);  // 距目标 (2,5) = 1
+        BattleUnit farWall = u(3, Side.PLAYER, 2, 3);   // 距目标 (2,5) = 2（也在目标身前）
+        BattleUnit backline = u(4, Side.PLAYER, 2, 5);
+        grantWall(nearWall);
+        grantWall(farWall);
+        BattleState state = state(shooter, nearWall, farWall, backline);
+        state.spawnProjectile(new Projectile(1, 4, 2.5f, 4.55f, 10f, false, null, 1f));
+
+        W.system.advanceAll(state, GameBalance.LOGIC_STEP);
+        CombatEvent blocked = state.getEvents().get(0);
+        assertThat(blocked.getType()).isEqualTo(CombatEvent.Type.PROJECTILE_BLOCKED);
+        assertThat(blocked.getSourceId()).isEqualTo(nearWall.getId()); // 距目标最近者挡下
     }
 }

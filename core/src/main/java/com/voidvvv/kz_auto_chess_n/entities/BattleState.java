@@ -29,6 +29,7 @@ public final class BattleState {
     private float introRemaining;         // 开战转场「清场入阵」剩余秒数（battle §二；0 = 主循环已起）
     private boolean over;
     private BattleOutcome outcome;
+    private final List<TimedTrigger> pendingTimedTriggers = new ArrayList<TimedTrigger>(); // CP23 K7 定时触发器队列
 
     public BattleState(List<BattleUnit> units, RandomGenerator rng,
                        SynergySnapshot playerSynergies, SynergySnapshot enemySynergies) {
@@ -151,6 +152,22 @@ public final class BattleState {
     /** framework-internal：追加事件 */
     public void record(CombatEvent event) {
         events.add(Objects.requireNonNull(event, "event 不能为 null"));
+    }
+
+    /** framework-internal：定时触发器入队（TimedTriggerSystem.scheduleFrom 调；追加序 = 调度序，CP23 K7） */
+    public void addTimedTrigger(TimedTrigger trigger) {
+        pendingTimedTriggers.add(Objects.requireNonNull(trigger, "trigger 不能为 null"));
+    }
+
+    /** framework-internal：取走全部到期触发器（atTick ≤ now；消费即移除，保持队列序——CP23 K7） */
+    public void drainDueTimedTriggers(int now, List<TimedTrigger> out) {
+        for (java.util.Iterator<TimedTrigger> it = pendingTimedTriggers.iterator(); it.hasNext(); ) {
+            TimedTrigger trigger = it.next();
+            if (trigger.getAtTick() <= now) {
+                out.add(trigger);
+                it.remove();
+            }
+        }
     }
 
     /** framework-internal：终局（幂等防御：首个结局生效） */

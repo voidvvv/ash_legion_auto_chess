@@ -317,6 +317,40 @@ public final class BattleUnit {
         this.lastDamagerId = damagerId;
     }
 
+    // —— 战吼嘲讽（CP23，K7；framework-internal 写方法归 TimedTriggerSystem/BattleSystem）——
+
+    private int tauntTargetId = -1;
+    private int tauntUntilTick;
+
+    /** 被嘲讽中（tick < 到期 tick；旗手 id 见 getTauntTargetId） */
+    public boolean isTaunted(int tick) {
+        return tauntTargetId >= 0 && tick < tauntUntilTick;
+    }
+
+    /** 嘲讽目标（旗手 unit id；-1 = 未被嘲讽） */
+    public int getTauntTargetId() {
+        return tauntTargetId;
+    }
+
+    /** framework-internal：被战吼嘲讽——同时强制 targetId 指向旗手（K7「targetId 强制指向旗手」） */
+    public void setTaunted(int bannerId, int untilTick) {
+        this.tauntTargetId = bannerId;
+        this.tauntUntilTick = untilTick;
+        this.targetId = bannerId;
+    }
+
+    /** framework-internal：解除嘲讽（旗手失效时；到期出豁免走 clearExpiredTaunt） */
+    public void clearTaunt() {
+        this.tauntTargetId = -1;
+    }
+
+    /** framework-internal：到期自动出豁免（act 头部调用；过期即作废不再占用 retargetAll 豁免位） */
+    public void clearExpiredTaunt(int tick) {
+        if (tauntTargetId >= 0 && tick >= tauntUntilTick) {
+            tauntTargetId = -1;
+        }
+    }
+
     // —— 旧疤受击计数（CP21，K2 计数通道）——
 
     /** framework-internal：被普攻直伤命中 +1 计数（DamagePipeline 普攻命中挂点调）——

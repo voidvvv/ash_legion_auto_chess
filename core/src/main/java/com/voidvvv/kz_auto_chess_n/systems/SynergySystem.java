@@ -4,6 +4,7 @@ import com.voidvvv.kz_auto_chess_n.data.EffectData;
 import com.voidvvv.kz_auto_chess_n.data.EffectOp;
 import com.voidvvv.kz_auto_chess_n.data.GameData;
 import com.voidvvv.kz_auto_chess_n.data.SynergyData;
+import com.voidvvv.kz_auto_chess_n.data.SynergyMechanic;
 import com.voidvvv.kz_auto_chess_n.data.SynergySource;
 import com.voidvvv.kz_auto_chess_n.data.UnitData;
 import com.voidvvv.kz_auto_chess_n.entities.StatModifierBlock;
@@ -81,8 +82,11 @@ public final class SynergySystem {
                 if (scaled.isStatChannel()) {
                     statModifiers = statModifiers.plus(StatModifierBlock.of(
                             scaled.getStat(), scaled.getOp(), scaled.getValue()));
+                } else if (scaled.isMechanicChannel()
+                        && scaled.getMechanic() == SynergyMechanic.OPENING_ENERGY) {
+                    openingEffects.add(scaled); // CP22：OPENING_ENERGY 并入开局通道（t=0 落地）
                 } else if (scaled.isMechanicChannel()) {
-                    mechanics.add(scaled); // 批0 惰性数据（K13）；OPENING_ENERGY 由 CP22 并入开局通道
+                    mechanics.add(scaled); // 触发式机制词（K13；startBattle 按 target 谓词下发）
                 } else {
                     openingEffects.add(scaled);
                 }

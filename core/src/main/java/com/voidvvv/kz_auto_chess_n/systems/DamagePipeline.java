@@ -28,9 +28,16 @@ import java.util.Objects;
  */
 public final class DamagePipeline {
     private final CastTrigger castTrigger;
+    private StatusSystem statusSystem; // 组装期一次性绑定（CP25：普攻附带状态经 StatusSystem 挂载）
 
     public DamagePipeline(CastTrigger castTrigger) {
         this.castTrigger = Objects.requireNonNull(castTrigger, "castTrigger 不能为 null");
+    }
+
+    /** framework-internal：组装期绑定（与 CastTrigger 同为延迟绑定——StatusSystem 与本类互相依赖，
+     *  BattleSystem 构造器内在 new StatusSystem 后立即调用） */
+    void bindStatusSystem(StatusSystem statusSystem) {
+        this.statusSystem = Objects.requireNonNull(statusSystem, "statusSystem 不能为 null");
     }
 
     /** 直伤命中（普攻与技能同路；skillId null = 普攻）。窗口序 K9：
@@ -173,10 +180,23 @@ public final class DamagePipeline {
         applyBasicAttackStatusOnPower(state, attacker, target, attackPower); // CP25 充实（批4）
     }
 
-    /** 普攻附带状态（兽人灼烧/野兽围狩）：BURN 取 attackPower×value%、SLOW 取 value 百分点（CP25 充实） */
+    /** 普攻附带状态（兽人灼烧/野兽围狩，CP25）：攻击者含 BASIC_ATTACK_STATUS → 命中落地对目标挂状态。
+     *  威力口径：DOT 类（BURN）power = attackPower × value/100（百分点刻度）；非 DOT（SLOW）power = value。
+     *  attackPower = 本发命中所用攻击力（近战 = 出手时有效攻；弹道 = 发射快照——applyDirectHit 入参）。 */
     void applyBasicAttackStatusOnPower(BattleState state, BattleUnit attacker, BattleUnit target,
                                        float attackPower) {
-        // CP25 充实（批4）
+        if (attacker == null) {
+            return; // 匿名攻击者无机制载荷
+        }
+        EffectData attach = attacker.getMechanic(SynergyMechanic.BASIC_ATTACK_STATUS);
+        if (attach == null || attach.getStatus() == null || !target.isActable()) {
+            return;
+        }
+        float power = StatusSystem.isDotType(attach.getStatus())
+                ? attackPower * attach.getValue() / 100f // BURN：本发攻击 ×value%
+                : attach.getValue();                    // SLOW：power = 百分点
+        statusSystem.apply(state, target, attach.getStatus(), power,
+                attach.getDuration() == null ? 0f : attach.getDuration(), attacker.getId());
     }
 
     /** 先扣盾：返回穿透到 HP 的伤害量；盾耗尽移除并打脏标记（口径 #9） */

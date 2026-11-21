@@ -16,7 +16,7 @@ public final class CombatEvent {
     public enum Type {
         ATTACK_LAUNCHED, HIT, CAST, STATUS_APPLIED, HEALED, SHIELDED,
         UNIT_DIED, PROJECTILE_FIZZLED, BATTLE_ENDED, UNIT_BANISHED,
-        UNIT_DOWNED, UNIT_REVIVED
+        UNIT_DOWNED, UNIT_REVIVED, PROJECTILE_BLOCKED
     }
 
     private final int tick;
@@ -112,6 +112,11 @@ public final class CombatEvent {
     /** 在途弹消散（目标先一步被清扫） */
     public static CombatEvent projectileFizzled(int tick, int sourceId, int targetId) {
         return new CombatEvent(tick, Type.PROJECTILE_FIZZLED, sourceId, targetId, 0f, 0f, false, null, null, null);
+    }
+
+    /** 盾墙拦截（CP24，K8）：sourceId = 拦截战士，targetId = 原目标（只拦不弹、无伤害） */
+    public static CombatEvent projectileBlocked(int tick, int sourceId, int targetId) {
+        return new CombatEvent(tick, Type.PROJECTILE_BLOCKED, sourceId, targetId, 0f, 0f, false, null, null, null);
     }
 
     /** 战斗终局 */
