@@ -82,12 +82,12 @@ public final class UnitInfoText {
         float second = orElseZero(effect.getValue2());
         switch (mechanic) {
             case BASIC_ATTACK_STATUS:
-                return "普攻附带" + statusLabel(effect.getStatus())
+                return "普攻" + statusLabel(effect.getStatus())
                         + numberText(value) + "%·" + numberText(orElseZero(effect.getDuration())) + "秒";
             case SCAR:
                 return "每受" + numberText(value) + "击积1疤（至" + numberText(second) + "层）";
             case DEATH_TAX:
-                return "阵亡名册：继承攻+" + numberText(value) + "·生命+" + numberText(second);
+                return "名册：继承攻+" + numberText(value) + "·生命+" + numberText(second);
             case DOUBLE_DEATHRATTLE:
                 return "亡语双响";
             case DEATH_AUDIT:
@@ -105,11 +105,11 @@ public final class UnitInfoText {
             case SHIELD_WALL:
                 return "盾墙：挡远程普攻";
             case SPELL_PEN:
-                return "法术穿甲" + numberText(value) + "%";
+                return "法穿" + numberText(value) + "%";
             case OPENING_ENERGY:
                 return "开局能量+" + numberText(value);
             case AFTER_CAST_ENERGY:
-                return "施法后能量+" + numberText(value);
+                return "施法回能+" + numberText(value);
             case EXECUTE:
                 return "收割：血<" + numberText(second) + "%敌增伤" + numberText(value) + "%";
             case KILL_ENERGY_REFUND:

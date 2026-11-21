@@ -27,8 +27,9 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 悬停预览卡行集拼装测试（feedback04 + feedback07）：boardCardLines 静态纯函数——玩家候选不加标记、
- * 敌方候选（虚影/敌侧战斗单位）首行加"（敌方）"、容量截断在标记后施加（总行数不超卡高）；
+ * 悬停预览卡行集拼装测试（feedback04 + feedback07 + 2026-11-21 v5 全量文案整改）：
+ * boardCardLines/shopCardLines 静态纯函数——玩家候选不加标记、敌方候选首行加"（敌方）"、
+ * 棋子卡全量不截断（容量由 UnitInfoTextSeedDataTest 按真实 assets 锁定）；卡高纯函数 cardHeightFor；
  * feedback07 背包格装备卡（inventoryCardLines 折 6 列截 7 行）与悬停归一（normalizeInventorySlot）。
  * 卡绘制本体走 lwjgl3 手验（Assets 构造需 GL）。
  */
@@ -50,9 +51,9 @@ class HoverPreviewCardTest {
     }
 
     @Test
-    @DisplayName("玩家候选行集：与 previewLines 原样一致（无标记行）")
+    @DisplayName("玩家候选行集：与 previewLines 原样一致（无标记行、不截断）")
     void playerLinesUnmarked() {
-        List<String> plain = UnitInfoText.previewLines(tpl("u1"), emptyData(), 7);
+        List<String> plain = UnitInfoText.previewLines(tpl("u1"), emptyData(), 9);
         List<String> card = HoverPreviewCard.boardCardLines(tpl("u1"), false, emptyData());
 
         assertThat(card).isEqualTo(plain);
@@ -60,13 +61,26 @@ class HoverPreviewCardTest {
     }
 
     @Test
-    @DisplayName("敌方候选行集：首行（敌方）标记，正文自 previewLines 原样跟随")
+    @DisplayName("敌方候选行集：首行（敌方）标记，正文自 previewLines 原样跟随（全量）")
     void enemyLinesMarked() {
-        List<String> plain = UnitInfoText.previewLines(tpl("foe"), emptyData(), 7);
+        List<String> plain = UnitInfoText.previewLines(tpl("foe"), emptyData(), 9);
         List<String> card = HoverPreviewCard.boardCardLines(tpl("foe"), true, emptyData());
 
         assertThat(card.get(0)).isEqualTo("（敌方）");
         assertThat(card.subList(1, card.size())).isEqualTo(plain);
+    }
+
+    @Test
+    @DisplayName("商店卡行集：previewLines 11 列原样（不截断）；卡高纯函数 = 顶留白+行数×9+底留白")
+    void shopLinesAndCardHeight() {
+        List<String> shop = HoverPreviewCard.shopCardLines(tpl("u1"), emptyData());
+        assertThat(shop).isEqualTo(UnitInfoText.previewLines(tpl("u1"), emptyData(), 11));
+
+        // 卡内字号 0.75×12 = 9px 行高；cardHeightFor = 4 + n×9 + 4
+        assertThat(HoverPreviewCard.CARD_TEXT_SCALE).isEqualTo(0.75f);
+        assertThat(HoverPreviewCard.LINE_HEIGHT).isEqualTo(9f);
+        assertThat(HoverPreviewCard.cardHeightFor(1)).isEqualTo(17f);
+        assertThat(HoverPreviewCard.cardHeightFor(27)).isEqualTo(251f); // 真实最坏组合（伏击豹 敌方标记）
     }
 
     // —— feedback07：背包格装备卡（inventoryCardLines 折 6 列 × 截 7 行） ——

@@ -21,6 +21,11 @@ public final class GameBalance {
     /** 全局攻速系数（battle §5.1：敌我对称、只在消耗点乘算——BattleUnit.attackInterval() 一处；1 = 关闭） */
     public static final float ATTACK_SPEED_GLOBAL_FACTOR = 0.6f;
 
+    /** UI/世界整体渲染缩放（2026-11-21 主人反馈「所有 UI 偏大」：整体调小一档 = 0.8×；
+     *  消费点两处——BattleTransitionController.zoom() 的 worldCamera 基准与 BattleScreen 的
+     *  uiStage/dialogStage 根缩放（同一中心点，UI 域与世界域足迹重合不错位）；1.0 = 恢复原大小 */
+    public static final float RENDER_GLOBAL_SCALE = 0.8f;
+
     // —— 开战转场「清场入阵」（battle §二 / render §5.6；2026-09-09 修订取代 2026-09-02 倒计时案）——
     /** 开战转场时长秒数（区间 0.4~0.8 待调；0 = 关闭转场——直接解冻且输入禁用窗口消失，软回滚杠杆 K11） */
     public static final float BATTLE_INTRO_TRANSITION_SECONDS = 0.6f;

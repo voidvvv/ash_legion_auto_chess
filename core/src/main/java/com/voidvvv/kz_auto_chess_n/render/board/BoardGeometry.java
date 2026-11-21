@@ -52,17 +52,21 @@ public final class BoardGeometry {
 
     // —— Phase 5.1 R1：悬停预览卡固定锚点（裁决 A；防遮挡论证见计划 §5.3-1） ——
 
-    /** 棋盘域悬停卡：②③（右缘 128）与 ④ 棋盘（左缘 224）之间的左侧空带；底边 240 避开 ⑨（y 244 起）。
-     *  瞬态覆盖 ⑥ 开战按钮（x134~198, y88~128）：指针移向按钮即离开棋子命中域 → 卡立即隐藏，无点击阻塞（§5.3-1） */
+    /** 棋盘域悬停卡：②③（右缘 128）与 ④ 棋盘（左缘 224）之间的左侧空带。
+     *  v5 全量文案后卡区加高（2026-11-21 主人整改：悬停卡必须完整容纳全部文本、不截断）——
+     *  高度 = 最长真实组合（敌方标记 27 行 × 9px + 上下留白）；27 行最坏仅现于 BATTLE 敌方悬停
+     *  （战时商店栏已下滑离场，底缘 296 与其顶缘相接不压）；SHOPPING 自有卡 ≤26 行底缘 ≤290，
+     *  瞬态覆盖 ⑨ 通知（y244 起，移开即恢复——非模态瞬态，拖拽期悬停本就抑制）。 */
     public static final int BOARD_HOVER_X = 128;
-    public static final int BOARD_HOVER_Y = 48;
+    public static final int BOARD_HOVER_Y = 44;
     public static final int BOARD_HOVER_W = 94;
-    public static final int BOARD_HOVER_H = 192;
-    /** 商店卡悬停卡：精确覆盖 ⑤ 羁绊面板区（瞬态覆盖，移开即恢复；⑥ 实际在左侧——差异声明 #2） */
+    public static final int BOARD_HOVER_H = 252;
+    /** 商店卡悬停卡：锚 ⑤ 羁绊面板区；高度容纳最长组合 24 行（2026-11-21 整改，自适应加高、不截断）；
+     *  底缘 272 瞬态覆盖 ⑦ 出售区（y246 起）——拖拽期悬停抑制，无操作冲突 */
     public static final int SHOP_HOVER_X = 508;
     public static final int SHOP_HOVER_Y = 48;
     public static final int SHOP_HOVER_W = 112;
-    public static final int SHOP_HOVER_H = 192;
+    public static final int SHOP_HOVER_H = 224;
 
     /** feedback07 背包格装备悬停卡：③ 背包（右缘 128）与 ④ 棋盘（左缘 224）之间空带内、③ 顶 172 之上。
      *  与棋盘域卡（128,48,94,192）同带不同源——单指针命中域互斥（背包 x≤128 y172~244，棋盘/备战

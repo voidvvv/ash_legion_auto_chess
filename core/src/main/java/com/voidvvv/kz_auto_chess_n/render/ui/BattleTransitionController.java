@@ -163,9 +163,12 @@ public final class BattleTransitionController {
     }
 
     /** 镜头 zoom（K4：SHOPPING 稳态 1.06、其余稳态 1.0、转场线性插值）：随备战层淡出系数同步回正——
-     *  chrome 全显（转场起点/SHOPPING 稳态）= 1.06，chrome 全隐（BATTLE 稳态）= 1.0，同一转场窗单一真相源 */
+     *  chrome 全显（转场起点/SHOPPING 稳态）= 1.06，chrome 全隐（BATTLE 稳态）= 1.0，同一转场窗单一真相源。
+     *  整体基准 ×RENDER_GLOBAL_SCALE（2026-11-21 主人反馈 UI 偏大：世界域与 UI 域根缩放同系数、
+     *  同一中心点——两域足迹恒重合，棋盘/备战席/面板不错位） */
     private float zoom() {
-        return 1f + (GameBalance.SHOPPING_CAMERA_ZOOM - 1f) * chromeFadeAlpha();
+        return GameBalance.RENDER_GLOBAL_SCALE
+                * (1f + (GameBalance.SHOPPING_CAMERA_ZOOM - 1f) * chromeFadeAlpha());
     }
 
     /** 像素取整吸附（render §八；zoom 插值除外——Q4 镜头域） */

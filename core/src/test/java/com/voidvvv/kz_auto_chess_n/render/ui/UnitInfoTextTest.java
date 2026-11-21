@@ -144,14 +144,14 @@ class UnitInfoTextTest {
     // —— 机制通道文案（v5 K1 第三通道；HoverPreview NPE 修复回归） ——
 
     @Test
-    @DisplayName("机制通道词条：玩家可读中文短文案（数值嵌入，非枚举名）")
+    @DisplayName("机制通道词条：玩家可读中文短文案（数值嵌入，非枚举名；2026-11-21 整改再收紧）")
     void mechanicTextPlayerReadable() {
         assertThat(UnitInfoText.effectText(
                 mechanic(SynergyMechanic.DEATH_TAX, 4f, 20f, null, null)))
-                .isEqualTo("阵亡名册：继承攻+4·生命+20");
+                .isEqualTo("名册：继承攻+4·生命+20");
         assertThat(UnitInfoText.effectText(
                 mechanic(SynergyMechanic.BASIC_ATTACK_STATUS, 30f, null, StatusType.BURN, 3f)))
-                .isEqualTo("普攻附带灼烧30%·3秒");
+                .isEqualTo("普攻灼烧30%·3秒");
         assertThat(UnitInfoText.effectText(
                 mechanic(SynergyMechanic.KNOCKBACK_IMMUNE, null, null, null, null)))
                 .isEqualTo("免疫击退");
@@ -161,6 +161,12 @@ class UnitInfoTextTest {
         assertThat(UnitInfoText.effectText(
                 mechanic(SynergyMechanic.EXECUTE, 40f, 35f, null, null)))
                 .isEqualTo("收割：血<35%敌增伤40%");
+        assertThat(UnitInfoText.effectText(
+                mechanic(SynergyMechanic.SPELL_PEN, 50f, null, null, null)))
+                .isEqualTo("法穿50%");
+        assertThat(UnitInfoText.effectText(
+                mechanic(SynergyMechanic.AFTER_CAST_ENERGY, 20f, null, null, null)))
+                .isEqualTo("施法回能+20");
     }
 
     @Test

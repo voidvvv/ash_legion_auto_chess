@@ -262,6 +262,8 @@ class GameBalanceTest {
         assertThat(GameBalance.LOGIC_STEP).isCloseTo(1f / 60f, within(1e-8f));
         assertThat(GameBalance.BATTLE_TIMEOUT).isEqualTo(60f);
         // 暴击两键已属性化（v5 §五.5）：缺省值走 StatKey（见 StatPipelineTest / JsonLoaderTest）
+        // UI 整体缩小档位（2026-11-21 主人整改）：1.0 = 恢复原大小
+        assertThat(GameBalance.RENDER_GLOBAL_SCALE).isEqualTo(0.8f);
         assertThat(GameBalance.ENERGY_MAX).isEqualTo(100);
         assertThat(GameBalance.ENERGY_PER_HIT).isEqualTo(10);
         assertThat(GameBalance.ENERGY_PER_HIT_TAKEN).isEqualTo(5);

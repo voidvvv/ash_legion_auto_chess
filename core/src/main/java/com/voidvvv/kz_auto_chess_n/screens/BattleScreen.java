@@ -238,6 +238,20 @@ public final class BattleScreen implements Screen {
         uiStage.addActor(notificationPanel);
         uiStage.addActor(hoverPreview); // 最上层：瞬态悬停卡（无输入监听，不阻断任何交互）
         uiStage.addActor(inputCatcher); // 转场窗口全屏吞点击（render §5.6 输入禁用）：最顶层、仅转场期可命中
+        applyGlobalUiScale(uiStage); // UI 整体缩小（2026-11-21 主人反馈）：与世界域 zoom 同系数同中心
+        applyGlobalUiScale(dialogManager.getStage()); // 弹窗域（chest/详情/暂停）同缩放
+    }
+
+    /** UI 域整体缩放（2026-11-21 主人反馈「所有 UI 偏大」→ 整体调小一档）：根节点统一缩放居中，
+     *  与 {@link BattleTransitionController} 的 worldCamera.zoom 基准（RENDER_GLOBAL_SCALE）同系数——
+     *  世界域（棋盘/备战席，zoom 以屏心收缩）与 UI 域（根缩放居中）足迹恒重合，相邻不错位；
+     *  Scene2d 命中测试穿过根变换（parentToLocalCoords），指针交互自动正确。恢复 = 常量回 1.0f。 */
+    private static void applyGlobalUiScale(com.badlogic.gdx.scenes.scene2d.Stage stage) {
+        float scale = GameBalance.RENDER_GLOBAL_SCALE;
+        stage.getRoot().setScale(scale);
+        stage.getRoot().setPosition(
+                BoardGeometry.VIRTUAL_W * (1f - scale) / 2f,
+                BoardGeometry.VIRTUAL_H * (1f - scale) / 2f);
     }
 
     /** 上下文供应者（面板/横幅共用——值随 restartRun 换新） */

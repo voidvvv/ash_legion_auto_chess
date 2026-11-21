@@ -221,7 +221,7 @@ class BoardGeometryTest {
     // —— Phase 5.1 CP8：悬停预览卡固定锚点（裁决 A；防遮挡论证见计划 §5.3-1） ——
 
     @Test
-    @DisplayName("棋盘域悬停卡锚点：不压 ④ 棋盘/②③ 左列/⑨ 通知、上沿沿 ② 顶")
+    @DisplayName("棋盘域悬停卡锚点：不压 ④ 棋盘/②③ 左列/⑧ 商店栏（v5 全量文案整改后加高、全量容纳）")
     void boardHoverAnchorClearOfZones() {
         // 右缘不压 ④ 棋盘（224 起，留 ≥2px 间隙）
         assertThat(BoardGeometry.BOARD_HOVER_X + BoardGeometry.BOARD_HOVER_W)
@@ -231,24 +231,24 @@ class BoardGeometryTest {
                 .isGreaterThanOrEqualTo(BoardGeometry.BENCH_X + BoardGeometry.BENCH_W);
         assertThat(BoardGeometry.BOARD_HOVER_X)
                 .isGreaterThanOrEqualTo(BoardGeometry.INVENTORY_X + BoardGeometry.INVENTORY_W);
-        // 下缘不压 ⑨（244 起）
+        // 下缘不压 ⑧ 商店栏（296 起；⑨ 通知 244~290 为瞬态覆盖——非模态卡移开即恢复，2026-11-21 整改口径）
         assertThat(BoardGeometry.BOARD_HOVER_Y + BoardGeometry.BOARD_HOVER_H)
-                .isLessThanOrEqualTo(BoardGeometry.NOTIFY_Y);
-        // 上沿沿 ② 备战席顶 48
-        assertThat(BoardGeometry.BOARD_HOVER_Y).isGreaterThanOrEqualTo(BoardGeometry.BENCH_Y);
+                .isLessThanOrEqualTo(BoardGeometry.SHOP_BAR_Y);
+        // 上沿抬至 44（② 顶 48 之上的空隙带——v5 最坏组合 27 行加高所需）
+        assertThat(BoardGeometry.BOARD_HOVER_Y).isGreaterThanOrEqualTo(44);
     }
 
     @Test
-    @DisplayName("商店悬停卡锚点：与 ⑤ 羁绊面板同位、右缘不出虚拟宽、下缘避开 ⑦ 出售区")
+    @DisplayName("商店悬停卡锚点：与 ⑤ 羁绊面板同位、右缘不出虚拟宽、下缘不压 ⑧ 商店栏（⑦ 瞬态覆盖）")
     void shopHoverAnchorMatchesSynergyZone() {
         assertThat(BoardGeometry.SHOP_HOVER_X).isEqualTo(BoardGeometry.SYNERGY_X);
         assertThat(BoardGeometry.SHOP_HOVER_Y).isEqualTo(BoardGeometry.SYNERGY_Y);
         assertThat(BoardGeometry.SHOP_HOVER_W).isEqualTo(BoardGeometry.SYNERGY_W);
         assertThat(BoardGeometry.SHOP_HOVER_X + BoardGeometry.SHOP_HOVER_W)
                 .isLessThanOrEqualTo(BoardGeometry.VIRTUAL_W);
-        // 下缘不压 ⑦ 出售区（246 起）
+        // 下缘不压 ⑧ 商店栏（296 起）；⑦ 出售区 246~292 为瞬态覆盖（拖拽期悬停抑制，2026-11-21 整改口径）
         assertThat(BoardGeometry.SHOP_HOVER_Y + BoardGeometry.SHOP_HOVER_H)
-                .isLessThanOrEqualTo(BoardGeometry.SELL_ZONE_Y);
+                .isLessThanOrEqualTo(BoardGeometry.SHOP_BAR_Y);
     }
 
     @Test

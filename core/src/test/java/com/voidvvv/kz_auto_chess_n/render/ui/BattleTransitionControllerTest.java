@@ -11,7 +11,9 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 
-/** 开战转场驱动器状态机测试（battle §二 / render §5.6；headless——Actor/OrthographicCamera 零 GL） */
+/** 开战转场驱动器状态机测试（battle §二 / render §5.6；headless——Actor/OrthographicCamera 零 GL）。
+ *  zoom 断言全部乘 RENDER_GLOBAL_SCALE（2026-11-21 主人整改「UI 整体缩小」：世界域 zoom 基准 ×0.8，
+ *  SHOPPING 稳态 0.848 / BATTLE 稳态 0.8——相对拉远差 6% 语义不变）。 */
 class BattleTransitionControllerTest {
 
     private OrthographicCamera camera;
@@ -44,11 +46,12 @@ class BattleTransitionControllerTest {
     }
 
     @Test
-    @DisplayName("SHOPPING 稳态：zoom 1.06、chrome 全显、③ 可见、输入放行、Catcher 隐")
+    @DisplayName("SHOPPING 稳态：zoom = 基准×1.06、chrome 全显、③ 可见、输入放行、Catcher 隐")
     void steadyShopping() {
         controller.update(GamePhase.SHOPPING, 0f, GameBalance.LOGIC_STEP);
         controller.applyUiPose();
-        assertThat(camera.zoom).isCloseTo(GameBalance.SHOPPING_CAMERA_ZOOM, within(1e-6f));
+        assertThat(camera.zoom).isCloseTo(
+                GameBalance.RENDER_GLOBAL_SCALE * GameBalance.SHOPPING_CAMERA_ZOOM, within(1e-6f));
         assertThat(controller.benchOffsetX()).isZero();
         assertThat(controller.chromeFadeAlpha()).isEqualTo(1f);
         assertThat(controller.isInputBlocked()).isFalse();
@@ -72,13 +75,14 @@ class BattleTransitionControllerTest {
 
         runForward(GameBalance.BATTLE_INTRO_TRANSITION_SECONDS, 18); // 半程
         assertThat(camera.zoom)
-                .isCloseTo((1f + GameBalance.SHOPPING_CAMERA_ZOOM) / 2f, within(1e-4f)); // 1.03
+                .isCloseTo(GameBalance.RENDER_GLOBAL_SCALE * (1f + GameBalance.SHOPPING_CAMERA_ZOOM) / 2f,
+                        within(1e-4f));
         assertThat(controller.chromeFadeAlpha()).isCloseTo(0.5f, within(0.05f));
 
         runForward(GameBalance.BATTLE_INTRO_TRANSITION_SECONDS / 2f, 18); // 后半程：remaining 0.3 → 0
         controller.update(GamePhase.BATTLE, 0f, GameBalance.LOGIC_STEP); // 解冻帧（remaining==0 显式兜底）
         controller.applyUiPose();
-        assertThat(camera.zoom).isCloseTo(1f, within(1e-6f));
+        assertThat(camera.zoom).isCloseTo(GameBalance.RENDER_GLOBAL_SCALE * 1f, within(1e-6f));
         assertThat(controller.isInputBlocked()).isFalse();
         assertThat(catcher.isVisible()).isFalse();
         assertThat(shopBar.getY()).isZero();                       // 稳态位姿归零
@@ -96,7 +100,8 @@ class BattleTransitionControllerTest {
         controller.update(GamePhase.BATTLE,
                 GameBalance.BATTLE_INTRO_TRANSITION_SECONDS / 2f, GameBalance.LOGIC_STEP); // ×2 快进一瞬
         assertThat(camera.zoom)
-                .isCloseTo((1f + GameBalance.SHOPPING_CAMERA_ZOOM) / 2f, within(1e-4f));
+                .isCloseTo(GameBalance.RENDER_GLOBAL_SCALE * (1f + GameBalance.SHOPPING_CAMERA_ZOOM) / 2f,
+                        within(1e-4f));
     }
 
     @Test
@@ -115,7 +120,8 @@ class BattleTransitionControllerTest {
             controller.update(GamePhase.SHOPPING, 0f, GameBalance.LOGIC_STEP);
         }
         controller.applyUiPose();
-        assertThat(camera.zoom).isCloseTo(GameBalance.SHOPPING_CAMERA_ZOOM, within(1e-6f));
+        assertThat(camera.zoom).isCloseTo(
+                GameBalance.RENDER_GLOBAL_SCALE * GameBalance.SHOPPING_CAMERA_ZOOM, within(1e-6f));
         assertThat(controller.isInputBlocked()).isFalse();
         assertThat(controller.chromeFadeAlpha()).isEqualTo(1f);
         assertThat(inventoryPanel.isVisible()).isTrue();
@@ -130,7 +136,7 @@ class BattleTransitionControllerTest {
         controller.applyUiPose();
         assertThat(controller.isInputBlocked()).isFalse();
         assertThat(catcher.isVisible()).isFalse();
-        assertThat(camera.zoom).isCloseTo(1f, within(1e-6f));
+        assertThat(camera.zoom).isCloseTo(GameBalance.RENDER_GLOBAL_SCALE * 1f, within(1e-6f));
         assertThat(controller.chromeFadeAlpha()).isZero();
     }
 
@@ -143,7 +149,8 @@ class BattleTransitionControllerTest {
         assertThat(controller.isInputBlocked()).isFalse();
         assertThat(catcher.isVisible()).isFalse();
         assertThat(controller.chromeFadeAlpha()).isEqualTo(1f);
-        assertThat(camera.zoom).isCloseTo(GameBalance.SHOPPING_CAMERA_ZOOM, within(1e-6f));
+        assertThat(camera.zoom).isCloseTo(
+                GameBalance.RENDER_GLOBAL_SCALE * GameBalance.SHOPPING_CAMERA_ZOOM, within(1e-6f));
     }
 
     @Test
