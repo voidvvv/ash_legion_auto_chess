@@ -21,6 +21,8 @@ import java.util.Map;
  * （{@link UnitShapeKit}，运行期由 UnitView 以星级色 tint——CP11）。
  * 帧差异保留（idle 亮度 / walk y±1px / attack 前移2px / cast 亮度脉冲 / death 透明度递减）；
  * 生成范围与 {@link PlaceholderKeys#enumerateFor} 对账（防漏）。
+ * UI 框架件（{@link UiKeys}，UI 抽屉化批0）逐键生成平色占位（画法见 {@link UiPlaceholderPainter}）——
+ * 真素材走 {@link Assets#uiRegion}/{@link Assets#uiPatch} 优先命中，缺件落此兜底。
  */
 public final class PlaceholderArt {
     private static final int UNIT_SIZE = 32;
@@ -63,6 +65,11 @@ public final class PlaceholderArt {
         put(PlaceholderKeys.HIT_DEFAULT, paintHitDefault());
         put(PlaceholderKeys.PANEL_9SLICE, paintPanel());
         put(PlaceholderKeys.WHITE, paintWhite());
+        // UI 框架件（UI 抽屉化批0）：逐 UiKeys 条目生成平色占位——真素材未到位/加分件缺交付时的兜底
+        // （真素材经 Assets.uiRegion/uiPatch 优先；画法见 UiPlaceholderPainter）
+        for (UiKeys.Entry entry : UiKeys.ALL) {
+            put(entry.id(), UiPlaceholderPainter.paint(entry));
+        }
         verifyCoverage(data);
     }
 
