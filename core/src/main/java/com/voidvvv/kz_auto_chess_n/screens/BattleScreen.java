@@ -23,6 +23,7 @@ import com.voidvvv.kz_auto_chess_n.entities.RunModifiers;
 import com.voidvvv.kz_auto_chess_n.entities.RunState;
 import com.voidvvv.kz_auto_chess_n.entities.SequentialIdIssuer;
 import com.voidvvv.kz_auto_chess_n.input.BoardInputProcessor;
+import com.voidvvv.kz_auto_chess_n.input.DrawerOutsideTouchProcessor;
 import com.voidvvv.kz_auto_chess_n.input.GlobalKeyProcessor;
 import com.voidvvv.kz_auto_chess_n.input.HoverCandidate;
 import com.voidvvv.kz_auto_chess_n.render.Assets;
@@ -31,6 +32,9 @@ import com.voidvvv.kz_auto_chess_n.render.board.BoardGeometry;
 import com.voidvvv.kz_auto_chess_n.render.ui.BattleHud;
 import com.voidvvv.kz_auto_chess_n.render.ui.BattleTransitionController;
 import com.voidvvv.kz_auto_chess_n.render.ui.ChestDialog;
+import com.voidvvv.kz_auto_chess_n.render.ui.DrawerController;
+import com.voidvvv.kz_auto_chess_n.render.ui.DrawerGeometry;
+import com.voidvvv.kz_auto_chess_n.render.ui.DrawerPanel;
 import com.voidvvv.kz_auto_chess_n.render.ui.EquipPendingState;
 import com.voidvvv.kz_auto_chess_n.render.ui.HoverPreviewCard;
 import com.voidvvv.kz_auto_chess_n.render.ui.InventoryPanel;
@@ -44,6 +48,7 @@ import com.voidvvv.kz_auto_chess_n.render.ui.SynergyPanel;
 import com.voidvvv.kz_auto_chess_n.render.ui.TopBar;
 import com.voidvvv.kz_auto_chess_n.render.ui.UIDialogManager;
 import com.voidvvv.kz_auto_chess_n.render.ui.UnitDetailDialog;
+import com.voidvvv.kz_auto_chess_n.render.ui.UnscaledLayer;
 import com.voidvvv.kz_auto_chess_n.save.MetaService;
 import com.voidvvv.kz_auto_chess_n.save.ProfileService;
 import com.voidvvv.kz_auto_chess_n.save.RunSettlementText;
@@ -110,6 +115,13 @@ public final class BattleScreen implements Screen {
     private final UnitDetailDialog unitDetailDialog;
     private final PauseMenuDialog pauseMenuDialog;
     private BoardInputProcessor boardProcessor;
+    /** UI 抽屉（UI 抽屉化批1·骨架：只画外观和开合、不绑数据；现有 ②③ 并存，批2/3 才迁）：
+     *  不缩放层（Q8）+ 面板 + 开合状态机（Q2 默认收起） */
+    private final UnscaledLayer unscaledLayer;
+    private final DrawerPanel drawerPanel;
+    private final DrawerController drawerController = new DrawerController();
+    /** 「点抽屉外收起」透传观察处理器（Q2；multiplexer 位置 = dialogStage 之后、uiStage 之前） */
+    private final DrawerOutsideTouchProcessor drawerOutsideTouch;
 
     /** 本局 seed（UI 域边界给定——RunSetup 传入；RESTART 换新，Q3 裁决口径 Phase 6 落地） */
     private long seed;
@@ -210,12 +222,51 @@ public final class BattleScreen implements Screen {
                     }
                 });
         this.pauseMenuDialog = new PauseMenuDialog(commandManager, assets, dialogManager);
+        // UI 抽屉装配（UI 抽屉化批1）：面板挂不缩放层（Q8）；开/合请求一律经控制器，转场封禁位在此合流（§3.8）
+        this.unscaledLayer = new UnscaledLayer(GameBalance.RENDER_GLOBAL_SCALE);
+        this.drawerPanel = new DrawerPanel(assets, new DrawerPanel.Listener() {
+            @Override
+            public void onToggleRequested() {
+                drawerController.requestToggle(transitionController.isInputBlocked());
+            }
+
+            @Override
+            public void onCloseRequested() {
+                drawerController.requestClose(transitionController.isInputBlocked());
+            }
+        });
+        this.unscaledLayer.addActor(drawerPanel);
+        this.drawerOutsideTouch = new DrawerOutsideTouchProcessor(uiStage.getViewport(),
+                new DrawerOutsideTouchProcessor.Host() {
+                    @Override
+                    public boolean isDrawerOpen() {
+                        return drawerController.isOpen();
+                    }
+
+                    @Override
+                    public boolean isDrawerTouchBlocked() {
+                        return dialogManager.isShowing() || transitionController.isInputBlocked();
+                    }
+
+                    @Override
+                    public boolean isInsideDrawer(float stageX, float stageY) {
+                        return DrawerGeometry.isInside(stageX, stageY, drawerController.progress());
+                    }
+
+                    @Override
+                    public void onOutsideClick() {
+                        drawerController.requestClose(transitionController.isInputBlocked());
+                    }
+                });
         this.keyProcessor = new GlobalKeyProcessor(new GlobalKeyProcessor.Listener() {
             @Override
             public boolean onEscapeOrBack() {
                 if (dialogManager.isShowing()) {
                     dialogManager.closeTop(); // input §3：有弹窗关顶层
                     return true;
+                }
+                if (drawerController.isOpen()) { // Q2：抽屉开着时 Esc 先收抽屉（转场窗口内被封禁位拒绝 → 照旧开暂停）
+                    return drawerController.requestClose(transitionController.isInputBlocked());
                 }
                 dialogManager.push(pauseMenuDialog); // 无弹窗开暂停
                 return true;
@@ -234,6 +285,8 @@ public final class BattleScreen implements Screen {
         uiStage.addActor(runEndPanel);
         uiStage.addActor(shopBar);
         uiStage.addActor(inventoryPanel);
+        // 抽屉层：位于现有面板之上、⑤⑨ 之下（UI_PLAN §3.5 绘制层级：现有面板 → 抽屉 → 羁绊/通知 → 悬停卡 → 收点）
+        uiStage.addActor(unscaledLayer);
         uiStage.addActor(synergyPanel);
         uiStage.addActor(notificationPanel);
         uiStage.addActor(hoverPreview); // 最上层：瞬态悬停卡（无输入监听，不阻断任何交互）
@@ -315,9 +368,11 @@ public final class BattleScreen implements Screen {
                         }
                     }
                 });
-        // 四层 multiplexer（input §2.2）：dialogStage > uiStage > boardProcessor > keyProcessor
+        // 四层 multiplexer（input §2.2）：dialogStage > uiStage > boardProcessor > keyProcessor；
+        // 抽屉外点击观察者夹在 dialogStage 与 uiStage 之间——永不吃事件（透传），只多「看见」一遍
         InputMultiplexer multiplexer = new InputMultiplexer();
         multiplexer.addProcessor(dialogManager.getStage());
+        multiplexer.addProcessor(drawerOutsideTouch);
         multiplexer.addProcessor(uiStage);
         multiplexer.addProcessor(boardProcessor);
         multiplexer.addProcessor(keyProcessor);
@@ -335,6 +390,10 @@ public final class BattleScreen implements Screen {
                         && runContext.getBattleState().isIntroCountdownActive()
                         ? runContext.getBattleState().getIntroRemaining() : 0f,
                 frozen ? 0f : delta);
+        // UI 抽屉（批1 骨架）：相位跳变强制收起（Q6 开战随转场退场）→ 冻结感知推进（dt 传 0 不走）→ 落位
+        drawerController.syncPhase(phase);
+        drawerController.update(frozen ? 0f : delta);
+        drawerPanel.apply(drawerController.progress());
         if (!frozen) {
             stepSimulation(delta);
             renderClock += delta;
@@ -370,7 +429,8 @@ public final class BattleScreen implements Screen {
         synergyPanel.refresh(runContext);
         notificationPanel.refresh(runContext);
         notificationPanel.syncBattle(runContext.getBattleState());
-        hoverPreview.refresh(boardProcessor == null ? HoverCandidate.NONE : boardProcessor.getHoverCandidate(),
+        hoverPreview.refresh(drawerController.progress() > 0f ? HoverCandidate.NONE // Q9：抽屉展开时压制备战期棋盘悬停卡
+                        : boardProcessor == null ? HoverCandidate.NONE : boardProcessor.getHoverCandidate(),
                 shopBar.getHoveredSlot(),
                 boardProcessor != null && boardProcessor.isDragging() ? -1 : inventoryPanel.getHoveredSlot(), // feedback07：拖拽中抑制背包源（口径 B4-2）
                 frozen, frozen ? 0f : delta); // R1+feedback04+feedback07：候选/槽位/冻结位（§5.3-8）

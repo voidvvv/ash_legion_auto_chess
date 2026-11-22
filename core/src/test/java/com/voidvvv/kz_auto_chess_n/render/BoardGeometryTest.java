@@ -271,4 +271,36 @@ class BoardGeometryTest {
         assertThat(BoardGeometry.isInSellZone(x0, y0 - 1)).isFalse();
         assertThat(BoardGeometry.isInSellZone(x0, y1)).isFalse();
     }
+
+    // —— UI 抽屉化批1：⑥ 开战按钮迁位（Q9：右侧、⑤ 羁绊面板上方；Q10：按实机 y-up 落点，常量待主人实机核对） ——
+
+    @Test
+    @DisplayName("⑥ 开战按钮新址（Q9）：右侧 ⑤ 羁绊面板正上方、⑦ 出售区正下方（两域真实缩放换算到舞台坐标互不压叠），不再占用抽屉范围")
+    void fightButtonRelocatedAboveSynergyPanel() {
+        // 位置取设计表原位 (508,200) 按实机 y-up；尺寸沿用既有 64×40
+        assertThat(BoardGeometry.FIGHT_BUTTON_X).isEqualTo(BoardGeometry.SYNERGY_X);
+        assertThat(BoardGeometry.FIGHT_BUTTON_Y).isEqualTo(200);
+        assertThat(BoardGeometry.FIGHT_BUTTON_W).isEqualTo(64);
+        assertThat(BoardGeometry.FIGHT_BUTTON_H).isEqualTo(40);
+        // UI 域内（同为 0.8 缩放）：⑥ 底 200 ≥ ⑤ 顶 192；右缘 ≤ ⑤ 右缘 620；不出虚拟宽
+        assertThat(BoardGeometry.FIGHT_BUTTON_Y).isGreaterThanOrEqualTo(
+                BoardGeometry.SYNERGY_Y + BoardGeometry.SYNERGY_H);
+        assertThat(BoardGeometry.FIGHT_BUTTON_X + BoardGeometry.FIGHT_BUTTON_W)
+                .isLessThanOrEqualTo(BoardGeometry.SYNERGY_X + BoardGeometry.SYNERGY_W);
+        // 跨域（⑥ UI 域 0.8 / ⑦ 世界域备战期 0.8/1.06）：⑥ 舞台顶 ≤ ⑦ 舞台底；⑥ 舞台底 ≥ ⑤ 舞台顶
+        float uiScale = GameBalance.RENDER_GLOBAL_SCALE;
+        float worldScale = GameBalance.RENDER_GLOBAL_SCALE / GameBalance.SHOPPING_CAMERA_ZOOM;
+        float buttonTop = BoardGeometry.screenY(BoardGeometry.FIGHT_BUTTON_Y + BoardGeometry.FIGHT_BUTTON_H, uiScale);
+        float buttonBottom = BoardGeometry.screenY(BoardGeometry.FIGHT_BUTTON_Y, uiScale);
+        float sellBottom = BoardGeometry.screenY(BoardGeometry.SELL_ZONE_Y, worldScale);
+        float synergyTop = BoardGeometry.screenY(BoardGeometry.SYNERGY_Y + BoardGeometry.SYNERGY_H, uiScale);
+        assertThat(buttonTop).isLessThanOrEqualTo(sellBottom);
+        assertThat(buttonBottom).isGreaterThanOrEqualTo(synergyTop);
+        // 不再落在抽屉展开态舞台范围 (2,88)~(246,306) 内（x 方向整个在抽屉右缘之外）
+        assertThat(BoardGeometry.screenX(BoardGeometry.FIGHT_BUTTON_X, uiScale))
+                .isGreaterThanOrEqualTo(246f);
+        // 旧址 (134,88) 已弃用：按钮不再压备战席右侧的悬停卡走廊
+        assertThat(BoardGeometry.FIGHT_BUTTON_X).isGreaterThan(
+                BoardGeometry.BENCH_X + BoardGeometry.BENCH_W + 6);
+    }
 }

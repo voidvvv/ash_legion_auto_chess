@@ -36,6 +36,13 @@ public final class BoardGeometry {
     public static final int SYNERGY_Y = 48;
     public static final int SYNERGY_W = 112;
     public static final int SYNERGY_H = 144;
+    /** ⑥ 开战按钮（UI 域；UI 抽屉化批1·Q9：自备战席右侧 (134,88) 迁至右侧、⑤ 羁绊面板上方——
+     *  位置取 render §九设计表原值 (508,200) 按实机 y-up 落点（Q10：界面坐标镜像漂移另案处理，本次一律
+     *  按实机落点写）；尺寸沿用既有 64×40（设计表的 112×40 未取）。待主人实机核对后可校准。 */
+    public static final int FIGHT_BUTTON_X = 508;
+    public static final int FIGHT_BUTTON_Y = 200;
+    public static final int FIGHT_BUTTON_W = 64;
+    public static final int FIGHT_BUTTON_H = 40;
     /** ⑦ 出售区（棋盘域拖拽终点，仅 SHOPPING） */
     public static final int SELL_ZONE_X = 564;
     public static final int SELL_ZONE_Y = 246;

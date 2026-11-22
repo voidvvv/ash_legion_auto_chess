@@ -2,6 +2,7 @@ package com.voidvvv.kz_auto_chess_n.render;
 
 import com.voidvvv.kz_auto_chess_n.config.GameBalance;
 import com.voidvvv.kz_auto_chess_n.render.board.BoardGeometry;
+import com.voidvvv.kz_auto_chess_n.render.ui.DrawerGeometry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -119,5 +120,78 @@ class RenderScaleFitTest {
                 BoardGeometry.SELL_ZONE_X, BoardGeometry.SELL_ZONE_Y,
                 BoardGeometry.SELL_ZONE_W, BoardGeometry.SELL_ZONE_H))
                 .as("出售区完整可见").isTrue();
+    }
+
+    // —— UI 抽屉化批1：抽屉（不缩放层——舞台几何固定，不随 s 缩放；Q7 甲案 244×218 / Q8） ——
+
+    /** 展开态抽屉与 ④ 棋盘左缘的舞台间隙（备战期真实世界缩放；负值 = 压棋盘） */
+    private static float drawerBoardGap(float scale) {
+        float boardLeft = BoardGeometry.screenX(BoardGeometry.BOARD_X, scale / GameBalance.SHOPPING_CAMERA_ZOOM);
+        return boardLeft - (DrawerGeometry.DRAWER_X + DrawerGeometry.DRAWER_W);
+    }
+
+    @Test
+    @DisplayName("抽屉两态完整在视口内：s∈{0.7~1.0} 展开态主体 / 收起态把手与角标均在 640×360 舞台内；收起态主体完全出屏")
+    void drawerStatesStayInsideViewportAtAllShrinkScales() {
+        float[] viewport = {0, 0, BoardGeometry.VIRTUAL_W, BoardGeometry.VIRTUAL_H};
+        for (float scale : SHRINK_SCALES) {
+            DrawerGeometry.Rect expanded = DrawerGeometry.drawerRect(1f);
+            assertThat(contains(viewport, expanded.x(), expanded.y(), expanded.width(), expanded.height()))
+                    .as("s=%f 展开态主体完整在视口内", scale).isTrue();
+            DrawerGeometry.Rect handle = DrawerGeometry.handleRect();
+            assertThat(contains(viewport, handle.x(), handle.y(), handle.width(), handle.height()))
+                    .as("s=%f 把手完整在视口内", scale).isTrue();
+            DrawerGeometry.Rect badge = DrawerGeometry.badgeRect();
+            assertThat(contains(viewport, badge.x(), badge.y(), badge.width(), badge.height()))
+                    .as("s=%f 角标完整在视口内", scale).isTrue();
+            assertThat(DrawerGeometry.drawerRect(0f).right())
+                    .as("s=%f 收起态主体右缘 ≤ 0（完全出屏，不露边）", scale).isLessThanOrEqualTo(0);
+        }
+    }
+
+    @Test
+    @DisplayName("抽屉屏幕右缘 ≤ 棋盘屏幕左缘：生产档 s=0.8 及 0.7 两态成立（展开态右缘 246、收起态把手右缘 14；备战期真实世界缩放）")
+    void drawerClearsBoardLeftEdgeAtSupportedScales() {
+        for (float scale : new float[]{0.7f, 0.8f}) {
+            assertThat(drawerBoardGap(scale)).as("s=%f 展开态：抽屉右缘 ≤ 棋盘左缘", scale).isPositive();
+            assertThat(drawerBoardGap(scale) + DrawerGeometry.DRAWER_X + DrawerGeometry.DRAWER_W
+                    - DrawerGeometry.handleRect().right())
+                    .as("s=%f 收起态：把手右缘 ≤ 棋盘左缘", scale).isPositive();
+        }
+        assertThat(drawerBoardGap(GameBalance.RENDER_GLOBAL_SCALE)).isCloseTo(1.55f, within(0.01f));
+    }
+
+    @Test
+    @DisplayName("边界锁（计划 §4.5「矩阵 {0.7~1.0} 右缘 ≤ 棋盘左缘」中不可满足的部分）：抽屉舞台几何按 s=0.8 定制，仅 s∈[0.793,0.817] 不压 ④⑧①")
+    void drawerLeftColumnFitBoundaryLock() {
+        // 推导（舞台坐标）：x：246 ≤ 320 − 96·s/1.06 ⇔ s ≤ 0.8171；
+        //                  y 下：88 ≥ 180 − 116·s（⑧ 商店栏顶 64）⇔ s ≥ 0.7931；y 上：306 ≤ 180 + 160·s（① 顶栏文字底 340）⇔ s ≥ 0.7875
+        float maxByBoard = (BoardGeometry.VIRTUAL_W / 2f - DrawerGeometry.DRAWER_X - DrawerGeometry.DRAWER_W)
+                * GameBalance.SHOPPING_CAMERA_ZOOM / (BoardGeometry.VIRTUAL_W / 2f - BoardGeometry.BOARD_X);
+        float minByShopBar = (BoardGeometry.VIRTUAL_H / 2f - DrawerGeometry.DRAWER_Y)
+                / (BoardGeometry.VIRTUAL_H / 2f - (BoardGeometry.VIRTUAL_H - BoardGeometry.SHOP_BAR_Y));
+        float minByTopBar = (DrawerGeometry.DRAWER_Y + DrawerGeometry.DRAWER_H - BoardGeometry.VIRTUAL_H / 2f)
+                / (BoardGeometry.VIRTUAL_H - 18 - 2 - BoardGeometry.VIRTUAL_H / 2f);
+        assertThat(maxByBoard).isCloseTo(0.8171f, within(1e-4f));
+        assertThat(minByShopBar).isCloseTo(0.7931f, within(1e-4f));
+        assertThat(minByTopBar).isCloseTo(0.7875f, within(1e-4f));
+        // 生产档 0.8 落在可用带内
+        float s = GameBalance.RENDER_GLOBAL_SCALE;
+        assertThat(s).isBetween(minByShopBar, maxByBoard);
+        // 矩阵其余档位逐一说明越界方向（改 RENDER_GLOBAL_SCALE 出带即须重校 DrawerGeometry）
+        assertThat(drawerBoardGap(0.7f)).as("s=0.7：x 不压棋盘").isPositive();
+        assertThat(BoardGeometry.screenY(BoardGeometry.VIRTUAL_H - BoardGeometry.SHOP_BAR_Y, 0.7f))
+                .as("s=0.7：⑧ 商店栏顶 98.8 > 抽屉底 88（压商店栏）").isGreaterThan(DrawerGeometry.DRAWER_Y);
+        assertThat(drawerBoardGap(0.9f)).as("s=0.9：压棋盘第 0 列").isNegative();
+        assertThat(drawerBoardGap(1.0f)).as("s=1.0：压棋盘第 0 列").isNegative();
+        // 可用带端点：0.795 三项皆成立；0.79 压商店栏；0.82 压棋盘
+        assertThat(drawerBoardGap(0.795f)).isPositive();
+        assertThat(BoardGeometry.screenY(BoardGeometry.VIRTUAL_H - BoardGeometry.SHOP_BAR_Y, 0.795f))
+                .isLessThanOrEqualTo(DrawerGeometry.DRAWER_Y);
+        assertThat(BoardGeometry.screenY(BoardGeometry.VIRTUAL_H - 18 - 2, 0.795f))
+                .isGreaterThanOrEqualTo(DrawerGeometry.DRAWER_Y + DrawerGeometry.DRAWER_H);
+        assertThat(BoardGeometry.screenY(BoardGeometry.VIRTUAL_H - BoardGeometry.SHOP_BAR_Y, 0.79f))
+                .isGreaterThan(DrawerGeometry.DRAWER_Y);
+        assertThat(drawerBoardGap(0.82f)).isNegative();
     }
 }
