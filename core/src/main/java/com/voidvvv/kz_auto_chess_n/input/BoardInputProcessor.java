@@ -25,7 +25,7 @@ import java.util.function.IntConsumer;
 import java.util.function.Supplier;
 
 /**
- * 棋盘域输入（input §2.3/§2.4/§3）：统辖棋盘 6×7 玩家区与备战席 3×3。
+ * 棋盘域输入（input §2.3/§2.4/§3）：统辖棋盘 6×7 玩家区与备战席——备战席现由左侧抽屉头像条承载，命中经 {@link DrawerHitTest} 注入（屏幕坐标，见下）。
  *
  * <p>unproject 用棋盘 viewport（含其 camera）——坐标陷阱防御（input §3 第四行）；
  * 每 pointer 独立 DragContext（第一陷阱：多点互不串扰，同时拖拽 ≤1 有意义）；

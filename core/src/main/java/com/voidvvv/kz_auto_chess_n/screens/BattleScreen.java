@@ -67,8 +67,8 @@ import com.voidvvv.kz_auto_chess_n.utils.RandomGenerator;
  * RESULT 计时 → 超限丢弃。渲染段：棋盘域自绘 + UI 域 Stage（⑨），可见性按 phase 联动。
  * 阶段推进全部委托 RunFlowSystem——本类只做点火器/观察者（architecture §七）。
  *
- * <p>Phase 5 装配（CP29）：四 system 注册 handler；四层输入 multiplexer
- * （dialogStage &gt; uiStage &gt; boardProcessor &gt; keyProcessor，input §2.2）；
+ * <p>Phase 5 装配（CP29）：四 system 注册 handler；五层输入 multiplexer
+ * （dialogStage &gt; drawerOutsideTouch &gt; uiStage &gt; boardProcessor &gt; keyProcessor，input §2.2）；
  * 模态冻结 = paused || isShowing（口径 #14）；通知三流挂接；seed 由 UI 域边界给定
  * （MainMenu START 传入、RESTART 换新——Q3 裁决），StartRun 以命令入队 = 回放流第 0 条记录。
  */
@@ -111,7 +111,7 @@ public final class BattleScreen implements Screen {
     private final ChestDialog chestDialog;
     private final PauseMenuDialog pauseMenuDialog;
     private BoardInputProcessor boardProcessor;
-    /** UI 抽屉（UI 抽屉化批1·骨架：只画外观和开合、不绑数据；现有 ②③ 并存，批2/3 才迁）：
+    /** UI 抽屉（UI 抽屉化：备战席 / 背包 / 棋子详情的承载面，②③ 与详情弹窗已退役——分区分工见 {@link DrawerPanel}）：
      *  不缩放层（Q8）+ 面板 + 开合状态机（Q2 默认收起） */
     private final UnscaledLayer unscaledLayer;
     private final DrawerPanel drawerPanel;
@@ -265,10 +265,10 @@ public final class BattleScreen implements Screen {
                     dialogManager.closeTop(); // input §3：有弹窗关顶层
                     return true;
                 }
-                if (drawerController.isOpen()) { // Q2：抽屉开着时 Esc 先收抽屉（转场窗口内被封禁位拒绝 → 照旧开暂停）
+                if (drawerController.isOpen()) { // Q2：抽屉开着时 Esc 先收抽屉——本分支恒 return、不开暂停（返回值 = 收起请求是否受理）；封禁位拒绝仅防御性：转场窗口始于相位跳变，抽屉同帧已被强制收起、封禁期内也开不了，实际走不到
                     return drawerController.requestClose(transitionController.isInputBlocked());
                 }
-                dialogManager.push(pauseMenuDialog); // 无弹窗开暂停
+                dialogManager.push(pauseMenuDialog); // 无弹窗且抽屉未开 → 开暂停
                 return true;
             }
 
@@ -290,7 +290,7 @@ public final class BattleScreen implements Screen {
 
     /** UI 域整体缩放（2026-11-21 主人反馈「所有 UI 偏大」→ 整体调小一档）：根节点统一缩放居中，
      *  与 {@link BattleTransitionController} 的 worldCamera.zoom 基准（RENDER_GLOBAL_SCALE）同系数——
-     *  世界域（棋盘/备战席，zoom 以屏心收缩）与 UI 域（根缩放居中）足迹恒重合，相邻不错位；
+     *  世界域（棋盘，zoom 以屏心收缩）与 UI 域（根缩放居中）足迹恒重合，相邻不错位；
      *  Scene2d 命中测试穿过根变换（parentToLocalCoords），指针交互自动正确。恢复 = 常量回 1.0f。 */
     private static void applyGlobalUiScale(com.badlogic.gdx.scenes.scene2d.Stage stage) {
         float scale = GameBalance.RENDER_GLOBAL_SCALE;
@@ -375,7 +375,7 @@ public final class BattleScreen implements Screen {
                         }
                     }
                 }, drawerPanel); // 备战席命中源（UI 抽屉化批2：抽屉头像条替代 ② 世界域矩形；滚轮路由同此）
-        // 四层 multiplexer（input §2.2）：dialogStage > uiStage > boardProcessor > keyProcessor；
+        // 五层 multiplexer（input §2.2）：dialogStage > drawerOutsideTouch > uiStage > boardProcessor > keyProcessor；
         // 抽屉外点击观察者夹在 dialogStage 与 uiStage 之间——永不吃事件（透传），只多「看见」一遍
         InputMultiplexer multiplexer = new InputMultiplexer();
         multiplexer.addProcessor(dialogManager.getStage());
