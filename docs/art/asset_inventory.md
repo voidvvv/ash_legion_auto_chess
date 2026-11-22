@@ -1,8 +1,9 @@
-# 最终游戏素材清单（v1 · 棋盘单位贴图）
+# 最终游戏素材清单（v1.1 · 棋盘单位贴图 + UI 抽屉框架件）
 
-> 生成日期：2026-11-22 ｜ 范围：24 个常规棋子 + 9 个 Boss，共 **33 模板 × 12 帧 = 396 帧**
+> 生成日期：2026-11-22 ｜ 范围：24 个常规棋子 + 9 个 Boss，共 **33 模板 × 12 帧 = 396 帧**；另含 **UI 抽屉框架件 12 张**（2026-11-22 补登，见 §9）
 > 源包：0x72《DungeonTileset II》（**CC0 1.0**）｜ 管线：6 档中性灰 + 运行期星级色 tint ｜ 画布：32×32，脚底 y=26
 > 状态：**集成测试已通过，待主人目检后决定正式入库**。本文是最终素材清单；源交付在 `assets_src/draft_batch2/`。
+> UI 抽屉框架件（§9）：源包 Golden UI（Buch，OpenGameArt，**CC0 1.0**）｜ **已入库（2026-11-22）**，运行期路径 `assets/art/ui/`；存证 `assets_src/sourced/golden-ui/`，交付物在 `assets_src/ui_redesign/`。
 
 ---
 
@@ -19,6 +20,7 @@
 | 批 1（pilot） | 4 个代表棋子 × 12 帧：`unit_warrior_01`、`unit_wolf_pup`、`unit_skeleton_soldier`、`unit_frost_giant` | 48 | **已被批 2 同名武器版覆盖**；文件留在 `assets_src/draft_batch1/` 作历史对照 |
 | **批 2（全量）** | **24 常规（4 族 × 6）+ 9 Boss = 33 模板 × 12 帧** | **396** | 已集成测试；`assets_src/draft_batch2/` 为源交付 |
 | P3 FX | 技能起手/弹道 16×16、落点 24×24、状态 8×8 等 | **0** | 0x72 无合适 FX；全部保留 `PlaceholderArt`，`Assets.regionFx` 软兜底 |
+| UI 抽屉框架件 | 左侧抽屉的底板 / 内凹底 / 槽 / 高亮框 / 标签 / 滚动条 / 把手 / 关闭钮 / 分隔条 / 标题板（必需 12 张，1:1） | **12 张** | **已入库（2026-11-22）**；源包 Golden UI（CC0）；`1_25x/` 备用列不入库；详见 §9 |
 
 - **运行期路径**：`assets/art/units/{unitId}_{anim}_{frame}.png`（`RealArt` 懒加载；缺文件自动回退占位）。
 - **源交付路径**：`assets_src/draft_batch2/units/`；当前 `assets/art/units/` 已有 396 个批 2 PNG（集成测试态）。
@@ -248,6 +250,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File assets_src\tools\make_valida
 - **尚未做正式“入库”决定**：是否保留、是否提交版本库、是否替换 `art_asset_spec.md` 的旧 201-key 口径，等主人目检后裁决。
 - 批 1 pilot 的 48 帧仍在 `assets_src/draft_batch1/`，但 4 个同名单位已在批 2 中升级为带武器版；最终清单以批 2 为准。
 - **P3 FX 未交付**：0 个文件，78 个 FX key 全部由 `PlaceholderArt` 生成占位；`Assets.regionFx` 缺键软告警并降级爆点/白片，装饰性贴图不崩局。说明见 `assets_src/draft_batch2/FX_MAPPING.md`。
+- **UI 抽屉框架件**：12 张 1:1 必需已于 2026-11-22 入库（`assets/art/ui/`），源包 Golden UI（CC0），见 §9；`1_25x/` 备用列与加分 8 张未入库。
 
 ### 8.2 已知偏弱项 / 风险
 
@@ -268,6 +271,56 @@ powershell -NoProfile -ExecutionPolicy Bypass -File assets_src\tools\make_valida
 3. **弱项是否修**：sling/javelin/knife 三个变体、Boss 24px 细节，是否在 v1 内修一版。
 4. **FX 是否补**：若需要，按 `FX_MAPPING.md` §4 选 CC0 特效包，先做 4 个代表 key 验证再铺 64 个。
 5. **旧文档口径**：`docs/art_asset_spec.md` 仍是 2026-08-22 的 201-key 旧口径；是否用本清单替代/挂链，需裁决。
+
+---
+
+## 9. UI 抽屉框架件（2026-11-22 补登，12 张）
+
+左侧抽屉（取代原屏上备战席与装备背包）用的 UI 框架件：逐张 1:1 单 PNG 放 `assets/art/ui/{id}.png`，文件名 = id；运行期由 `UiArt` 懒加载、`Assets.uiPatch` 按 `UiKeys` 登记的切分线包成真 `NinePatch`，缺件自动回退 `PlaceholderArt` 平色占位。**与 §2~§7 的棋盘单位贴图是两个独立来源包**。
+
+- **运行期路径**：`assets/art/ui/{id}.png`（`UiArt.ROOT = "art/ui/"`，Nearest 过滤；按 640×360 虚拟像素 1:1 出图）。
+- **键集与切分线**：代码 `render/UiKeys.java` 为唯一事实源（必需 12 + 加分 8；本节只登记已入库的必需 12）。
+- **manifest**：`assets_src/ui_redesign/ui_asset_manifest.csv`（UTF-8 + BOM）与 `.json`——每行含素材名、用途、来源矩形、切分线、许可、尺寸、SHA-256。
+- **成品副本 / 预览**：`assets_src/ui_redesign/sourced_assets/`（与运行期同名 12 张）；`assets_src/ui_redesign/previews/`（逐张预览、抽屉 mock、九宫格拉伸测试）。
+- **消费方**：`render_design.md` §9.1；逐张规格与出图规范见 `art_asset_spec.md` §11。
+
+### 9.1 素材来源与许可
+
+| 项 | 值 |
+|---|---|
+| 素材包 | Golden UI（`ui_split.png` 606×414 拆件图 + `ui.psd` 分层源文件） |
+| 作者 | Buch |
+| 作者页 / 原始来源 | https://opengameart.org/users/buch ／ https://opengameart.org/content/golden-ui |
+| 本次下载页（镜像） | 同上（OpenGameArt 原始页，无镜像） |
+| 许可 | **CC0 1.0**（Public Domain Dedication） |
+| 是否需署名 | **否**；作者希望 credit “Buch / OpenGameArt”，本项目在存证与 manifest 中保留 |
+| 包文件 / SHA-256 | `ui_split.png`（21,699 bytes）/ `1b5422a4d66121f6727be855055fa23f0b21fe620bc52da0a117d480f8c7dd75`；`ui.psd`（573,124 bytes）/ `56c660e25a8484fc84ad92c2cfa668937869286560ec17567bd3eb07ec59948d` |
+| 许可存证 | `assets_src/sourced/golden-ui/PROVENANCE.md`、`LICENSE.txt`（按 OGA 页面声明整理——包内无独立 LICENSE 文件）、`provenance/opengameart-golden-ui.html`、`provenance/cc0-1.0-deed.html` |
+| 取件备注 | 取件日期 2026-11-22。本项目做了裁切 / 九宫格重排 / 调色（深蓝灰石材 + 暗棕木 + 暗金，整体调暗冷化）；脚本 `assets_src/tools/process_ui_assets.ps1`，无手改原图。未使用任何许可含糊素材。 |
+
+### 9.2 完整清单：12 张必需（1:1）
+
+> 路径列省略前缀 `assets/art/ui/`。
+> “画法”列：**程序化重绘** = 以 Golden UI 的 16 色盘 / 2px 线宽 / 角钉·木牌母题为约束用脚本生成（拆件图里没有满足“干净四角 + 2px 线 + 无邻件溢出”的九宫格安全裁片）；**直接裁切** = 从 `ui_split.png` 按来源矩形裁出。12 张中 10 张重绘、2 张裁切；**重绘件中 6 张经一次返修**（M02 / M03 / M05 / M06 / M09 / M10，见“返修”列）。SHA-256 逐张见 manifest。
+
+| # | id / 名称 | 用途 | 1:1 尺寸 | 九宫格切分 左/右/上/下 | 画法 | 返修 | 文件路径 |
+|---|---|---|---|---|---|---|---|
+| M01 | `ui_panel_body_9p` 面板底 | 抽屉面板底（自带外边框） | 64×64 | 12/12/12/12 | 程序化重绘 | — | `ui_panel_body_9p.png` |
+| M02 | `ui_inset_9p` 内凹底 | 描述框 / 立绘位 / 装备预览的内凹底 | 24×24 | 6/6/6/6 | 程序化重绘 | **返修**：线宽加到 2px | `ui_inset_9p.png` |
+| M03 | `ui_slot_9p` 槽格 | 头像槽 / 装备槽（空槽态） | 36×36 | 8/8/8/8 | 程序化重绘 | **返修**：线宽加到 2px | `ui_slot_9p.png` |
+| M04 | `ui_slot_selected_9p` 高亮框 | 选中 / 落点 / 悬停高亮（中心透明，叠在 M03 上） | 36×36 | 8/8/8/8 | 直接裁切 `13,140,18,18` | — | `ui_slot_selected_9p.png` |
+| M05 | `ui_tab_active_9p` 标签·选中 | “介绍 / 装备”标签页选中态 | 32×18 | 6/6/6/6 | 程序化重绘 | **返修**：清除 x=29 透明列、端饰移出中段 | `ui_tab_active_9p.png` |
+| M06 | `ui_tab_inactive_9p` 标签·未选中 | 标签页未选中态 | 32×18 | 6/6/6/6 | 程序化重绘 | **返修**：同 M05 | `ui_tab_inactive_9p.png` |
+| M07 | `ui_scroll_track_9p` 滚动条轨 | 横竖共用 | 16×16 | 4/4/4/4 | 程序化重绘 | — | `ui_scroll_track_9p.png` |
+| M08 | `ui_scroll_knob_9p` 滚动条滑块 | 横竖共用 | 12×12 | 4/4/4/4 | 直接裁切 `266,59,12,12` | — | `ui_scroll_knob_9p.png` |
+| M09 | `ui_handle` 把手 | 左缘把手（收起态唯一可见件；纵向可拉伸） | 14×72 | 0/0/12/12 | 程序化重绘 | **返修**：拉槽 / 图标位移入上下端帽 | `ui_handle.png` |
+| M10 | `ui_btn_close` 关闭钮 | 关闭钮 | 14×14 | 不拉伸 | 程序化重绘 | **返修**：补齐左侧 2×2 透明缺口 | `ui_btn_close.png` |
+| M11 | `ui_divider_h` 分隔条 | 横向分隔条 | 24×4 | 4/4/0/0 | 程序化重绘 | — | `ui_divider_h.png` |
+| M12 | `ui_title_plate_9p` 标题板 | 标题板 / 收起态角标底 | 48×18 | 8/8/6/6 | 程序化重绘 | — | `ui_title_plate_9p.png` |
+
+> **未入库**：`assets/art/ui/1_25x/`（1.25× 备用列）——Q8 裁定抽屉走不缩放层，1.25× 永不使用。**未交付**：加分 8 张（B01 / B03~B09），相应件走占位。**不采购**：B02 `ui_btn_sell`（Q3：保留拖拽出售区）。
+> 对账测试：`UiArtInventoryTest` 4 例——入库后干净检出下实跑（目录文件 ⊆ 键集、必需 12 张 IHDR 尺寸、在位键尺寸、manifest 尺寸 / 切分线 / SHA-256）。
+> 返修逐项记录与接入建议：`assets_src/ui_redesign/ASSET_DELIVERY.md` §4 / §4.1；采购口径：`assets_src/ui_redesign/ASSET_REQUIREMENTS.md`。
 
 ---
 
@@ -292,3 +345,5 @@ powershell -NoProfile -ExecutionPolicy Bypass -File assets_src\tools\make_valida
 | `assets_src/draft_batch2/previews/` | 10 | roster 4 + contact 5 + star_tints 1 |
 | `assets_src/draft_batch2/` 根 | 5 | manifest.csv/json、MAPPING、README、FX_MAPPING |
 | `assets/art/units/` | 396 | 集成测试态（claude 已复制） |
+| `assets/art/ui/` | 12 | UI 抽屉框架件 1:1（2026-11-22 入库）；`1_25x/` 备用列不入库 |
+| `assets_src/ui_redesign/sourced_assets/` | 12 | UI 框架件成品副本（与 `assets/art/ui/` 同名） |
