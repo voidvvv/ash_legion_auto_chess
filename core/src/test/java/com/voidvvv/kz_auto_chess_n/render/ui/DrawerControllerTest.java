@@ -179,6 +179,26 @@ class DrawerControllerTest {
     }
 
     @Test
+    @DisplayName("显式收起不受「点外抑制」影响（批4·主人裁决）：把手切换 / 关闭钮 / Esc 直连控制器——装备待定态期间照常接受收起")
+    void explicitClosePathsIgnoreOutsideClickSuppression() {
+        // 控制器没有「点外抑制」这个概念：抑制位只挂在 input/DrawerOutsideTouchProcessor 的点外判定上。
+        // 把手 → requestToggle、关闭钮/Esc → requestClose，三条路径都不经过它——待定态下不会卡在无法关闭。
+        DrawerController c = new DrawerController();
+        c.requestOpen(false);
+        step(c, 20, DT);
+        assertThat(c.isOpen()).isTrue();
+        assertThat(c.requestClose(false)).as("关闭钮 / Esc 路径").isTrue(); // 待定态下照样接受
+        assertThat(c.isOpen()).isFalse();
+        step(c, 20, DT);
+        c.requestOpen(false);
+        step(c, 20, DT);
+        assertThat(c.requestToggle(false)).as("把手段路径").isTrue();
+        assertThat(c.isOpen()).isFalse();
+        // 转场封禁位仍对显式手段生效（既有语义不变）
+        assertThat(c.requestOpen(true)).isFalse();
+    }
+
+    @Test
     @DisplayName("强制收起 collapse：无视转场位、幂等——开战转场「随转场左滑退场」用")
     void collapseIsUnconditionalAndIdempotent() {
         DrawerController c = new DrawerController(true);

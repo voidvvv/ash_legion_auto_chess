@@ -27,6 +27,13 @@ public final class DrawerOutsideTouchProcessor implements InputProcessor {
         /** 转场窗口封禁位（为真时抽屉外点击不收起） */
         boolean isDrawerTouchBlocked();
 
+        /**
+         * 「点抽屉外收起」的业务抑制位（UI 抽屉化批4·主人裁决：装备待定态期间点外不收起）。
+         * 与封禁位分工：封禁位 = 转场窗口（时序）；本位 = 业务态（待定）。只抑制「点外收起」这一条路径——
+         * 把手 / 关闭钮 / Esc 等显式收起不经本处理器，照常有效。
+         */
+        boolean isOutsideClickSuppressed();
+
         /** 舞台坐标是否落在抽屉交互域内（把手 ∪ 展开中的主体） */
         boolean isInsideDrawer(float stageX, float stageY);
 
@@ -66,7 +73,7 @@ public final class DrawerOutsideTouchProcessor implements InputProcessor {
     public boolean touchUp(int screenX, int screenY, int pointer, int button) {
         if (pointer >= 0 && pointer < MAX_POINTERS && armed[pointer]) {
             armed[pointer] = false;
-            if (!host.isDrawerTouchBlocked()) {
+            if (!host.isDrawerTouchBlocked() && !host.isOutsideClickSuppressed()) {
                 host.onOutsideClick();
             }
         }

@@ -246,6 +246,14 @@ public final class BattleScreen implements Screen {
                     }
 
                     @Override
+                    public boolean isOutsideClickSuppressed() {
+                        // 批4·主人裁决：装备待定态期间「点抽屉外」不收起（两段式穿戴中途不被打断）。
+                        // 显式收起手段（把手 / 关闭钮 / Esc）直连 DrawerController，不经本判定——待定态下照常可收起；
+                        // 待定态的退出路径（穿上 / 再点同格或空格取消 / 物品失配自清）均在抽屉内或命令层，不受本位影响。
+                        return equipPending.hasPending();
+                    }
+
+                    @Override
                     public void onOutsideClick() {
                         drawerController.requestClose(transitionController.isInputBlocked());
                     }
@@ -270,21 +278,14 @@ public final class BattleScreen implements Screen {
                 return true;
             }
         });
-        uiStage.addActor(topBar);
-        uiStage.addActor(shoppingHud);
-        uiStage.addActor(battleHud);
-        uiStage.addActor(resultBanner);
-        uiStage.addActor(runEndPanel);
-        uiStage.addActor(shopBar);
-        // ③ InventoryPanel 已退役（UI 抽屉化批3：背包库存并入抽屉装备网格，两段式穿戴走抽屉装备格 + 棋子点击）
-        // 抽屉层：位于现有面板之上、⑤⑨ 之下（UI_PLAN §3.5 绘制层级：现有面板 → 抽屉 → 羁绊/通知 → 悬停卡 → 收点）
-        uiStage.addActor(unscaledLayer);
-        uiStage.addActor(synergyPanel);
-        uiStage.addActor(notificationPanel);
-        uiStage.addActor(hoverPreview); // 最上层：瞬态悬停卡（无输入监听，不阻断任何交互）
-        uiStage.addActor(inputCatcher); // 转场窗口全屏吞点击（render §5.6 输入禁用）：最顶层、仅转场期可命中
+        // 绘制/命中层级（自下而上，见 uiLayerOrder）：③ InventoryPanel 已退役（批3）；抽屉层按主人裁决
+        // （批4·⑨ 层级 A 案）移到 ⑤⑨ 之上——展开期间通知小窗（含 L 键大窗左半）被整块盖住，属已接受代价
+        for (Actor actor : uiLayerOrder(topBar, shoppingHud, battleHud, resultBanner, runEndPanel, shopBar,
+                synergyPanel, notificationPanel, unscaledLayer, hoverPreview, inputCatcher)) {
+            uiStage.addActor(actor);
+        }
         applyGlobalUiScale(uiStage); // UI 整体缩小（2026-11-21 主人反馈）：与世界域 zoom 同系数同中心
-        applyGlobalUiScale(dialogManager.getStage()); // 弹窗域（chest/详情/暂停）同缩放
+        applyGlobalUiScale(dialogManager.getStage()); // 弹窗域（chest/暂停）同缩放
     }
 
     /** UI 域整体缩放（2026-11-21 主人反馈「所有 UI 偏大」→ 整体调小一档）：根节点统一缩放居中，
@@ -297,6 +298,19 @@ public final class BattleScreen implements Screen {
         stage.getRoot().setPosition(
                 BoardGeometry.VIRTUAL_W * (1f - scale) / 2f,
                 BoardGeometry.VIRTUAL_H * (1f - scale) / 2f);
+    }
+
+    /**
+     * uiStage 根下的 Actor 添加序 = 绘制序 = 命中优先级（后加者在上；headless 可测——装配唯一入口）。
+     * 自下而上：顶栏 ① / ⑥ / 战斗 HUD / 横幅 / 终局面板 / ⑧ 商店栏 → ⑤ 羁绊 → ⑨ 通知 → <b>抽屉层</b> →
+     * 悬停卡（瞬态）→ 转场收点。抽屉层高于 ⑨（批4·主人裁决 A 案：展开期间通知被盖住属已接受代价），
+     * 仍低于悬停卡与转场收点。
+     */
+    static Actor[] uiLayerOrder(Actor topBar, Actor shoppingHud, Actor battleHud, Actor resultBanner,
+                                Actor runEndPanel, Actor shopBar, Actor synergyPanel, Actor notificationPanel,
+                                Actor drawerLayer, Actor hoverPreview, Actor inputCatcher) {
+        return new Actor[]{topBar, shoppingHud, battleHud, resultBanner, runEndPanel, shopBar,
+                synergyPanel, notificationPanel, drawerLayer, hoverPreview, inputCatcher};
     }
 
     /** 上下文供应者（面板/横幅共用——值随 restartRun 换新） */

@@ -93,6 +93,8 @@ class DrawerOutsideTouchProcessorTest {
     private static final class FakeHost implements DrawerOutsideTouchProcessor.Host {
         boolean open;
         boolean blocked;
+        /** 批4：装备待定态抑制位（点外不收起） */
+        boolean suppressed;
         float progress = 1f;
         int outsideClicks;
 
@@ -109,6 +111,11 @@ class DrawerOutsideTouchProcessorTest {
         @Override
         public boolean isInsideDrawer(float stageX, float stageY) {
             return DrawerGeometry.isInside(stageX, stageY, progress);
+        }
+
+        @Override
+        public boolean isOutsideClickSuppressed() {
+            return suppressed;
         }
 
         @Override
@@ -151,6 +158,61 @@ class DrawerOutsideTouchProcessorTest {
         assertThat(p.touchUp(BOARD_X, BOARD_Y, 0, 0)).isFalse();
         assertThat(p.touchDown(BODY_X, BODY_Y, 0, 0)).isFalse();     // 主体（如拖滑块/头像起手）
         assertThat(p.touchUp(BOARD_X, BOARD_Y, 0, 0)).isFalse();
+        assertThat(host.outsideClicks).isZero();
+    }
+
+    // —— 批4·主人裁决：装备待定态期间点抽屉外不收起（显式收起手段另路，见 DrawerControllerTest） ——
+
+    @Test
+    @DisplayName("待定态点外不收起：抽屉开着 + 抑制位 → 抽屉外按下抬手不触发 onOutsideClick（事件照旧透传）")
+    void pendingStateSuppressesOutsideClick() {
+        FakeHost host = new FakeHost();
+        host.open = true;
+        host.suppressed = true;
+        DrawerOutsideTouchProcessor p = new DrawerOutsideTouchProcessor(new IdentityViewport(), host);
+        assertThat(p.touchDown(BOARD_X, BOARD_Y, 0, 0)).isFalse();
+        assertThat(p.touchUp(BOARD_X, BOARD_Y, 0, 0)).isFalse();
+        assertThat(host.outsideClicks).as("待定态：点外不收起").isZero();
+    }
+
+    @Test
+    @DisplayName("待定清除后恢复点外收起：同一按下-抬手中途清抑制位 → 抬手时已无待定 → 收起；抑制不跨次点击残留")
+    void outsideClickResumesAfterPendingCleared() {
+        FakeHost host = new FakeHost();
+        host.open = true;
+        host.suppressed = true;
+        DrawerOutsideTouchProcessor p = new DrawerOutsideTouchProcessor(new IdentityViewport(), host);
+        p.touchDown(BOARD_X, BOARD_Y, 0, 0);
+        p.touchUp(BOARD_X, BOARD_Y, 0, 0);
+        assertThat(host.outsideClicks).isZero();
+        host.suppressed = false; // 穿上 / 取消待定 → 抑制解除
+        p.touchDown(BOARD_X, BOARD_Y, 0, 0);
+        p.touchUp(BOARD_X, BOARD_Y, 0, 0);
+        assertThat(host.outsideClicks).as("恢复后点外收起").isEqualTo(1);
+        // 中途清待定（按下时待定、抬手前已穿上）：抬手按抬手时刻的抑制位判定 → 收起
+        FakeHost mid = new FakeHost();
+        mid.open = true;
+        mid.suppressed = true;
+        DrawerOutsideTouchProcessor q = new DrawerOutsideTouchProcessor(new IdentityViewport(), mid);
+        q.touchDown(BOARD_X, BOARD_Y, 0, 0);
+        mid.suppressed = false;
+        q.touchUp(BOARD_X, BOARD_Y, 0, 0);
+        assertThat(mid.outsideClicks).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("抑制只作用于点外：待定态下按下点在抽屉内（把手/滑块/格子）→ 本就不收起，抑制位不改变；封禁位与抑制位任一为真即不收起")
+    void suppressionOnlyAffectsOutsideClick() {
+        FakeHost host = new FakeHost();
+        host.open = true;
+        host.suppressed = true;
+        DrawerOutsideTouchProcessor p = new DrawerOutsideTouchProcessor(new IdentityViewport(), host);
+        p.touchDown(HANDLE_X, HANDLE_Y, 0, 0);
+        p.touchUp(HANDLE_X, HANDLE_Y, 0, 0);
+        assertThat(host.outsideClicks).isZero(); // 把手点击走 uiStage 的 ClickListener → requestToggle（显式手段）
+        host.blocked = true; // 封禁位独立生效
+        p.touchDown(BOARD_X, BOARD_Y, 0, 0);
+        p.touchUp(BOARD_X, BOARD_Y, 0, 0);
         assertThat(host.outsideClicks).isZero();
     }
 
