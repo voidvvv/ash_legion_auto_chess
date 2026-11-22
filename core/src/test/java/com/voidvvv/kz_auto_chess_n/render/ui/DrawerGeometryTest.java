@@ -55,7 +55,7 @@ class DrawerGeometryTest {
     // —— 尺寸与三分区 ——
 
     @Test
-    @DisplayName("Q7 甲案：抽屉 244×218，展开态舞台矩形 (2,88)~(246,306)；把手 14×72 取自素材源尺寸")
+    @DisplayName("Q7 甲案：抽屉 244×218，展开态舞台矩形 (2,88)~(246,306)；把手宽/关闭钮取素材源尺寸，把手高为九宫格纵向取值 53（见 handleFlushWithLeftEdge）")
     void drawerSizeMatchesPlan() {
         assertThat(DrawerGeometry.DRAWER_W).isEqualTo(244);
         assertThat(DrawerGeometry.DRAWER_H).isEqualTo(218);
@@ -65,7 +65,8 @@ class DrawerGeometryTest {
         assertThat(expanded.right()).isEqualTo(246);
         assertThat(expanded.top()).isEqualTo(306);
         assertThat(DrawerGeometry.HANDLE_W).isEqualTo(UiKeys.HANDLE.width());
-        assertThat(DrawerGeometry.HANDLE_H).isEqualTo(UiKeys.HANDLE.height());
+        assertThat(DrawerGeometry.CLOSE_W).isEqualTo(UiKeys.BTN_CLOSE.width());
+        assertThat(DrawerGeometry.CLOSE_H).isEqualTo(UiKeys.BTN_CLOSE.height());
     }
 
     @Test
@@ -77,7 +78,8 @@ class DrawerGeometryTest {
         DrawerGeometry.Rect equip = DrawerGeometry.equipSection();
         for (DrawerGeometry.Rect section : new DrawerGeometry.Rect[]{info, strip, equip}) {
             assertThat(inside(body, section)).as("分区 %s 落在抽屉内", section).isTrue();
-            assertThat(section.width()).as("分区 %s 通栏内宽", section).isEqualTo(DrawerGeometry.DRAWER_W - 2 * DrawerGeometry.PADDING);
+            assertThat(section.width()).as("分区 %s = 内容列宽（让开把手）", section).isEqualTo(DrawerGeometry.CONTENT_W);
+            assertThat(section.x()).as("分区 %s 自内容列起", section).isEqualTo(DrawerGeometry.CONTENT_X);
         }
         assertThat(overlaps(info, strip)).isFalse();
         assertThat(overlaps(strip, equip)).isFalse();
@@ -100,12 +102,24 @@ class DrawerGeometryTest {
         DrawerGeometry.Rect desc = DrawerGeometry.descriptionPane();
         DrawerGeometry.Rect tabInfo = DrawerGeometry.tabInfo();
         DrawerGeometry.Rect tabEquip = DrawerGeometry.tabEquip();
-        for (DrawerGeometry.Rect part : new DrawerGeometry.Rect[]{title, portrait, desc, tabInfo, tabEquip}) {
+        DrawerGeometry.Rect body = new DrawerGeometry.Rect(0, 0, DrawerGeometry.DRAWER_W, DrawerGeometry.DRAWER_H);
+        for (DrawerGeometry.Rect part : new DrawerGeometry.Rect[]{portrait, desc, tabInfo, tabEquip}) {
             assertThat(inside(info, part)).as("部件 %s 落在信息区内", part).isTrue();
         }
+        // 标题板通栏（在把手竖向范围之上，不被压）——落在抽屉体内而非自 CONTENT_X 起的信息区
+        assertThat(inside(body, title)).as("标题板落在抽屉体内").isTrue();
+        assertThat(title.x()).isEqualTo(DrawerGeometry.PADDING);
+        assertThat(title.y()).isEqualTo(info.y() + info.height() - title.height());
         assertThat(portrait.width()).isEqualTo(64);
         assertThat(portrait.height()).isEqualTo(64);
         assertThat(portrait.width()).isEqualTo(2 * BoardGeometry.CELL);
+        assertThat(portrait.x()).as("立绘自内容列起（让开把手）").isEqualTo(DrawerGeometry.CONTENT_X);
+        // 批2·素材返修后：描述 120 + 标签 32（方案示意 124+36 因内容列让位 232→224 各让 4px；9px 字下同为 12 列）
+        assertThat(desc.width()).isEqualTo(120);
+        assertThat(desc.x()).isEqualTo(portrait.right() + DrawerGeometry.STRIP_GAP);
+        assertThat(tabInfo.x()).isEqualTo(desc.right() + DrawerGeometry.STRIP_GAP);
+        assertThat(DrawerGeometry.DESC_W + DrawerGeometry.PORTRAIT_W + 2 * DrawerGeometry.STRIP_GAP + DrawerGeometry.TAB_W)
+                .as("立绘 + 两道间距 + 描述 + 标签 = 内容列宽").isEqualTo(DrawerGeometry.CONTENT_W);
         for (DrawerGeometry.Rect a : new DrawerGeometry.Rect[]{portrait, desc, tabInfo, tabEquip}) {
             assertThat(overlaps(title, a)).isFalse();
         }
@@ -113,13 +127,50 @@ class DrawerGeometryTest {
         assertThat(overlaps(desc, tabInfo)).isFalse();
         assertThat(overlaps(desc, tabEquip)).isFalse();
         assertThat(overlaps(tabInfo, tabEquip)).isFalse();
-        // 标签竖排：「介绍」在上、「装备」在下，同列等宽
+        // 标签竖排：「介绍」在上、「装备」在下，同列等宽；两枚（30+4+30）正好填满 64 高信息行
         assertThat(tabInfo.x()).isEqualTo(tabEquip.x());
         assertThat(tabInfo.width()).isEqualTo(tabEquip.width());
         assertThat(tabInfo.y()).isGreaterThan(tabEquip.top());
+        assertThat(tabInfo.top()).isEqualTo(portrait.top());
+        assertThat(tabEquip.y()).isEqualTo(portrait.y());
+        assertThat(tabInfo.top() - tabEquip.y()).isEqualTo(DrawerGeometry.INFO_ROW_H);
         // 标签贴描述框右侧、右缘齐内边
         assertThat(tabInfo.x()).isGreaterThanOrEqualTo(desc.right());
         assertThat(tabInfo.right()).isEqualTo(info.right());
+    }
+
+    @Test
+    @DisplayName("内容列让开把手（批2·骨架观察 a）：把手竖向范围内一切承载内容的件左缘 ≥ CONTENT_X（把手右缘 + 2px）且与把手不压叠；标题板/分隔条在把手之上/下方穿过属通栏例外")
+    void contentClearOfHandle() {
+        // 把手占到的抽屉局部矩形：舞台 x 0~14 → 局部 −2~12；y = 头像条分区
+        DrawerGeometry.Rect handleLocal = new DrawerGeometry.Rect(
+                -DrawerGeometry.DRAWER_X, DrawerGeometry.stripSection().y(),
+                DrawerGeometry.HANDLE_W, DrawerGeometry.HANDLE_H);
+        assertThat(DrawerGeometry.CONTENT_X)
+                .as("内容列左缘 = 把手局部右缘 + 间隙").isEqualTo(handleLocal.right() + DrawerGeometry.HANDLE_GAP);
+        List<DrawerGeometry.Rect> content = new ArrayList<DrawerGeometry.Rect>();
+        content.add(DrawerGeometry.portrait());
+        content.add(DrawerGeometry.descriptionPane());
+        for (int slot = 0; slot < DrawerGeometry.STRIP_VISIBLE_SLOTS; slot++) {
+            content.add(DrawerGeometry.stripSlot(slot, 0));
+        }
+        content.add(DrawerGeometry.stripScrollBar());
+        for (int index = 0; index < DrawerGeometry.EQUIP_GRID_COLS * DrawerGeometry.EQUIP_GRID_ROWS; index++) {
+            content.add(DrawerGeometry.equipSlot(index, 0));
+        }
+        content.add(DrawerGeometry.equipPreview());
+        for (DrawerGeometry.Rect part : content) {
+            assertThat(part.x()).as("内容件 %s 左缘 ≥ CONTENT_X", part).isGreaterThanOrEqualTo(DrawerGeometry.CONTENT_X);
+            assertThat(overlaps(handleLocal, part)).as("内容件 %s 不被把手压住", part).isFalse();
+        }
+        // 通栏例外：标题板在把手竖向范围之上（不被压）；两条分隔条不承载内容，从把手下方穿过
+        assertThat(DrawerGeometry.titlePlate().y()).isGreaterThanOrEqualTo(handleLocal.top());
+        assertThat(overlaps(handleLocal, DrawerGeometry.titlePlate())).isFalse();
+        assertThat(DrawerGeometry.dividerLower().x()).as("分隔条通栏（把手下穿过）").isEqualTo(DrawerGeometry.PADDING);
+        assertThat(DrawerGeometry.dividerUpper().x()).isEqualTo(DrawerGeometry.PADDING);
+        // 把手恰夹在两条分隔条之间（下分隔条底 ~ 上分隔条顶）
+        assertThat(DrawerGeometry.stripSection().y()).isEqualTo(DrawerGeometry.dividerLower().y());
+        assertThat(DrawerGeometry.stripSection().top()).isEqualTo(DrawerGeometry.dividerUpper().top());
     }
 
     // —— 头像条 / 装备槽（含滚动偏移） ——
@@ -192,14 +243,19 @@ class DrawerGeometryTest {
     // —— 把手 / 开合两态 ——
 
     @Test
-    @DisplayName("把手矩形贴左缘：x = 0、宽 14、高 72，垂直居中于抽屉，完整在视口内；把手位置不随开合进度移动")
+    @DisplayName("把手矩形贴左缘：x = 0、宽 14（素材源宽）；高 53 = 头像条分区等高对齐（九宫格纵向 72→53 收缩，≥ 上下帽和 24）；位置不随开合进度移动")
     void handleFlushWithLeftEdge() {
         DrawerGeometry.Rect handle = DrawerGeometry.handleRect();
         assertThat(handle.x()).isZero();
-        assertThat(handle.width()).isEqualTo(14);
-        assertThat(handle.height()).isEqualTo(72);
-        assertThat((float) handle.y() + handle.height() / 2f)
-                .as("把手中心 y = 抽屉中心 y").isCloseTo(DrawerGeometry.DRAWER_Y + DrawerGeometry.DRAWER_H / 2f, within(0.5f));
+        assertThat(handle.width()).isEqualTo(UiKeys.HANDLE.width());
+        assertThat(handle.height()).isEqualTo(DrawerGeometry.HANDLE_H);
+        // 取值依据：与头像条分区等高对齐（局部 78~131）
+        assertThat(handle.height()).isEqualTo(DrawerGeometry.stripSection().height());
+        assertThat(handle.y()).isEqualTo(DrawerGeometry.DRAWER_Y + DrawerGeometry.stripSection().y());
+        assertThat(handle.top()).isEqualTo(DrawerGeometry.DRAWER_Y + DrawerGeometry.stripSection().top());
+        // 九宫格纵向收缩不撕裂：目标高 ≥ 上下切分线和；且确为非原生高（拉伸/收缩生效）
+        assertThat(handle.height()).isGreaterThanOrEqualTo(UiKeys.HANDLE.top() + UiKeys.HANDLE.bottom());
+        assertThat(handle.height()).isNotEqualTo(UiKeys.HANDLE.height());
         assertThat(handle.y()).isPositive();
         assertThat(handle.top()).isLessThanOrEqualTo(BoardGeometry.VIRTUAL_H);
         assertThat(DrawerGeometry.handleRect(0.5f)).isEqualTo(handle); // 与进度无关
@@ -290,7 +346,7 @@ class DrawerGeometryTest {
     // —— 九宫格拉伸安全（对照真素材像素核验结论） ——
 
     @Test
-    @DisplayName("九宫格目标尺寸 ≥ 切分线和（不压扁四角）；标签页/把手/关闭钮按素材原生尺寸绘制（真图饰纹跨中段，拉伸会变形）")
+    @DisplayName("九宫格拉伸安全：目标尺寸 ≥ 切分线和（不压扁四角）；标签页 32×30 纵向拉伸（18→30）、把手 14×53 纵向收缩（72→53）均走九宫格；关闭钮按规格不拉伸")
     void ninePatchTargetsNeverShrinkBelowSplits() {
         assertThat(UiKeys.PANEL_BODY.left() + UiKeys.PANEL_BODY.right()).isLessThanOrEqualTo(DrawerGeometry.DRAWER_W);
         assertThat(UiKeys.PANEL_BODY.top() + UiKeys.PANEL_BODY.bottom()).isLessThanOrEqualTo(DrawerGeometry.DRAWER_H);
@@ -308,15 +364,20 @@ class DrawerGeometryTest {
         DrawerGeometry.Rect divider = DrawerGeometry.dividerLower();
         assertThat(divider.width()).isGreaterThanOrEqualTo(UiKeys.DIVIDER_H.left() + UiKeys.DIVIDER_H.right());
         assertThat(divider.height()).isEqualTo(UiKeys.DIVIDER_H.height());
-        // 原生尺寸件：标签页 32×18（M05/M06 左端饰纹跨切分中段——不拉伸）、把手 14×72（M09 拉槽跨中段）
-        assertThat(DrawerGeometry.tabInfo().width()).isEqualTo(UiKeys.TAB_ACTIVE.width());
-        assertThat(DrawerGeometry.tabInfo().height()).isEqualTo(UiKeys.TAB_ACTIVE.height());
-        assertThat(DrawerGeometry.tabEquip().width()).isEqualTo(UiKeys.TAB_INACTIVE.width());
-        assertThat(DrawerGeometry.tabEquip().height()).isEqualTo(UiKeys.TAB_INACTIVE.height());
+        // 标签页（M05/M06 返修后中段可拉伸）：横向原生宽 32、纵向 18→30
+        for (DrawerGeometry.Rect tab : new DrawerGeometry.Rect[]{DrawerGeometry.tabInfo(), DrawerGeometry.tabEquip()}) {
+            assertThat(tab.width()).isEqualTo(UiKeys.TAB_ACTIVE.width());
+            assertThat(tab.height()).isEqualTo(DrawerGeometry.TAB_H).isGreaterThan(UiKeys.TAB_ACTIVE.height());
+            assertThat(tab.width()).isGreaterThanOrEqualTo(UiKeys.TAB_ACTIVE.left() + UiKeys.TAB_ACTIVE.right());
+            assertThat(tab.height()).isGreaterThanOrEqualTo(UiKeys.TAB_ACTIVE.top() + UiKeys.TAB_ACTIVE.bottom());
+        }
+        // 把手（M09 返修后中段木纹可拉伸）：宽 14 原生（切分 0/0）、高 53 纵向收缩
         assertThat(DrawerGeometry.HANDLE_W).isEqualTo(UiKeys.HANDLE.width());
-        assertThat(DrawerGeometry.HANDLE_H).isEqualTo(UiKeys.HANDLE.height());
+        assertThat(DrawerGeometry.HANDLE_H).isNotEqualTo(UiKeys.HANDLE.height());
+        // 关闭钮：采购单规格「不拉伸」——原生 14×14
         assertThat(DrawerGeometry.CLOSE_W).isEqualTo(UiKeys.BTN_CLOSE.width());
         assertThat(DrawerGeometry.CLOSE_H).isEqualTo(UiKeys.BTN_CLOSE.height());
+        assertThat(UiKeys.BTN_CLOSE.isNinePatch()).isFalse();
     }
 
     @Test

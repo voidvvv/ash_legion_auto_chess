@@ -3,6 +3,8 @@ package com.voidvvv.kz_auto_chess_n.input;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import com.voidvvv.kz_auto_chess_n.command.CommandManager;
+import com.voidvvv.kz_auto_chess_n.command.MoveUnitCommand;
+import com.voidvvv.kz_auto_chess_n.command.PlacementTarget;
 import com.voidvvv.kz_auto_chess_n.command.RunContext;
 import com.voidvvv.kz_auto_chess_n.command.SellUnitCommand;
 import com.voidvvv.kz_auto_chess_n.data.BaseStats;
@@ -29,28 +31,75 @@ import java.util.LinkedHashMap;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 
 /**
- * 棋盘域输入测试（CP19）：⑦ 出售区拖拽终点 + 死区点击回调。
+ * 棋盘域输入测试（CP19）：⑦ 出售区拖拽终点 + 死区点击回调；UI 抽屉化批2：头像条替代 ② 的命中源切换。
  *
  * <p>viewport 注入恒等桩（屏幕坐标 == 虚拟坐标，仿 FitViewport 满屏 640×360 的 1:1 口径）
  * ——真 {@code Viewport.unproject} 依赖 Gdx.graphics（headless NPE），纯判定逻辑经桩零 Gdx 覆盖。
+ * 备战席命中源 = {@link DrawerHitTest} 桩（由抽屉实现；返回的槽号即 bench 下标）——
+ * 其后拖拽 / 出售 / 死区点击代码不变，既有断言按此迁移（测试数只增不减）。
  */
 class BoardInputProcessorTest {
 
-    /** 备战席槽 0 中心（BoardGeometry.benchSlotCenter(0)） */
+    /** 头像条槽 0（= 备战席槽 0）中心（屏幕坐标；恒等 viewport 下与旧 benchSlotCenter(0) 同值——断言迁移） */
     private static final int BENCH0_X = 38;
     private static final int BENCH0_Y = 68;
+    /** 头像条槽 2 中心（同排右移 40px，不与槽 0 的死区重叠） */
+    private static final int BENCH2_X = BENCH0_X + 40;
+    private static final int BENCH2_Y = BENCH0_Y;
     /** ⑦ 出售区中心 */
     private static final int SELL_X = BoardGeometry.SELL_ZONE_X + BoardGeometry.SELL_ZONE_W / 2;
     private static final int SELL_Y = BoardGeometry.SELL_ZONE_Y + BoardGeometry.SELL_ZONE_H / 2;
 
     /** 恒等 viewport 桩：unproject 原样返回（纯 Java 零 Gdx） */
-    private static final class IdentityViewport extends Viewport {
+    private static class IdentityViewport extends Viewport {
         @Override
         public Vector2 unproject(Vector2 screenCoords) {
             return screenCoords;
         }
+    }
+
+    /**
+     * 抽屉命中桩：屏幕点 (BENCH0) → 槽 0、(BENCH2) → 槽 2，其余 -1；
+     * {@code open = false} 模拟抽屉收起（同一屏幕位置不再命中）；记录收到的屏幕坐标与滚轮步数。
+     */
+    private static final class FakeDrawerHitTest implements DrawerHitTest {
+        boolean open = true;
+        int lastScreenX = Integer.MIN_VALUE;
+        int lastScreenY = Integer.MIN_VALUE;
+        int scrollSteps;
+
+        @Override
+        public int stripSlotAt(int screenX, int screenY) {
+            lastScreenX = screenX;
+            lastScreenY = screenY;
+            if (!open) {
+                return -1;
+            }
+            if (screenX == BENCH0_X && screenY == BENCH0_Y) {
+                return 0;
+            }
+            if (screenX == BENCH2_X && screenY == BENCH2_Y) {
+                return 2;
+            }
+            return -1;
+        }
+
+        @Override
+        public boolean scrollStrip(int screenX, int screenY, int steps) {
+            boolean over = stripSlotAt(screenX, screenY) >= 0;
+            if (over) {
+                scrollSteps += steps;
+            }
+            return over;
+        }
+    }
+
+    /** 每个用例独享一个桩（可变状态不跨用例泄漏） */
+    private static FakeDrawerHitTest hit() {
+        return new FakeDrawerHitTest();
     }
 
     // —— 夹具（口径对齐 RosterSystemTest） ——
@@ -87,7 +136,7 @@ class BoardInputProcessorTest {
         CommandManager manager = new CommandManager();
         new com.voidvvv.kz_auto_chess_n.systems.RosterSystem().registerHandlers(manager);
         BoardInputProcessor processor = new BoardInputProcessor(new IdentityViewport(), manager,
-                () -> ctx, () -> false);
+                () -> ctx, () -> false, null, hit());
 
         assertThat(processor.touchDown(BENCH0_X, BENCH0_Y, 0, 0)).isTrue();
         assertThat(processor.touchDragged(SELL_X, SELL_Y, 0)).isTrue();
@@ -106,7 +155,7 @@ class BoardInputProcessorTest {
         RunContext ctx = shoppingContext();
         CommandManager manager = new CommandManager();
         BoardInputProcessor processor = new BoardInputProcessor(new IdentityViewport(), manager,
-                () -> ctx, () -> false);
+                () -> ctx, () -> false, null, hit());
 
         assertThat(processor.isDropOnSellZone()).isFalse(); // 未拖拽
         assertThat(processor.touchDown(BENCH0_X, BENCH0_Y, 0, 0)).isTrue();
@@ -128,7 +177,7 @@ class BoardInputProcessorTest {
         CommandManager manager = new CommandManager();
         final List<Integer> clicks = new ArrayList<Integer>();
         BoardInputProcessor processor = new BoardInputProcessor(new IdentityViewport(), manager,
-                () -> ctx, () -> false, clicks::add);
+                () -> ctx, () -> false, clicks::add, hit());
 
         assertThat(processor.touchDown(BENCH0_X, BENCH0_Y, 0, 0)).isTrue();
         assertThat(processor.touchDragged(BENCH0_X + 7, BENCH0_Y + 4, 0)).isTrue(); // 位移 8px < 死区 20px
@@ -140,12 +189,12 @@ class BoardInputProcessorTest {
     }
 
     @Test
-    @DisplayName("四参构造（无监听）死区松手：不炸、零命令（存量 BattleScreen 调用点兼容）")
+    @DisplayName("无点击监听 + 抽屉命中：头像格上死区松手不炸、零命令（点击监听可缺省，命中源不可缺省）")
     void deadZoneReleaseWithoutListenerKeepsSilent() {
         RunContext ctx = shoppingContext();
         CommandManager manager = new CommandManager();
         BoardInputProcessor processor = new BoardInputProcessor(new IdentityViewport(), manager,
-                () -> ctx, () -> false);
+                () -> ctx, () -> false, null, hit());
 
         assertThat(processor.touchDown(BENCH0_X, BENCH0_Y, 0, 0)).isTrue();
         assertThat(processor.touchUp(BENCH0_X, BENCH0_Y, 0, 0)).isTrue();
@@ -161,7 +210,7 @@ class BoardInputProcessorTest {
     void mouseMovedTracksHoverCandidate() {
         RunContext ctx = shoppingContext();
         BoardInputProcessor processor = new BoardInputProcessor(new IdentityViewport(),
-                new CommandManager(), () -> ctx, () -> false);
+                new CommandManager(), () -> ctx, () -> false, null, hit());
 
         assertThat(processor.mouseMoved(BENCH0_X, BENCH0_Y)).isFalse(); // 不消费：uiStage 照常收
         assertThat(processor.getHoverCandidate().kind()).isEqualTo(HoverCandidate.Kind.PLAYER_UNIT);
@@ -176,7 +225,7 @@ class BoardInputProcessorTest {
     void draggingSuppressesHoverCandidate() {
         RunContext ctx = shoppingContext();
         BoardInputProcessor processor = new BoardInputProcessor(new IdentityViewport(),
-                new CommandManager(), () -> ctx, () -> false);
+                new CommandManager(), () -> ctx, () -> false, null, hit());
 
         assertThat(processor.touchDown(BENCH0_X, BENCH0_Y, 0, 0)).isTrue();
         assertThat(processor.touchDragged(SELL_X, SELL_Y, 0)).isTrue(); // 出死区成拖拽
@@ -189,7 +238,7 @@ class BoardInputProcessorTest {
     void modalBlockSuppressesHoverCandidate() {
         RunContext ctx = shoppingContext();
         BoardInputProcessor processor = new BoardInputProcessor(new IdentityViewport(),
-                new CommandManager(), () -> ctx, () -> true);
+                new CommandManager(), () -> ctx, () -> true, null, hit());
 
         assertThat(processor.mouseMoved(BENCH0_X, BENCH0_Y)).isFalse();
         assertThat(processor.getHoverCandidate().isNone()).isTrue();
@@ -200,7 +249,7 @@ class BoardInputProcessorTest {
     void resultPhaseSuppressesHoverCandidate() {
         RunContext ctx = shoppingContext();
         BoardInputProcessor processor = new BoardInputProcessor(new IdentityViewport(),
-                new CommandManager(), () -> ctx, () -> false);
+                new CommandManager(), () -> ctx, () -> false, null, hit());
 
         processor.mouseMoved(BENCH0_X, BENCH0_Y); // 备战期悬停命中
         assertThat(processor.getHoverCandidate().kind()).isEqualTo(HoverCandidate.Kind.PLAYER_UNIT);
@@ -215,7 +264,7 @@ class BoardInputProcessorTest {
     void removedUnitInvalidatesHoverCandidate() {
         RunContext ctx = shoppingContext();
         BoardInputProcessor processor = new BoardInputProcessor(new IdentityViewport(),
-                new CommandManager(), () -> ctx, () -> false);
+                new CommandManager(), () -> ctx, () -> false, null, hit());
 
         processor.mouseMoved(BENCH0_X, BENCH0_Y);
         assertThat(processor.getHoverCandidate().kind()).isEqualTo(HoverCandidate.Kind.PLAYER_UNIT);
@@ -237,7 +286,7 @@ class BoardInputProcessorTest {
                 new WaveSpec(ghostB, 1, 1f, 2, 1), // 与 ghostA 同格：取第一个
                 new WaveSpec(ghostB, 1, 1f, 4, 0)));
         BoardInputProcessor processor = new BoardInputProcessor(new IdentityViewport(),
-                new CommandManager(), () -> ctx, () -> false);
+                new CommandManager(), () -> ctx, () -> false, null, hit());
 
         int[] ghostCell = BoardGeometry.cellCenter(2, 1);
         assertThat(processor.mouseMoved(ghostCell[0], ghostCell[1])).isFalse();
@@ -261,7 +310,7 @@ class BoardInputProcessorTest {
         player.deploy(deployed, 3, 5);
         ctx.getRunState().setEnemyWave(Arrays.asList(new WaveSpec(tpl("ghost_a"), 1, 1f, 3, 5))); // 越界口径防御：虚影不落玩家区
         BoardInputProcessor processor = new BoardInputProcessor(new IdentityViewport(),
-                new CommandManager(), () -> ctx, () -> false);
+                new CommandManager(), () -> ctx, () -> false, null, hit());
 
         int[] cell = BoardGeometry.cellCenter(3, 5);
         processor.mouseMoved(cell[0], cell[1]);
@@ -277,7 +326,7 @@ class BoardInputProcessorTest {
                 BattleTestFixtures.unit(9, Side.PLAYER, tpl("ally9"), 1, 4),
                 BattleTestFixtures.unit(10, Side.ENEMY, tpl("foe10"), 2, 1)));
         BoardInputProcessor processor = new BoardInputProcessor(new IdentityViewport(),
-                new CommandManager(), () -> ctx, () -> false);
+                new CommandManager(), () -> ctx, () -> false, null, hit());
 
         int[] allyCell = BoardGeometry.cellCenter(1, 4);
         processor.mouseMoved(allyCell[0], allyCell[1]);
@@ -306,7 +355,7 @@ class BoardInputProcessorTest {
         BattleUnit foe = BattleTestFixtures.unit(10, Side.ENEMY, tpl("foe10"), 2, 1);
         ctx.setBattleState(BattleTestFixtures.state(foe));
         BoardInputProcessor processor = new BoardInputProcessor(new IdentityViewport(),
-                new CommandManager(), () -> ctx, () -> false);
+                new CommandManager(), () -> ctx, () -> false, null, hit());
 
         int[] cell = BoardGeometry.cellCenter(2, 1);
         processor.mouseMoved(cell[0], cell[1]);
@@ -322,8 +371,146 @@ class BoardInputProcessorTest {
         RunContext ctx = shoppingContext();
         ctx.getRunState().setPhase(GamePhase.BATTLE); // 未 setBattleState
         BoardInputProcessor processor = new BoardInputProcessor(new IdentityViewport(),
-                new CommandManager(), () -> ctx, () -> false);
+                new CommandManager(), () -> ctx, () -> false, null, hit());
 
+        processor.mouseMoved(BENCH0_X, BENCH0_Y);
+        assertThat(processor.getHoverCandidate().isNone()).isTrue();
+    }
+
+    // —— UI 抽屉化批2：头像条替代 ②——命中源切换（DrawerHitTest 注入；其后拖拽/出售/死区点击代码不动） ——
+
+    @Test
+    @DisplayName("点在头像格上起手拖拽 → 落玩家区格：入队 MoveUnitCommand(Cell) 且 handler 真实执行（棋子离席上场）")
+    void stripSlotDragDeploysToBoard() {
+        RunContext ctx = shoppingContext();
+        CommandManager manager = new CommandManager();
+        new com.voidvvv.kz_auto_chess_n.systems.RosterSystem().registerHandlers(manager);
+        BoardInputProcessor processor = new BoardInputProcessor(new IdentityViewport(), manager,
+                () -> ctx, () -> false, null, hit());
+        int[] cell = BoardGeometry.cellCenter(2, 4);
+
+        assertThat(processor.touchDown(BENCH0_X, BENCH0_Y, 0, 0)).isTrue();
+        assertThat(processor.isDragFromBench()).as("未出死区还不算拖拽").isFalse();
+        assertThat(processor.touchDragged(cell[0], cell[1], 0)).isTrue();
+        assertThat(processor.isDragging()).isTrue();
+        assertThat(processor.isDragFromBench()).as("源在头像条（bench）").isTrue();
+        assertThat(processor.getDropPreview()).isInstanceOf(PlacementTarget.Cell.class);
+        assertThat(((PlacementTarget.Cell) processor.getDropPreview()).gridX).isEqualTo(2);
+        assertThat(((PlacementTarget.Cell) processor.getDropPreview()).gridY).isEqualTo(4);
+        assertThat(processor.touchUp(cell[0], cell[1], 0, 0)).isTrue();
+
+        manager.executeAll(ctx);
+        assertThat(manager.getHistory()).hasSize(1);
+        assertThat(manager.getHistory().get(0).getCommand()).isInstanceOf(MoveUnitCommand.class);
+        assertThat(ctx.getPlayer().getBench()).isEmpty();
+        assertThat(ctx.getPlayer().deployedAt(2, 4).getId()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("拖下：场上棋子拖到头像格 → MoveUnitCommand(Bench(slot))，落点预览为 Bench；空槽下标超出席长由名单层钳制追加")
+    void boardUnitDraggedOntoStripSlotReturnsToBench() {
+        RunContext ctx = shoppingContext(); // 备战席已有 1 号棋子
+        Player player = ctx.getPlayer();
+        Unit benchUnit = player.getBench().get(0);
+        Unit deployed = new Unit(2, tpl("u2"), 1); // 与席上棋子不同 id
+        player.addToBench(deployed);
+        player.deploy(deployed, 3, 5);
+        CommandManager manager = new CommandManager();
+        new com.voidvvv.kz_auto_chess_n.systems.RosterSystem().registerHandlers(manager);
+        BoardInputProcessor processor = new BoardInputProcessor(new IdentityViewport(), manager,
+                () -> ctx, () -> false, null, hit());
+        int[] cell = BoardGeometry.cellCenter(3, 5);
+
+        assertThat(processor.touchDown(cell[0], cell[1], 0, 0)).isTrue();
+        assertThat(processor.touchDragged(BENCH2_X, BENCH2_Y, 0)).isTrue();
+        assertThat(processor.isDragFromBench()).as("源在棋盘").isFalse();
+        assertThat(processor.getDropPreview()).isInstanceOf(PlacementTarget.Bench.class);
+        assertThat(((PlacementTarget.Bench) processor.getDropPreview()).slotIndex).isEqualTo(2);
+        assertThat(processor.touchUp(BENCH2_X, BENCH2_Y, 0, 0)).isTrue();
+
+        manager.executeAll(ctx);
+        assertThat(manager.getHistory().get(0).getCommand()).isInstanceOf(MoveUnitCommand.class);
+        assertThat(player.deployedAt(3, 5)).isNull();
+        assertThat(player.getBench()).as("下标 2 > 席长 1 → 钳制追加到末位").containsExactly(benchUnit, deployed);
+    }
+
+    @Test
+    @DisplayName("抽屉收起时同一屏幕位置不起手：命中桩返回 -1 → touchDown 不消费、无拖拽、无悬停候选")
+    void collapsedDrawerDoesNotStartDrag() {
+        RunContext ctx = shoppingContext();
+        FakeDrawerHitTest hit = hit();
+        hit.open = false;
+        BoardInputProcessor processor = new BoardInputProcessor(new IdentityViewport(), new CommandManager(),
+                () -> ctx, () -> false, null, hit);
+
+        assertThat(processor.touchDown(BENCH0_X, BENCH0_Y, 0, 0)).isFalse();
+        assertThat(processor.touchDragged(SELL_X, SELL_Y, 0)).isFalse();
+        assertThat(processor.touchUp(SELL_X, SELL_Y, 0, 0)).isFalse();
+        assertThat(processor.isDragging()).isFalse();
+        assertThat(processor.isDragFromBench()).isFalse();
+        processor.mouseMoved(BENCH0_X, BENCH0_Y);
+        assertThat(processor.getHoverCandidate().isNone()).isTrue();
+    }
+
+    @Test
+    @DisplayName("跨域换算用屏幕坐标（R2）：世界域 viewport 非恒等（×1.3）时抽屉命中桩收到屏幕坐标，棋盘域落点仍走 unproject 后的世界坐标")
+    void drawerHitTestReceivesScreenCoordsNotWorldCoords() {
+        RunContext ctx = shoppingContext();
+        FakeDrawerHitTest hit = hit();
+        Viewport scaling = new IdentityViewport() {
+            @Override
+            public Vector2 unproject(Vector2 screenCoords) {
+                return screenCoords.scl(1.3f);
+            }
+        };
+        BoardInputProcessor processor = new BoardInputProcessor(scaling, new CommandManager(),
+                () -> ctx, () -> false, null, hit);
+
+        assertThat(processor.touchDown(BENCH0_X, BENCH0_Y, 0, 0)).isTrue();
+        assertThat(hit.lastScreenX).isEqualTo(BENCH0_X);
+        assertThat(hit.lastScreenY).isEqualTo(BENCH0_Y);
+        processor.touchDragged(BENCH0_X + 40, BENCH0_Y + 30, 0); // 出死区（世界域位移 > 20px）
+        assertThat(processor.isDragging()).isTrue();
+        assertThat(processor.getDragVirtualX()).isCloseTo((BENCH0_X + 40) * 1.3f, within(1e-3f));
+        assertThat(processor.getDragVirtualY()).isCloseTo((BENCH0_Y + 30) * 1.3f, within(1e-3f));
+        processor.mouseMoved(BENCH0_X, BENCH0_Y);
+        assertThat(hit.lastScreenX).as("悬停路径同样传屏幕坐标").isEqualTo(BENCH0_X);
+    }
+
+    @Test
+    @DisplayName("滚轮接头像条：指针在头像格上 → 传给抽屉并消费（向下滚 = 看后面的槽）；指针在别处或无命中接口 → 不消费")
+    void wheelOverStripScrollsDrawer() {
+        RunContext ctx = shoppingContext();
+        FakeDrawerHitTest hit = hit();
+        BoardInputProcessor processor = new BoardInputProcessor(new IdentityViewport(), new CommandManager(),
+                () -> ctx, () -> false, null, hit);
+
+        processor.mouseMoved(BENCH0_X, BENCH0_Y);
+        assertThat(processor.scrolled(0f, -1f)).isTrue();
+        assertThat(hit.scrollSteps).isEqualTo(1);
+        assertThat(processor.scrolled(0f, 1f)).isTrue();
+        assertThat(hit.scrollSteps).as("反向一步抵消").isZero();
+        assertThat(processor.scrolled(0f, 0f)).as("零滚动量不消费").isFalse();
+
+        processor.mouseMoved(400, 60);
+        assertThat(processor.scrolled(0f, -1f)).isFalse();
+        assertThat(hit.scrollSteps).isZero();
+
+        BoardInputProcessor legacy = new BoardInputProcessor(new IdentityViewport(), new CommandManager(),
+                () -> ctx, () -> false);
+        legacy.mouseMoved(BENCH0_X, BENCH0_Y);
+        assertThat(legacy.scrolled(0f, -1f)).as("未注入抽屉：恒不消费（原口径）").isFalse();
+    }
+
+    @Test
+    @DisplayName("旧备战席世界域矩形退役：未注入 DrawerHitTest 时点在原 ② 矩形内不再起手、无悬停候选（命中源只剩抽屉）")
+    void legacyBenchRectNoLongerHitsWithoutDrawer() {
+        RunContext ctx = shoppingContext();
+        BoardInputProcessor processor = new BoardInputProcessor(new IdentityViewport(), new CommandManager(),
+                () -> ctx, () -> false);
+
+        assertThat(BoardGeometry.pixelToBenchSlot(BENCH0_X, BENCH0_Y)).as("旧函数仍在（去留待批4裁决）").isEqualTo(0);
+        assertThat(processor.touchDown(BENCH0_X, BENCH0_Y, 0, 0)).isFalse();
         processor.mouseMoved(BENCH0_X, BENCH0_Y);
         assertThat(processor.getHoverCandidate().isNone()).isTrue();
     }

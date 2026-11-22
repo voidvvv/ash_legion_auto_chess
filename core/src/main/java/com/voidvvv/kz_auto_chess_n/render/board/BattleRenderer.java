@@ -89,17 +89,17 @@ public final class BattleRenderer {
      * @param input       棋盘域输入（ghost 与落点高亮只读暴露；可为 null）
      */
     public void draw(SpriteBatch batch, RunContext ctx, float alpha, float renderClock, float dt,
-                     BoardInputProcessor input, float benchOffsetX, float chromeFadeAlpha) {
+                     BoardInputProcessor input, float chromeFadeAlpha) {
         syncBattleScope(ctx);
         batch.begin();
         drawGrid(batch);
         floatSlot = 0;
         if (ctx.getRunState().getPhase() == GamePhase.SHOPPING || ctx.getBattleState() == null) {
-            drawShopping(batch, ctx, benchOffsetX, chromeFadeAlpha);
+            drawShopping(batch, ctx, chromeFadeAlpha);
             drawDropOverlay(batch, ctx, input);
         } else {
             if (chromeFadeAlpha > 0f) { // 开战转场窗口：备战层 chrome 随姿态退场（render §5.6；K5 不画部署帧）
-                drawShoppingChrome(batch, ctx, benchOffsetX, chromeFadeAlpha);
+                drawShoppingChrome(batch, ctx, chromeFadeAlpha);
             }
             drawBattle(batch, ctx, alpha, renderClock, dt);
         }
@@ -163,11 +163,11 @@ public final class BattleRenderer {
         return PLAYER_ZONE_TINT;
     }
 
-    // —— 备战期：② 备战席 + 玩家部署 + 敌阵预览（侦察，口径 #25） ——
+    // —— 备战期：玩家部署 + 敌阵预览（侦察，口径 #25）；② 备战席已迁入 UI 抽屉头像条（UI 抽屉化批2） ——
 
-    /** 备战层总入口：chrome（②⑦提示虚影，随转场姿态）+ 玩家部署帧（随淡出系数；转场期由 UnitView 接管不画——K5） */
-    private void drawShopping(SpriteBatch batch, RunContext ctx, float benchOffsetX, float chromeFadeAlpha) {
-        drawShoppingChrome(batch, ctx, benchOffsetX, chromeFadeAlpha);
+    /** 备战层总入口：chrome（⑦ 提示虚影，随转场姿态）+ 玩家部署帧（随淡出系数；转场期由 UnitView 接管不画——K5） */
+    private void drawShopping(SpriteBatch batch, RunContext ctx, float chromeFadeAlpha) {
+        drawShoppingChrome(batch, ctx, chromeFadeAlpha);
         Player player = ctx.getPlayer();
         for (int y = 4; y <= 6; y++) {
             for (int x = 0; x < GameBalance.BOARD_COLS; x++) {
@@ -182,24 +182,11 @@ public final class BattleRenderer {
         }
     }
 
-    /** 备战层 chrome：② 备战席（槽 + 席上棋子，左滑位移）+ 敌阵虚影（淡出=实体化一拍）+ ⑦ 出售区 + 布阵提示（淡出） */
-    private void drawShoppingChrome(SpriteBatch batch, RunContext ctx, float benchOffsetX, float chromeFadeAlpha) {
-        TextureRegion panel = assets.region(PlaceholderKeys.PANEL_9SLICE);
-        for (int slot = 0; slot < GameBalance.BENCH_SIZE; slot++) {
-            int[] center = BoardGeometry.benchSlotCenter(slot);
-            batch.setColor(0.5f, 0.48f, 0.45f, 0.8f);
-            batch.draw(panel, center[0] - BoardGeometry.BENCH_SLOT_W / 2f + benchOffsetX,
-                    center[1] - BoardGeometry.BENCH_SLOT_H / 2f,
-                    BoardGeometry.BENCH_SLOT_W, BoardGeometry.BENCH_SLOT_H);
-        }
-        batch.setColor(com.badlogic.gdx.graphics.Color.WHITE);
-        List<Unit> bench = ctx.getPlayer().getBench();
-        for (int slot = 0; slot < bench.size(); slot++) {
-            int[] center = BoardGeometry.benchSlotCenter(slot);
-            drawUnitFrame(batch, bench.get(slot).getTemplate().getId(),
-                    PlaceholderKeys.ANIM_IDLE, 0, (int) (center[0] + benchOffsetX), center[1],
-                    false, 1f, bench.get(slot).getStar(), SideColors.PLAYER);
-        }
+    /**
+     * 备战层 chrome：敌阵虚影（淡出=实体化一拍）+ ⑦ 出售区 + 布阵提示（淡出）。
+     * ② 备战席槽 + 席上棋子的世界域绘制已退役（UI 抽屉化批2：由 DrawerPanel 头像条接管，备战席不再左滑）。
+     */
+    private void drawShoppingChrome(SpriteBatch batch, RunContext ctx, float chromeFadeAlpha) {
         for (WaveSpec spec : ctx.getRunState().getEnemyWave()) { // 敌阵侦察虚影（红框 + 半透明，P1b；转场随层淡出；恒 1★ 骨白）
             int[] center = BoardGeometry.cellCenter(spec.getGridX(), spec.getGridY());
             drawUnitFrame(batch, spec.getTemplate().getId(), PlaceholderKeys.ANIM_IDLE, 0,
@@ -334,23 +321,14 @@ public final class BattleRenderer {
         return HitShakeAxis.resolve(attacker.virtualX(renderClock), targetX, event.getTargetId());
     }
 
-    /** 占位单位帧绘制（中心定位；enemyFace = 水平翻转；star 星级色 tint；border 敌我色框，null 不画；alpha 整体透明度） */
+    /** 占位单位帧绘制（中心定位；enemyFace = 水平翻转；star 星级色 tint；border 敌我色框，null 不画；alpha 整体透明度）。
+     *  帧本体委托 {@link UnitFramePainter}（UI 抽屉化批2：与抽屉头像格 / 立绘共用同一套取帧-翻转-tint-还原） */
     private void drawUnitFrame(SpriteBatch batch, String unitId, String anim, int frame,
                                int cx, int cy, boolean enemyFace, float alpha, int star,
                                com.badlogic.gdx.graphics.Color border) {
-        TextureRegion region = assets.region(PlaceholderKeys.unitFrame(unitId, anim, frame));
-        boolean wasFlip = region.isFlipX();
-        if (enemyFace != wasFlip) {
-            region.flip(true, false); // 用后即还（region 共享，铁律：不残留状态）
-        }
-        com.badlogic.gdx.graphics.Color tint = StarColors.of(star);
-        batch.setColor(tint.r, tint.g, tint.b, alpha);
-        batch.draw(region, cx - BoardGeometry.CELL / 2f, cy - BoardGeometry.CELL / 2f,
-                BoardGeometry.CELL, BoardGeometry.CELL);
-        batch.setColor(com.badlogic.gdx.graphics.Color.WHITE);
-        if (region.isFlipX() != wasFlip) {
-            region.flip(true, false); // 还原
-        }
+        UnitFramePainter.draw(batch, assets, unitId, anim, frame,
+                cx - BoardGeometry.CELL / 2f, cy - BoardGeometry.CELL / 2f, BoardGeometry.CELL,
+                enemyFace, alpha, StarColors.of(star));
         if (border != null) {
             SideColors.drawBorder(batch, assets.region(PlaceholderKeys.WHITE), cx, cy, border);
         }
@@ -379,12 +357,7 @@ public final class BattleRenderer {
                     BoardGeometry.BOARD_Y + BoardGeometry.BOARD_H - (cell.gridY + 1) * BoardGeometry.CELL,
                     BoardGeometry.CELL, BoardGeometry.CELL);
         } else if (preview instanceof com.voidvvv.kz_auto_chess_n.command.PlacementTarget.Bench) {
-            int slot = ((com.voidvvv.kz_auto_chess_n.command.PlacementTarget.Bench) preview).slotIndex;
-            int[] center = BoardGeometry.benchSlotCenter(slot);
-            batch.setColor(DROP_OK_TINT);
-            batch.draw(white, center[0] - BoardGeometry.BENCH_SLOT_W / 2f,
-                    center[1] - BoardGeometry.BENCH_SLOT_H / 2f,
-                    BoardGeometry.BENCH_SLOT_W, BoardGeometry.BENCH_SLOT_H);
+            // 备战席落点高亮已随 ② 迁入抽屉：由 DrawerPanel 在头像格上叠选中框（世界域无备战席可画）
         } else {
             int[] cell = BoardGeometry.pixelToCell((int) input.getDragVirtualX(), (int) input.getDragVirtualY());
             if (cell != null) { // 悬停棋盘但非法行（敌区/缓冲带）：红高亮

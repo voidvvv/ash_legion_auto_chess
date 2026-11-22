@@ -211,20 +211,10 @@ public final class BattleScreen implements Screen {
         this.inputCatcher = new Actor(); // 无绘制；空 ClickListener 即消费点击（ResultBanner.ClickCatcher 先例）
         this.inputCatcher.setSize(BoardGeometry.VIRTUAL_W, BoardGeometry.VIRTUAL_H);
         this.inputCatcher.addListener(new ClickListener());
-        this.transitionController = new BattleTransitionController(
-                worldCamera, shopBar, shoppingHud, battleHud, inventoryPanel, inputCatcher);
-        this.chestDialog = new ChestDialog(commandManager, assets, data);
-        this.unitDetailDialog = new UnitDetailDialog(commandManager, assets, contextSupplier(),
-                new UnitDetailDialog.CloseListener() {
-                    @Override
-                    public void onCloseRequested() {
-                        closeDialog(unitDetailDialog);
-                    }
-                });
-        this.pauseMenuDialog = new PauseMenuDialog(commandManager, assets, dialogManager);
-        // UI 抽屉装配（UI 抽屉化批1）：面板挂不缩放层（Q8）；开/合请求一律经控制器，转场封禁位在此合流（§3.8）
+        // UI 抽屉装配（批1 骨架 / 批2 备战席迁入）：面板挂不缩放层（Q8）；其主体接替 ③ 参数位随转场淡出，
+        // 故面板先于转场控制器构造。开/合请求一律经控制器，转场封禁位在回调处合流（§3.8）
         this.unscaledLayer = new UnscaledLayer(GameBalance.RENDER_GLOBAL_SCALE);
-        this.drawerPanel = new DrawerPanel(assets, new DrawerPanel.Listener() {
+        this.drawerPanel = new DrawerPanel(assets, contextSupplier(), uiStage.getViewport(), new DrawerPanel.Listener() {
             @Override
             public void onToggleRequested() {
                 drawerController.requestToggle(transitionController.isInputBlocked());
@@ -236,6 +226,19 @@ public final class BattleScreen implements Screen {
             }
         });
         this.unscaledLayer.addActor(drawerPanel);
+        // 退场距离 = 抽屉滑动距离（246 ≥ 抽屉宽 244；③ 时代写死 140 会滑不干净）
+        this.transitionController = new BattleTransitionController(
+                worldCamera, shopBar, shoppingHud, battleHud, drawerPanel.bodyActor(), inputCatcher,
+                DrawerGeometry.SLIDE_PX);
+        this.chestDialog = new ChestDialog(commandManager, assets, data);
+        this.unitDetailDialog = new UnitDetailDialog(commandManager, assets, contextSupplier(),
+                new UnitDetailDialog.CloseListener() {
+                    @Override
+                    public void onCloseRequested() {
+                        closeDialog(unitDetailDialog);
+                    }
+                });
+        this.pauseMenuDialog = new PauseMenuDialog(commandManager, assets, dialogManager);
         this.drawerOutsideTouch = new DrawerOutsideTouchProcessor(uiStage.getViewport(),
                 new DrawerOutsideTouchProcessor.Host() {
                     @Override
@@ -355,19 +358,19 @@ public final class BattleScreen implements Screen {
                         return dialogManager.isShowing() || transitionController.isInputBlocked();
                     }
                 },
-                new java.util.function.IntConsumer() { // 死区点击：装备待定落点 / 详情弹窗
+                new java.util.function.IntConsumer() { // 死区点击：装备待定落点 / 抽屉选中
                     @Override
                     public void accept(int unitId) {
                         if (equipPending.hasPending()) {
                             commandManager.addCommand(new EquipItemCommand(
                                     equipPending.pendingItemId(), unitId));
                             equipPending.clear();
-                        } else {
-                            unitDetailDialog.showUnit(unitId);
-                            dialogManager.push(unitDetailDialog);
+                        } else { // Q5（UI 抽屉化批2）：点棋子 = 抽屉选中并展开——详情弹窗由抽屉「介绍」页取代
+                            drawerPanel.select(unitId);
+                            drawerController.requestOpen(transitionController.isInputBlocked());
                         }
                     }
-                });
+                }, drawerPanel); // 备战席命中源（UI 抽屉化批2：抽屉头像条替代 ② 世界域矩形；滚轮路由同此）
         // 四层 multiplexer（input §2.2）：dialogStage > uiStage > boardProcessor > keyProcessor；
         // 抽屉外点击观察者夹在 dialogStage 与 uiStage 之间——永不吃事件（透传），只多「看见」一遍
         InputMultiplexer multiplexer = new InputMultiplexer();
@@ -390,10 +393,14 @@ public final class BattleScreen implements Screen {
                         && runContext.getBattleState().isIntroCountdownActive()
                         ? runContext.getBattleState().getIntroRemaining() : 0f,
                 frozen ? 0f : delta);
-        // UI 抽屉（批1 骨架）：相位跳变强制收起（Q6 开战随转场退场）→ 冻结感知推进（dt 传 0 不走）→ 落位
+        // UI 抽屉：相位跳变强制收起（Q6 开战随转场退场）+ 从抽屉往外拖棋子时让位（Q2：强制收起、松手后保持收起）
+        // → 冻结感知推进（dt 传 0 不走）；落位在 applyUiPose 之后（见下）
         drawerController.syncPhase(phase);
+        boolean dragFromBench = boardProcessor != null && boardProcessor.isDragFromBench();
+        if (dragFromBench) {
+            drawerController.collapse();
+        }
         drawerController.update(frozen ? 0f : delta);
-        drawerPanel.apply(drawerController.progress());
         if (!frozen) {
             stepSimulation(delta);
             renderClock += delta;
@@ -404,7 +411,7 @@ public final class BattleScreen implements Screen {
         worldViewport.apply();
         batch.setProjectionMatrix(worldCamera.combined);
         battleRenderer.draw(batch, runContext, alpha, renderClock, frozen ? 0f : delta, boardProcessor,
-                transitionController.benchOffsetX(), transitionController.chromeFadeAlpha());
+                transitionController.chromeFadeAlpha()); // ② 备战席世界域绘制已退役（批2）：不再传备战席左滑位移
         if (phase == GamePhase.RUN_END && !runEndSettled) { // 档案结算每局一次（裁决 D11）
             runEndSettled = true;
             ProfileService.Settlement settlement = metaService.settleRun(data, runContext);
@@ -424,7 +431,14 @@ public final class BattleScreen implements Screen {
         if (phase == GamePhase.SHOPPING) {
             shopBar.refresh(runContext);
         }
-        transitionController.applyUiPose(); // 转场姿态覆写（⑥⑧HUD③ + Catcher；稳态归零不越权——K7）
+        transitionController.applyUiPose(); // 转场姿态覆写（⑥⑧HUD + 抽屉主体 + Catcher；稳态归零不越权——K7）
+        // 抽屉落位须在转场姿态之后：applyUiPose 先写淡出透明度/位移，此处按开合进度定最终位姿与可见性；
+        // 让位淡到三成、拖拽落点高亮头像格、绑定备战席（只读）
+        drawerPanel.setDimmed(dragFromBench);
+        drawerPanel.setDropTarget(boardProcessor != null && boardProcessor.isDragging()
+                ? boardProcessor.getDropPreview() : null);
+        drawerPanel.refresh();
+        drawerPanel.apply(drawerController.progress());
         inventoryPanel.refresh(); // ⑤⑨ 全程可见（BATTLE 置灰在各自 draw 内，差异声明 #8）；③ 稳态可见性归转场驱动器（K7）
         synergyPanel.refresh(runContext);
         notificationPanel.refresh(runContext);

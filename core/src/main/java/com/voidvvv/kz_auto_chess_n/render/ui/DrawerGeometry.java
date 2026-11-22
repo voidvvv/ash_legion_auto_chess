@@ -11,9 +11,15 @@ package com.voidvvv.kz_auto_chess_n.render.ui;
  * </ul>
  *
  * <p><b>全部常量待主人实机核对后可校准</b>（Q10：界面坐标镜像漂移另案处理，本次一律按实机落点 y-up 写）。
- * 内部预算沿 UI_PLAN §3.2 甲案示意（内边距 6，自下而上 装备区 / 头像条 / 信息区）；
- * 与示意的两处差异：① 标签页取素材原生 32×18（M05/M06 左端饰纹跨九宫格中段，拉伸会变形——描述框因此
- * 取 128 宽而非示意的 124）；② 把手 / 关闭钮 / 标签页不拉伸。
+ * 内部预算沿 UI_PLAN §3.2 甲案示意（内边距 6，自下而上 装备区 / 头像条 / 信息区），并按实机核验做过两处修订：
+ * <ol>
+ *   <li><b>内容列让开把手</b>（批2）：把手是常驻左缘的竖木牌（舞台 x 0~14），展开时压在面板左缘上；
+ *       头像槽 / 立绘 / 滚动条等会放内容的件一律自 {@link #CONTENT_X} 起（把手右缘 + 2px 间隙），
+ *       否则首槽棋子左侧 4px 被把手盖住。标题板与分隔条仍通栏（它们不承载可点内容，从把手下方穿过）。</li>
+ *   <li><b>标签页与把手走九宫格拉伸</b>（批2·素材返修后撤掉原生尺寸对策）：标签 32×30（横向原生宽、纵向 18→30，
+ *       两枚竖排正好填满 64 高信息行）；把手纵向取 {@link #HANDLE_H}（与头像条分区等高对齐，见常量注释）。
+ *       方案示意的「描述 124 + 标签 36」因内容列让位（232→224）改为「描述 120 + 标签 32」——9px 小字下列数不变（12 列）。</li>
+ * </ol>
  *
  * <p>开合进度 progress ∈ [0,1]：0 = 收起（主体完全出屏）、1 = 展开。
  */
@@ -31,16 +37,14 @@ public final class DrawerGeometry {
     public static final int DRAWER_H = 218;
     /** 滑动距离 = 左缘 + 宽：收起态主体右缘恰为 0（完全出屏不露边） */
     public static final int SLIDE_PX = DRAWER_X + DRAWER_W;
-    /** 左缘竖把手：宽/高 = 素材源尺寸（M09 14×72，原生绘制不拉伸），x = 0 贴屏幕左边 */
+    /** 左缘竖把手宽 = 素材源宽（M09 14；横向切分 0/0 不拉伸），x = 0 贴屏幕左边 */
     public static final int HANDLE_W = 14;
-    public static final int HANDLE_H = 72;
-    /** 收起态「后备 n/9」小角标（Q2）：把手右上；54 宽容 12px 字「后备 -/9」= 48px + 左右各 3px */
-    public static final int BADGE_W = 54;
-    public static final int BADGE_H = 16;
 
     // —— 内部预算（抽屉局部坐标；y 向上） ——
 
     public static final int PADDING = 6;
+    /** 把手与内容的间隙 */
+    public static final int HANDLE_GAP = 2;
     /** 分隔条（M11 24×4，横向拉伸到内宽） */
     public static final int DIVIDER_H = 4;
     /** 信息区：标题板 14 高 + 立绘/描述行 64 高 */
@@ -49,11 +53,10 @@ public final class DrawerGeometry {
     /** Q11：立绘 = 单位 idle 帧放大 2 倍（64px） */
     public static final int PORTRAIT_W = 64;
     public static final int PORTRAIT_H = 64;
-    public static final int DESC_W = 128;
-    /** 标签页：素材原生 32×18（不拉伸），竖排两枚、间隙 2 */
+    /** 标签页：源 32×18 九宫格——横向取原生宽、纵向拉伸到 30（两枚 + 4px 间隙 = 64 高信息行） */
     public static final int TAB_W = 32;
-    public static final int TAB_H = 18;
-    public static final int TAB_GAP = 2;
+    public static final int TAB_H = 30;
+    public static final int TAB_GAP = 4;
     /** Q4：头像条可见 6 槽 × 34（槽内放 32px 单位帧原尺寸），间距 4 */
     public static final int STRIP_VISIBLE_SLOTS = 6;
     public static final int STRIP_SLOT = 34;
@@ -65,9 +68,12 @@ public final class DrawerGeometry {
     public static final int EQUIP_GRID_ROWS = 2;
     public static final int EQUIP_SLOT = 34;
     public static final int EQUIP_GAP = 4;
-    /** 关闭钮：素材原生 14×14（不拉伸） */
+    /** 关闭钮：采购单规格「不拉伸」，源 14×14 */
     public static final int CLOSE_W = 14;
     public static final int CLOSE_H = 14;
+    /** 收起态「后备 n/9」小角标（Q2）：把手右上；54 容 12px 字「后备 -/9」= 48px + 左右各 3px */
+    public static final int BADGE_W = 54;
+    public static final int BADGE_H = 16;
 
     // —— 纵向标尺（自下而上；局部 y） ——
     private static final int EQUIP_Y = PADDING;                                   // 6
@@ -78,6 +84,24 @@ public final class DrawerGeometry {
     private static final int DIVIDER_UPPER_Y = STRIP_Y + STRIP_SLOT;               // 127
     private static final int INFO_ROW_Y = DIVIDER_UPPER_Y + DIVIDER_H + 1;         // 132
     private static final int TITLE_Y = DRAWER_H - PADDING - TITLE_H;               // 198
+
+    /** 头像条分区（下分隔条底 ~ 上分隔条顶）的局部起止——把手与之等高对齐 */
+    private static final int STRIP_SECTION_Y = DIVIDER_LOWER_Y;                    // 78
+    private static final int STRIP_SECTION_TOP = DIVIDER_UPPER_Y + DIVIDER_H;      // 131
+
+    /** 内容列左缘 = 把手占到的局部右缘（HANDLE_W − DRAWER_X）+ 间隙：把手竖向范围内的内容件一律自此起 */
+    public static final int CONTENT_X = (HANDLE_W - DRAWER_X) + HANDLE_GAP;        // 14
+    /** 内容列宽（到底内边） */
+    public static final int CONTENT_W = DRAWER_W - PADDING - CONTENT_X;            // 224
+    /** 描述框宽 = 内容列 − 立绘 64 − 两道间距 − 标签 32 */
+    public static final int DESC_W = CONTENT_W - PORTRAIT_W - 2 * STRIP_GAP - TAB_W; // 120
+
+    /**
+     * 把手高（九宫格纵向拉伸/收缩，M09 源 72，切分 0/0/12/12）。
+     * 取值依据：<b>与它所展开的头像条分区等高并对齐</b>（局部 y 78~131）——把手在语义上「拉出的是备战席」，
+     * 收起态与头像条落在同一竖带，展开后也恰好夹在两条分隔条之间；高度 53 ≥ 上下帽之和 24，中段木纹收缩不撕裂。
+     */
+    public static final int HANDLE_H = STRIP_SECTION_TOP - STRIP_SECTION_Y;        // 53
 
     private DrawerGeometry() {
     }
@@ -165,8 +189,7 @@ public final class DrawerGeometry {
 
     /** 把手舞台矩形（常驻左缘，不随进度移动；重载仅为调用方语义清晰） */
     public static Rect handleRect() {
-        int y = DRAWER_Y + (DRAWER_H - HANDLE_H) / 2;
-        return new Rect(0, y, HANDLE_W, HANDLE_H);
+        return new Rect(0, DRAWER_Y + STRIP_SECTION_Y, HANDLE_W, HANDLE_H);
     }
 
     /** 同 {@link #handleRect()}（进度无关——签名对齐 {@link #drawerRect(float)} 便于调用方统一传进度） */
@@ -199,28 +222,26 @@ public final class DrawerGeometry {
         return new Rect(local.x() + bodyX(progress), local.y() + DRAWER_Y, local.width(), local.height());
     }
 
-    // —— 三分区（抽屉局部坐标；自下而上 装备区 / 头像条 / 信息区，相邻共边、互不压叠） ——
+    // —— 三分区（抽屉局部坐标；自下而上 装备区 / 头像条 / 信息区，相邻共边、互不压叠；均自内容列起） ——
 
     /** 上段·信息区：上分隔条之上到顶内边（标题板 + 立绘/描述/标签行） */
     public static Rect infoSection() {
-        return new Rect(PADDING, DIVIDER_UPPER_Y + DIVIDER_H, DRAWER_W - 2 * PADDING,
-                DRAWER_H - PADDING - (DIVIDER_UPPER_Y + DIVIDER_H));
+        return new Rect(CONTENT_X, STRIP_SECTION_TOP, CONTENT_W, DRAWER_H - PADDING - STRIP_SECTION_TOP);
     }
 
     /** 中段·头像条：下分隔条之上到上分隔条之上（两条分隔条归本段；含滚动条与槽行） */
     public static Rect stripSection() {
-        return new Rect(PADDING, DIVIDER_LOWER_Y, DRAWER_W - 2 * PADDING,
-                DIVIDER_UPPER_Y + DIVIDER_H - DIVIDER_LOWER_Y);
+        return new Rect(CONTENT_X, STRIP_SECTION_Y, CONTENT_W, STRIP_SECTION_TOP - STRIP_SECTION_Y);
     }
 
     /** 下段·装备区：底内边到装备网格顶（装备网格 + 大图预览） */
     public static Rect equipSection() {
-        return new Rect(PADDING, EQUIP_Y, DRAWER_W - 2 * PADDING, EQUIP_H);
+        return new Rect(CONTENT_X, EQUIP_Y, CONTENT_W, EQUIP_H);
     }
 
     // —— 信息区部件 ——
 
-    /** 标题板（棋子名）：通栏内宽 × 14 */
+    /** 标题板（棋子名）：通栏内宽 × 14（在把手竖向范围之上，可通栏） */
     public static Rect titlePlate() {
         return new Rect(PADDING, TITLE_Y, DRAWER_W - 2 * PADDING, TITLE_H);
     }
@@ -230,22 +251,22 @@ public final class DrawerGeometry {
         return new Rect(DRAWER_W - PADDING - CLOSE_W, TITLE_Y + TITLE_H - CLOSE_H, CLOSE_W, CLOSE_H);
     }
 
-    /** 立绘位：左下角起 64×64（Q11） */
+    /** 立绘位：内容列左下角起 64×64（Q11） */
     public static Rect portrait() {
-        return new Rect(PADDING, INFO_ROW_Y, PORTRAIT_W, PORTRAIT_H);
+        return new Rect(CONTENT_X, INFO_ROW_Y, PORTRAIT_W, PORTRAIT_H);
     }
 
-    /** 描述框：立绘右侧 128×64（介绍 / 装备两标签页的内容区） */
+    /** 描述框：立绘右侧（介绍 / 装备两标签页的内容区） */
     public static Rect descriptionPane() {
         return new Rect(portrait().right() + STRIP_GAP, INFO_ROW_Y, DESC_W, INFO_ROW_H);
     }
 
-    /** 「介绍」标签（上） */
+    /** 「介绍」标签（上）：32×30（九宫格纵向拉伸），贴描述框右侧、右缘齐内边 */
     public static Rect tabInfo() {
         return new Rect(DRAWER_W - PADDING - TAB_W, tabEquip().top() + TAB_GAP, TAB_W, TAB_H);
     }
 
-    /** 「装备」标签（下）：在信息行内垂直居中于两标签整体 */
+    /** 「装备」标签（下）：两标签整体在信息行内垂直居中（30 + 4 + 30 = 64） */
     public static Rect tabEquip() {
         int blockH = 2 * TAB_H + TAB_GAP;
         return new Rect(DRAWER_W - PADDING - TAB_W, INFO_ROW_Y + (INFO_ROW_H - blockH) / 2, TAB_W, TAB_H);
@@ -260,23 +281,19 @@ public final class DrawerGeometry {
      */
     public static Rect stripSlot(int slot, int scrollPx) {
         int pitch = STRIP_SLOT + STRIP_GAP;
-        int blockW = STRIP_VISIBLE_SLOTS * STRIP_SLOT + (STRIP_VISIBLE_SLOTS - 1) * STRIP_GAP;
-        int x0 = PADDING + (DRAWER_W - 2 * PADDING - blockW) / 2;
-        return new Rect(x0 + slot * pitch - scrollPx, STRIP_Y, STRIP_SLOT, STRIP_SLOT);
+        return new Rect(CONTENT_X + slot * pitch - scrollPx, STRIP_Y, STRIP_SLOT, STRIP_SLOT);
     }
 
-    /** 头像条横向滚动条轨（槽行正下方；通头像条宽） */
+    /** 头像条横向滚动条轨（槽行正下方；与 6 槽等宽 = 内容列宽） */
     public static Rect stripScrollBar() {
-        Rect first = stripSlot(0, 0);
-        int w = STRIP_VISIBLE_SLOTS * STRIP_SLOT + (STRIP_VISIBLE_SLOTS - 1) * STRIP_GAP;
-        return new Rect(first.x(), SCROLL_Y, w, STRIP_SCROLL_H);
+        return new Rect(CONTENT_X, SCROLL_Y, CONTENT_W, STRIP_SCROLL_H);
     }
 
     // —— 装备区 ——
 
     /** 装备网格外框（3 列 × 2 行可见） */
     public static Rect equipGrid() {
-        return new Rect(PADDING, EQUIP_Y,
+        return new Rect(CONTENT_X, EQUIP_Y,
                 EQUIP_GRID_COLS * EQUIP_SLOT + (EQUIP_GRID_COLS - 1) * EQUIP_GAP,
                 EQUIP_GRID_ROWS * EQUIP_SLOT + (EQUIP_GAP));
     }
@@ -302,7 +319,7 @@ public final class DrawerGeometry {
                 DRAWER_W - PADDING - (grid.right() + 2 * EQUIP_GAP), EQUIP_H);
     }
 
-    // —— 分隔条 ——
+    // —— 分隔条（通栏：不承载内容，从把手下方穿过） ——
 
     /** 下分隔条（装备区 ↔ 头像条） */
     public static Rect dividerLower() {

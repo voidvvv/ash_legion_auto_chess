@@ -28,6 +28,8 @@ class DrawerPanelDrawTest {
     private static final class RecordingHandler implements java.lang.reflect.InvocationHandler {
         final List<String> calls = new ArrayList<String>();
         final List<Color> colors = new ArrayList<Color>();
+        /** 四浮点 setColor(r,g,b,a) 的 a 分量序列 */
+        final List<Float> alphas = new ArrayList<Float>();
 
         @Override
         public Object invoke(Object proxy, java.lang.reflect.Method method, Object[] args) {
@@ -35,6 +37,9 @@ class DrawerPanelDrawTest {
             if ("setColor".equals(method.getName()) && args != null && args.length == 1
                     && args[0] instanceof Color) {
                 colors.add((Color) args[0]);
+            }
+            if ("setColor".equals(method.getName()) && args != null && args.length == 4) {
+                alphas.add((Float) args[3]);
             }
             Class<?> type = method.getReturnType();
             if (type == boolean.class) {
@@ -52,15 +57,14 @@ class DrawerPanelDrawTest {
     }
 
     @Test
-    @DisplayName("整图绘制调用序：置白 → draw → 还原白（不继承同批次内前序 Actor 泄漏的 tint）")
+    @DisplayName("整图绘制调用序：置白(alpha) → draw → 还原白（不继承同批次内前序 Actor 泄漏的 tint）")
     void regionDrawSetsWhiteBeforeAndAfter() {
         RecordingHandler handler = new RecordingHandler();
         Batch batch = recordingBatch(handler);
-        DrawerPanel.drawRegion(batch, new TextureRegion(), 2f, 88f, 14f, 72f);
+        DrawerPanel.drawRegion(batch, new TextureRegion(), 2f, 88f, 14f, 72f, 1f);
         assertThat(handler.calls).containsExactly("setColor", "draw", "setColor");
-        assertThat(handler.colors).hasSize(2);
-        assertThat(handler.colors.get(0)).isEqualTo(Color.WHITE);
-        assertThat(handler.colors.get(1)).isEqualTo(Color.WHITE);
+        assertThat(handler.alphas).as("进入：四浮点 setColor，alpha=1").containsExactly(1f);
+        assertThat(handler.colors).as("离开：setColor(Color.WHITE)").containsExactly(Color.WHITE);
     }
 
     @Test
@@ -68,10 +72,58 @@ class DrawerPanelDrawTest {
     void patchDrawUsesTheSameUntintedGuards() {
         RecordingHandler handler = new RecordingHandler();
         Batch batch = recordingBatch(handler);
-        DrawerPanel.beginUntinted(batch);
+        DrawerPanel.beginUntinted(batch, 1f);
         DrawerPanel.endUntinted(batch);
         assertThat(handler.calls).containsExactly("setColor", "setColor");
-        assertThat(handler.colors).containsExactly(Color.WHITE, Color.WHITE);
+        assertThat(handler.alphas).containsExactly(1f);
+        assertThat(handler.colors).containsExactly(Color.WHITE);
+    }
+
+    @Test
+    @DisplayName("透明度透传：让位三成 / 转场淡出经 alpha 入参进批次色（0.3），画毕仍还原白")
+    void alphaPassesThroughUntintedGuards() {
+        RecordingHandler handler = new RecordingHandler();
+        Batch batch = recordingBatch(handler);
+        DrawerPanel.drawRegion(batch, new TextureRegion(), 0f, 0f, 1f, 1f, DrawerPanel.DIM_ALPHA);
+        assertThat(handler.calls).containsExactly("setColor", "draw", "setColor");
+        assertThat(handler.alphas).containsExactly(DrawerPanel.DIM_ALPHA);
+        assertThat(handler.colors).containsExactly(Color.WHITE);
+        assertThat(DrawerPanel.DIM_ALPHA).isEqualTo(0.3f);
+    }
+
+    @Test
+    @DisplayName("让位透明度合成规则：让位期间逐帧压到 0.3（即使转场稳态刚把它写回 1）；退出让位那帧还原 1；其余帧保留转场淡出值")
+    void bodyAlphaResolveRule() {
+        // 进入让位（上一帧未让位；转场稳态刚写了 1）
+        assertThat(DrawerPanel.resolveBodyAlpha(1f, true, false)).isEqualTo(0.3f);
+        // 让位持续：转场稳态每帧归 1 → 仍压回 0.3
+        assertThat(DrawerPanel.resolveBodyAlpha(1f, true, true)).isEqualTo(0.3f);
+        // 退出让位：还原 1（下一帧起交还转场姿态）
+        assertThat(DrawerPanel.resolveBodyAlpha(0.3f, false, true)).isEqualTo(1f);
+        // 非让位稳态 / 转场窗内：原值透传（淡出 1−p 不被覆盖）
+        assertThat(DrawerPanel.resolveBodyAlpha(0.42f, false, false)).isEqualTo(0.42f);
+        assertThat(DrawerPanel.resolveBodyAlpha(1f, false, false)).isEqualTo(1f);
+    }
+
+    @Test
+    @DisplayName("文字行顶居中规则（libGDX BitmapFont.draw 的 y 是行顶、向下延伸）：标题板/标签/角标内 12px 字行框完整落在盒内且上下留白相等")
+    void centeredTextTopKeepsLineBoxInsideBox() {
+        DrawerGeometry.Rect title = DrawerGeometry.titlePlate();
+        float titleTop = DrawerPanel.centeredTextTop(title.y(), title.height(), 12f);
+        assertThat(titleTop - 12f).isGreaterThanOrEqualTo(title.y());
+        assertThat(titleTop).isLessThanOrEqualTo(title.y() + title.height());
+        for (DrawerGeometry.Rect tab : new DrawerGeometry.Rect[]{DrawerGeometry.tabInfo(), DrawerGeometry.tabEquip()}) {
+            float top = DrawerPanel.centeredTextTop(tab.y(), tab.height(), 12f);
+            assertThat(top - 12f - tab.y()).as("标签下留白").isEqualTo(tab.y() + tab.height() - top);
+            assertThat(top - 12f).isGreaterThanOrEqualTo(tab.y());
+            assertThat(top).isLessThanOrEqualTo(tab.y() + tab.height());
+        }
+        DrawerGeometry.Rect badge = DrawerGeometry.badgeRect();
+        float badgeTop = DrawerPanel.centeredTextTop(badge.y(), badge.height(), 12f);
+        assertThat(badgeTop - 12f).isGreaterThanOrEqualTo(badge.y());
+        assertThat(badgeTop).isLessThanOrEqualTo(badge.y() + badge.height());
+        // 对照：批1 的基线摆法（y + 2）会让行框 [y−10, y+2] 大半落到盒外
+        assertThat(title.y() + 2f - 12f).isLessThan(title.y());
     }
 
     @Test

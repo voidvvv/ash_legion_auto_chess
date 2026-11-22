@@ -9,19 +9,22 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.within;
 
 /** 开战转场驱动器状态机测试（battle §二 / render §5.6；headless——Actor/OrthographicCamera 零 GL）。
  *  zoom 断言全部除以 RENDER_GLOBAL_SCALE（libGDX zoom = 可见世界 ÷ 画布：缩小 0.8 倍 ⇔ zoom ÷0.8，
  *  SHOPPING 稳态 1.06/0.8 = 1.325 / BATTLE 稳态 1/0.8 = 1.25——相对拉远差 6% 语义不变；
- *  回归修复 2026-11-21：初版误乘致世界放大 1.25、备战席/出售区出屏）。 */
+ *  回归修复 2026-11-21：初版误乘致世界放大 1.25、备战席/出售区出屏）。
+ *  UI 抽屉化批2：原「抽屉主体」参数位换成抽屉主体（DrawerPanel.body），退场距离参数化且必须 ≥ 抽屉宽——
+ *  ③ 时代的断言按此迁移（测试数只增不减）。 */
 class BattleTransitionControllerTest {
 
     private OrthographicCamera camera;
     private Actor shopBar;
     private Actor shoppingHud;
     private Actor battleHud;
-    private Actor inventoryPanel;
+    private Actor drawerBody;
     private Actor catcher;
     private BattleTransitionController controller;
 
@@ -31,10 +34,10 @@ class BattleTransitionControllerTest {
         shopBar = new Actor();
         shoppingHud = new Actor();
         battleHud = new Actor();
-        inventoryPanel = new Actor();
+        drawerBody = new Actor();
         catcher = new Actor();
         controller = new BattleTransitionController(
-                camera, shopBar, shoppingHud, battleHud, inventoryPanel, catcher);
+                camera, shopBar, shoppingHud, battleHud, drawerBody, catcher, DrawerGeometry.SLIDE_PX);
     }
 
     /** 按剩余秒数推进正向转场（每步 dt = LOGIC_STEP，模拟 step 门控递减） */
@@ -47,7 +50,7 @@ class BattleTransitionControllerTest {
     }
 
     @Test
-    @DisplayName("SHOPPING 稳态：zoom = 基准×1.06、chrome 全显、③ 可见、输入放行、Catcher 隐")
+    @DisplayName("SHOPPING 稳态：zoom = 基准×1.06、chrome 全显、抽屉主体可见、输入放行、Catcher 隐")
     void steadyShopping() {
         controller.update(GamePhase.SHOPPING, 0f, GameBalance.LOGIC_STEP);
         controller.applyUiPose();
@@ -57,7 +60,7 @@ class BattleTransitionControllerTest {
         assertThat(controller.chromeFadeAlpha()).isEqualTo(1f);
         assertThat(controller.isInputBlocked()).isFalse();
         assertThat(catcher.isVisible()).isFalse();
-        assertThat(inventoryPanel.isVisible()).isTrue();
+        assertThat(drawerBody.isVisible()).isTrue();
     }
 
     @Test
@@ -72,7 +75,7 @@ class BattleTransitionControllerTest {
         assertThat(catcher.isVisible()).isTrue();
         assertThat(shopBar.getY()).isLessThan(0f);                 // ⑧ 下滑离场中
         assertThat(battleHud.getY()).isGreaterThan(0f);            // HUD 上缘外下落中
-        assertThat(inventoryPanel.getX()).isLessThan(0f);          // ③ 左滑中
+        assertThat(drawerBody.getX()).isLessThan(0f);          // 抽屉主体左滑中
 
         runForward(GameBalance.BATTLE_INTRO_TRANSITION_SECONDS, 18); // 半程
         assertThat(camera.zoom)
@@ -125,7 +128,7 @@ class BattleTransitionControllerTest {
                 GameBalance.SHOPPING_CAMERA_ZOOM / GameBalance.RENDER_GLOBAL_SCALE, within(1e-6f));
         assertThat(controller.isInputBlocked()).isFalse();
         assertThat(controller.chromeFadeAlpha()).isEqualTo(1f);
-        assertThat(inventoryPanel.isVisible()).isTrue();
+        assertThat(drawerBody.isVisible()).isTrue();
     }
 
     @Test
@@ -155,15 +158,63 @@ class BattleTransitionControllerTest {
     }
 
     @Test
-    @DisplayName("③ 背包稳态可见性归驱动器（K7）：仅 SHOPPING 可见——BATTLE/RESULT 稳态隐藏")
-    void inventoryVisibleOnlyInSteadyShopping() {
+    @DisplayName("抽屉主体稳态可见性归驱动器（沿 ③ 时代 K7 口径）：仅 SHOPPING 可见——BATTLE/RESULT 稳态隐藏（装配点随后按开合进度覆写）")
+    void drawerBodyVisibleOnlyInSteadyShopping() {
         runForward(GameBalance.BATTLE_INTRO_TRANSITION_SECONDS, 36); // 正向播完 → BATTLE 稳态
-        assertThat(inventoryPanel.isVisible()).isFalse();
+        assertThat(drawerBody.isVisible()).isFalse();
         controller.update(GamePhase.RESULT, 0f, GameBalance.LOGIC_STEP);
         controller.applyUiPose();
-        assertThat(inventoryPanel.isVisible()).isFalse();
+        assertThat(drawerBody.isVisible()).isFalse();
         controller.update(GamePhase.SHOPPING, 0f, GameBalance.LOGIC_STEP);
         controller.applyUiPose();
-        assertThat(inventoryPanel.isVisible()).isTrue();
+        assertThat(drawerBody.isVisible()).isTrue();
+    }
+
+    // —— UI 抽屉化批2：退场距离参数化（原写死 140 < 抽屉宽，会滑不干净） ——
+
+    @Test
+    @DisplayName("退场距离校验：必须 ≥ 抽屉宽 244（小于即抛 IllegalArgumentException；等于放行）")
+    void drawerExitDistanceMustCoverDrawerWidth() {
+        assertThat(DrawerGeometry.SLIDE_PX).isEqualTo(DrawerGeometry.DRAWER_X + DrawerGeometry.DRAWER_W);
+        assertThat(controller.getDrawerSlidePx()).isEqualTo(DrawerGeometry.SLIDE_PX);
+        assertThat((float) DrawerGeometry.SLIDE_PX).isGreaterThan(GameBalance.BATTLE_TRANSITION_SLIDE_LEFT_PX);
+        assertThatExceptionOfType(IllegalArgumentException.class).isThrownBy(() -> new BattleTransitionController(
+                camera, shopBar, shoppingHud, battleHud, drawerBody, catcher, DrawerGeometry.DRAWER_W - 1));
+        new BattleTransitionController(camera, shopBar, shoppingHud, battleHud, drawerBody, catcher,
+                DrawerGeometry.DRAWER_W); // 等于抽屉宽：放行
+    }
+
+    @Test
+    @DisplayName("正向转场：抽屉主体按自身退场距离左滑并淡出——同进度位移 ≥ ⑥ 开战按钮（140 档），滑完 ≥ 抽屉宽不留残边")
+    void drawerBodyExitsByItsOwnDistance() {
+        controller.update(GamePhase.SHOPPING, 0f, 0f); // 预置 prevPhase
+        controller.update(GamePhase.BATTLE,
+                GameBalance.BATTLE_INTRO_TRANSITION_SECONDS - GameBalance.LOGIC_STEP, 0f);
+        controller.applyUiPose();
+        float p = 1f - (GameBalance.BATTLE_INTRO_TRANSITION_SECONDS - GameBalance.LOGIC_STEP)
+                / GameBalance.BATTLE_INTRO_TRANSITION_SECONDS;
+        assertThat(drawerBody.isVisible()).isTrue();
+        assertThat(drawerBody.getX()).isEqualTo(-Math.round(DrawerGeometry.SLIDE_PX * p));
+        int hudShift = Math.round(GameBalance.BATTLE_TRANSITION_SLIDE_LEFT_PX * p);
+        assertThat(-drawerBody.getX()).as("抽屉退场位移 ≥ ⑥ 位移").isGreaterThanOrEqualTo(hudShift);
+        assertThat(shoppingHud.getX()).isEqualTo(-hudShift);
+        assertThat(drawerBody.getColor().a).isLessThan(1f);
+
+        runForward(GameBalance.BATTLE_INTRO_TRANSITION_SECONDS, 36); // 播完
+        assertThat(drawerBody.getX()).isZero();   // 稳态归零
+        assertThat(drawerBody.getColor().a).isEqualTo(1f);
+    }
+
+    @Test
+    @DisplayName("反向转场：抽屉主体淡入归位（p: 0→1 透明度随之回升）")
+    void drawerBodyEntersOnReverse() {
+        controller.update(GamePhase.RESULT, 0f, GameBalance.LOGIC_STEP);
+        controller.update(GamePhase.SHOPPING, 0f, GameBalance.LOGIC_STEP);
+        controller.applyUiPose();
+        float p = 1f - (GameBalance.BATTLE_INTRO_TRANSITION_SECONDS - GameBalance.LOGIC_STEP)
+                / GameBalance.BATTLE_INTRO_TRANSITION_SECONDS;
+        assertThat(drawerBody.isVisible()).isTrue();
+        assertThat(drawerBody.getColor().a).isCloseTo(p, within(1e-4f));
+        assertThat(drawerBody.getX()).isEqualTo(-Math.round(DrawerGeometry.SLIDE_PX * (1f - p)));
     }
 }
