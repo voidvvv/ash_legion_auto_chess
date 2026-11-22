@@ -33,7 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 棋子文案格式化纯函数测试（Phase 5.1 CP1）：词表 / 档位数值行 / 羁绊查表 /
  * 悬停预览与详情行集 / 折行与卡高截断——零 Gdx 依赖，headless 直测。
  *
- * <p>夹具沿 {@link UnitDetailDialogTest} 手搓 GameData 先例；羁绊用带 desc 的 6 参构造
+ * <p>夹具沿手搓 GameData 先例（原 UnitDetailDialogTest，已退役）；羁绊用带 desc 的 6 参构造
  * （裁决 2：synergy 级 desc 手写 + 档位行由 thresholds/effects 生成，混合口径）。
  */
 class UnitInfoTextTest {
@@ -41,7 +41,7 @@ class UnitInfoTextTest {
     private static final String ORC_DESC = "焰痕部族的雇佣兵，越战越硬的正面铁壁";
     private static final String WARRIOR_DESC = "执旗卫队的老兵，以纪律与护甲结阵而战";
 
-    // —— 夹具（口径对齐 UnitDetailDialogTest） ——
+    // —— 夹具（手搓 GameData 口径） ——
 
     private static UnitData tpl(String id, String race, String unitClass) {
         return new UnitData(id, "夹具" + id, race, unitClass, 1,

@@ -31,7 +31,7 @@ import java.util.Objects;
  *   <li><b>「介绍」</b>：{@link UnitInfoText#detailLines} 折 12 列的<b>全量</b>行集，scene2d {@link ScrollPane}
  *       滚动（最长真实文案 23 行必须能滚到底——批3 硬验收，{@code DrawerTextCapacityTest}）；</li>
  *   <li><b>「装备」</b>：选中棋子当前三件（武器 / 盔甲 / 饰品），每件带「卸下」钮——{@link UnequipItemCommand}
- *       经 commandManager（原 UnitDetailDialog 卸下按钮逻辑迁入；Q6 仅备战期可写）。</li>
+ *       经 commandManager（原 UnitDetailDialog 卸下按钮逻辑迁入——该弹窗批4 退役；Q6 仅备战期可写）。</li>
  * </ul>
  * 选中棋子经 {@link #setUnit} 绑定（文案按 id/星/累计花费指纹缓存；卸下按钮按装备 id 序列指纹重建——
  * Scene2d ClickListener 要求 down/up 命中同一实例）。坐标 = 抽屉局部。
@@ -188,11 +188,11 @@ final class DrawerInfoSection extends Group {
 
     /**
      * 「装备」标签页：三行（武器 / 盔甲 / 饰品）文案 + 每件的卸下钮（{@link UnequipItemCommand}）。
-     * 钮实例只在装备 id 序列变化时重建（ClickListener 要求 down/up 命中同一实例——UnitDetailDialog 先例）。
+     * 钮实例只在装备 id 序列变化时重建（ClickListener 要求 down/up 命中同一实例——沿原 UnitDetailDialog 做法，该弹窗已退役）。
      */
     private final class EquipTabPane extends Group {
         private Unit unit;
-        /** 卸下按钮集的构建指纹（UnitDetailDialog 先例）：单位 id + 装备 id 序列——均未变则跳过重建 */
+        /** 卸下按钮集的构建指纹（DrawerSelection.fingerprintChanged）：单位 id + 装备 id 序列——均未变则跳过重建 */
         private int buttonUnitId = -1;
         private List<Integer> buttonEquipIds = new ArrayList<Integer>();
 
@@ -204,36 +204,13 @@ final class DrawerInfoSection extends Group {
         /** 绑定单位并按需重建卸下钮（指纹未变零分配） */
         void sync(Unit unit) {
             this.unit = unit;
-            if (sameButtons(unit)) {
+            if (!DrawerSelection.fingerprintChanged(buttonUnitId, buttonEquipIds, unit)) {
                 return; // 序列未变：保留现按钮实例
             }
-            List<Integer> ids = new ArrayList<Integer>();
-            if (unit != null) {
-                for (Equipment item : unit.getEquipped()) {
-                    ids.add(item.getId());
-                }
-            }
             buttonUnitId = unit != null ? unit.getId() : -1;
-            buttonEquipIds = ids;
+            buttonEquipIds = DrawerSelection.equippedIds(unit != null ? unit.getEquipped()
+                    : java.util.Collections.<Equipment>emptyList());
             rebuildButtons();
-        }
-
-        /** 指纹比对（零分配）：单位 id 同且装备 id 序列逐位相等 */
-        private boolean sameButtons(Unit unit) {
-            int unitId = unit != null ? unit.getId() : -1;
-            if (unitId != buttonUnitId) {
-                return false;
-            }
-            List<Equipment> equipped = unit != null ? unit.getEquipped() : java.util.Collections.<Equipment>emptyList();
-            if (equipped.size() != buttonEquipIds.size()) {
-                return false;
-            }
-            for (int i = 0; i < equipped.size(); i++) {
-                if (equipped.get(i).getId() != buttonEquipIds.get(i)) {
-                    return false;
-                }
-            }
-            return true;
         }
 
         /** 移除旧卸下钮并按当前穿着序重建 */
@@ -247,7 +224,7 @@ final class DrawerInfoSection extends Group {
                 return;
             }
             for (final Equipment item : unit.getEquipped()) {
-                int row = rowOf(item.getTemplate().getSlot());
+                int row = DrawerSelection.rowOf(item.getTemplate().getSlot());
                 UnequipButton button = new UnequipButton(item);
                 DrawerGeometry.Rect r = DrawerGeometry.equipTabUnequipButton(row);
                 button.setPosition(r.x(), r.y());
@@ -281,17 +258,6 @@ final class DrawerInfoSection extends Group {
             }
             return null;
         }
-    }
-
-    /** 行号 ↔ 装备槽（row 0 = 武器，在上；沿 EquipmentSlot 声明序 WEAPON / ARMOR / TRINKET） */
-    static int rowOf(EquipmentSlot slot) {
-        EquipmentSlot[] values = EquipmentSlot.values();
-        for (int i = 0; i < values.length; i++) {
-            if (values[i] == slot) {
-                return i;
-            }
-        }
-        return values.length - 1;
     }
 
     /** 单件卸下钮（UnequipItem 命令路径，input §2.4；Q6 仅备战期可写） */

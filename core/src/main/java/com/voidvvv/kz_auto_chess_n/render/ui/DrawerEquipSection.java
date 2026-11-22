@@ -32,7 +32,7 @@ import java.util.Objects;
  *   <li><b>装备大图预览 + 装备描述</b>：预览目标 = 悬停槽的物品，否则待定物品；描述走 ScrollPane 可滚到底；</li>
  *   <li><b>写门控</b>（Q6）：仅备战期可点装备格（战斗期只读展开，悬停预览仍按归一规则抑制）。</li>
  * </ul>
- * 稀有度底色 / 待定高亮 / 槽位短标沿 InventoryPanel 写法；只读实体、零命令（穿戴走棋盘点击回调，卸下在信息区）。
+ * 稀有度底色 / 待定高亮 / 槽位短标沿原 InventoryPanel（已退役）写法；只读实体、零命令（穿戴走棋盘点击回调，卸下在信息区）。
  * 坐标 = 抽屉局部（本组位于主体原点）。
  */
 final class DrawerEquipSection extends Group {
@@ -124,17 +124,7 @@ final class DrawerEquipSection extends Group {
         }
         knob.place(track.y() + DrawerEquipScroll.knobOffsetY(track.height(), DrawerGeometry.EQUIP_KNOB, firstRow, boundCount),
                 track.x() + track.width() / 2f);
-        preview.setItem(hoveredItem != null ? hoveredItem
-                : pending.hasPending() ? inventoryItem(inventory, pending.pendingItemId()) : null);
-    }
-
-    private static Equipment inventoryItem(List<Equipment> inventory, int itemId) {
-        for (Equipment item : inventory) {
-            if (item.getId() == itemId) {
-                return item;
-            }
-        }
-        return null;
+        preview.setItem(DrawerEquipText.previewTarget(hoveredItem, inventory, pending.pendingItemId()));
     }
 
     private TextureRegion iconRegion(EquipmentSlot slot) {
@@ -182,7 +172,7 @@ final class DrawerEquipSection extends Group {
                     }
                 }
             });
-            addListener(new InputListener() { // 悬停槽位轨迹（沿 InventoryPanel/ShopBar 先例）
+            addListener(new InputListener() { // 悬停槽位轨迹（沿 ShopBar 先例；原 InventoryPanel 同法）
                 @Override
                 public void enter(InputEvent event, float x, float y, int pointer, Actor fromActor) {
                     hoveredVisible = visibleIndex;

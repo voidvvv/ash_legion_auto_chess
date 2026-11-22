@@ -441,6 +441,83 @@ class DrawerGeometryTest {
         assertThat(desc.height()).isEqualTo(DrawerGeometry.EQUIP_DESC_ZONE_H - 4);
     }
 
+    // —— UI 抽屉化批4：②③ 世界域几何退役后的断言迁移（自 BoardGeometryTest 的 bench×4 / inventory×2 用例迁入） ——
+
+    @Test
+    @DisplayName("头像条按 bench 下标映射（自 benchSlotRoundTrip/benchSlotsColumnMajor 迁入）：槽号即 bench 下标，x 按槽距递增、各槽中心落在自身矩形内、互不压叠")
+    void stripSlotsMapBenchIndexInOrder() {
+        List<DrawerGeometry.Rect> slots = new ArrayList<DrawerGeometry.Rect>();
+        for (int slot = 0; slot < GameBalance.BENCH_SIZE; slot++) {
+            slots.add(DrawerGeometry.stripSlot(slot, 0));
+        }
+        for (int slot = 0; slot < slots.size(); slot++) {
+            DrawerGeometry.Rect r = slots.get(slot);
+            assertThat(r.x()).as("槽 %d 左缘 = 内容列 + 槽距 × 下标", slot)
+                    .isEqualTo(DrawerGeometry.CONTENT_X + slot * (DrawerGeometry.STRIP_SLOT + DrawerGeometry.STRIP_GAP));
+            assertThat(r.contains(r.x() + r.width() / 2f, r.y() + r.height() / 2f)).as("槽 %d 含自身中心", slot).isTrue();
+            if (slot > 0) {
+                assertThat(overlaps(slots.get(slot - 1), r)).as("槽 %d 与前一槽不压叠", slot).isFalse();
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("头像条可见 6：滚动为 0 时第 7~9 槽在内容列右缘之外（不可见）；滚到底时前 3 槽在内容列左缘之外——9 槽全部可达（自 pixelToBenchSlotRejectsOutside 的界外语义迁入）")
+    void stripBeyondVisibleSlotsLieOutsideContentColumn() {
+        DrawerGeometry.Rect column = DrawerGeometry.stripSection();
+        int maxScroll = DrawerStripScroll.maxScroll(GameBalance.BENCH_SIZE);
+        for (int slot = DrawerGeometry.STRIP_VISIBLE_SLOTS; slot < GameBalance.BENCH_SIZE; slot++) {
+            assertThat(DrawerGeometry.stripSlot(slot, 0).x()).as("未滚动：槽 %d 在可见区外", slot)
+                    .isGreaterThanOrEqualTo(column.right());
+        }
+        int scrollPx = maxScroll * (DrawerGeometry.STRIP_SLOT + DrawerGeometry.STRIP_GAP); // 内容滚动量 = 首槽数 × 槽距
+        for (int slot = 0; slot < GameBalance.BENCH_SIZE; slot++) {
+            DrawerGeometry.Rect r = DrawerGeometry.stripSlot(slot, scrollPx);
+            if (slot < maxScroll) {
+                assertThat(r.right()).as("滚到底：槽 %d 已滚出左侧", slot).isLessThanOrEqualTo(column.x());
+            } else {
+                assertThat(inside(column, r)).as("滚到底：槽 %d 完整可见", slot).isTrue();
+            }
+        }
+        assertThat(maxScroll + DrawerGeometry.STRIP_VISIBLE_SLOTS).isEqualTo(GameBalance.BENCH_SIZE);
+    }
+
+    @Test
+    @DisplayName("装备网格接替 ③ 背包格（自 inventoryConstantsSelfConsistent/inventorySlotCenters 迁入）：3 列 × 2 行铺满网格；槽中心互异、行 0 在上、列距 = 槽 + 间距")
+    void equipSlotsReplaceInventorySlots() {
+        DrawerGeometry.Rect grid = DrawerGeometry.equipGrid();
+        assertThat(grid.width()).isEqualTo(DrawerGeometry.EQUIP_GRID_COLS * DrawerGeometry.EQUIP_SLOT
+                + (DrawerGeometry.EQUIP_GRID_COLS - 1) * DrawerGeometry.EQUIP_GAP);
+        assertThat(grid.height()).isEqualTo(DrawerGeometry.EQUIP_GRID_ROWS * DrawerGeometry.EQUIP_SLOT + DrawerGeometry.EQUIP_GAP);
+        java.util.Set<String> seen = new java.util.HashSet<String>();
+        for (int index = 0; index < DrawerGeometry.EQUIP_GRID_COLS * DrawerGeometry.EQUIP_GRID_ROWS; index++) {
+            DrawerGeometry.Rect r = DrawerGeometry.equipSlot(index, 0);
+            assertThat(inside(grid, r)).as("装备槽 %d 落在网格内", index).isTrue();
+            assertThat(seen.add(r.x() + "," + r.y())).as("槽 %d 位置互异", index).isTrue();
+        }
+        // 行 0 在上：槽 0 高于槽 3；换列步进一槽距（槽 + 间距）
+        assertThat(DrawerGeometry.equipSlot(0, 0).y()).isGreaterThan(DrawerGeometry.equipSlot(3, 0).top());
+        assertThat(DrawerGeometry.equipSlot(1, 0).x() - DrawerGeometry.equipSlot(0, 0).x())
+                .isEqualTo(DrawerGeometry.EQUIP_SLOT + DrawerGeometry.EQUIP_GAP);
+    }
+
+    @Test
+    @DisplayName("退役留痕：BoardGeometry 不再暴露 ②③ 的世界域命中/定位函数（防止旧矩形命中被重新接回）")
+    void retiredHitTestFunctionsRemoved() {
+        java.util.Set<String> names = new java.util.HashSet<String>();
+        for (java.lang.reflect.Method m : BoardGeometry.class.getDeclaredMethods()) {
+            names.add(m.getName());
+        }
+        assertThat(names).doesNotContain("benchSlotCenter", "pixelToBenchSlot", "inventorySlotCenter");
+    }
+
+    @Test
+    @DisplayName("退役前左列矩形样本（BENCH_* 保留用途）：右缘 128 = 棋盘悬停卡走廊左缘；不再出现在任何在屏元件清单里")
+    void retiredLeftColumnRectAnchorsHoverCorridor() {
+        assertThat(BoardGeometry.BENCH_X + BoardGeometry.BENCH_W).isEqualTo(BoardGeometry.BOARD_HOVER_X);
+        assertThat(BoardGeometry.BENCH_X).as("左列极端坐标样本（缩放公式锁引用）").isEqualTo(20);
+    }
+
     @Test
     @DisplayName("关闭钮落在标题板内、贴抽屉右上角，不越出抽屉")
     void closeButtonInsideTitlePlate() {

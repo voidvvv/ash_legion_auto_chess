@@ -28,7 +28,7 @@ import java.util.List;
  */
 public final class ChestDialog extends Group {
 
-    /** 选项底色（static final：渲染段零分配；传说金棕与 InventoryPanel 同源） */
+    /** 选项底色（static final：渲染段零分配；传说金棕沿原背包格口径——该面板批3 退役） */
     private static final Color TINT_LEGENDARY = new Color(0.55f, 0.42f, 0.12f, 1f);
     private static final Color TINT_DEFAULT = new Color(0.3f, 0.32f, 0.4f, 1f);
     /** feedback07 装备选项效果行：折行列宽 (120-14-2)/12 = 8；行容量 3（名行 y+46 之下 y+32/20/8） */

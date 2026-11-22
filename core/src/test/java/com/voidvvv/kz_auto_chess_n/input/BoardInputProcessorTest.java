@@ -43,7 +43,7 @@ import static org.assertj.core.api.Assertions.within;
  */
 class BoardInputProcessorTest {
 
-    /** 头像条槽 0（= 备战席槽 0）中心（屏幕坐标；恒等 viewport 下与旧 benchSlotCenter(0) 同值——断言迁移） */
+    /** 头像条槽 0（= 备战席槽 0）中心（屏幕坐标；恒等 viewport 下与退役前的旧备战席槽 0 中心同值——断言迁移） */
     private static final int BENCH0_X = 38;
     private static final int BENCH0_Y = 68;
     /** 头像条槽 2 中心（同排右移 40px，不与槽 0 的死区重叠） */
@@ -360,7 +360,7 @@ class BoardInputProcessorTest {
         assertThat(foe.isEnemy()).isTrue();
         assertThat(foe.template().getId()).isEqualTo("foe10");
 
-        int[] bench = BoardGeometry.benchSlotCenter(0); // 备战席在 BATTLE 非战斗单位域
+        int[] bench = {BENCH0_X, BENCH0_Y}; // 旧备战席矩形位置（BATTLE 非战斗单位域；世界域命中函数已于批4 退役）
         processor.mouseMoved(bench[0], bench[1]);
         assertThat(processor.getHoverCandidate().isNone()).isTrue();
     }
@@ -540,13 +540,12 @@ class BoardInputProcessorTest {
     }
 
     @Test
-    @DisplayName("旧备战席世界域矩形退役：未注入 DrawerHitTest 时点在原 ② 矩形内不再起手、无悬停候选（命中源只剩抽屉）")
+    @DisplayName("旧备战席世界域矩形退役：未注入 DrawerHitTest 时点在原 ② 矩形内不再起手、无悬停候选（命中源只剩抽屉；矩形命中函数已于批4 删除）")
     void legacyBenchRectNoLongerHitsWithoutDrawer() {
         RunContext ctx = shoppingContext();
         BoardInputProcessor processor = new BoardInputProcessor(new IdentityViewport(), new CommandManager(),
                 () -> ctx, () -> false);
 
-        assertThat(BoardGeometry.pixelToBenchSlot(BENCH0_X, BENCH0_Y)).as("旧函数仍在（去留待批4裁决）").isEqualTo(0);
         assertThat(processor.touchDown(BENCH0_X, BENCH0_Y, 0, 0)).isFalse();
         processor.mouseMoved(BENCH0_X, BENCH0_Y);
         assertThat(processor.getHoverCandidate().isNone()).isTrue();

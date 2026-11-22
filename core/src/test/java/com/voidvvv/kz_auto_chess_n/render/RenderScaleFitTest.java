@@ -27,11 +27,10 @@ class RenderScaleFitTest {
     @Test
     @DisplayName("缩放档位矩阵：s∈{0.7,0.8,0.9,1.0} 下可见世界矩形 ⊇ 全部 640×360 世界域元件")
     void worldElementsFitVisibleRectAtAllShrinkScales() {
-        // 世界域元件（BattleRenderer 经 worldCamera 绘制）：④ 棋盘 / ② 备战席 / ⑦ 出售区
+        // 世界域元件（BattleRenderer 经 worldCamera 绘制）：④ 棋盘 / ⑦ 出售区；② 备战席矩形 = 退役前左列极端坐标样本（③ 背包已迁抽屉，见 DrawerGeometryTest）
         int[][] elements = {
                 {BoardGeometry.BOARD_X, BoardGeometry.BOARD_Y, BoardGeometry.BOARD_W, BoardGeometry.BOARD_H},
                 {BoardGeometry.BENCH_X, BoardGeometry.BENCH_Y, BoardGeometry.BENCH_W, BoardGeometry.BENCH_H},
-                {BoardGeometry.INVENTORY_X, BoardGeometry.INVENTORY_Y, BoardGeometry.INVENTORY_W, BoardGeometry.INVENTORY_H},
                 {BoardGeometry.SELL_ZONE_X, BoardGeometry.SELL_ZONE_Y, BoardGeometry.SELL_ZONE_W, BoardGeometry.SELL_ZONE_H},
         };
         for (float scale : SHRINK_SCALES) {
@@ -112,10 +111,6 @@ class RenderScaleFitTest {
         assertThat(contains(visible,
                 BoardGeometry.BENCH_X, BoardGeometry.BENCH_Y, BoardGeometry.BENCH_W, BoardGeometry.BENCH_H))
                 .as("备战席完整可见").isTrue();
-        assertThat(contains(visible,
-                BoardGeometry.INVENTORY_X, BoardGeometry.INVENTORY_Y,
-                BoardGeometry.INVENTORY_W, BoardGeometry.INVENTORY_H))
-                .as("装备背包区完整可见").isTrue();
         assertThat(contains(visible,
                 BoardGeometry.SELL_ZONE_X, BoardGeometry.SELL_ZONE_Y,
                 BoardGeometry.SELL_ZONE_W, BoardGeometry.SELL_ZONE_H))

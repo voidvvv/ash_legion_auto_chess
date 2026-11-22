@@ -46,7 +46,6 @@ import com.voidvvv.kz_auto_chess_n.render.ui.ShoppingHud;
 import com.voidvvv.kz_auto_chess_n.render.ui.SynergyPanel;
 import com.voidvvv.kz_auto_chess_n.render.ui.TopBar;
 import com.voidvvv.kz_auto_chess_n.render.ui.UIDialogManager;
-import com.voidvvv.kz_auto_chess_n.render.ui.UnitDetailDialog;
 import com.voidvvv.kz_auto_chess_n.render.ui.UnscaledLayer;
 import com.voidvvv.kz_auto_chess_n.save.MetaService;
 import com.voidvvv.kz_auto_chess_n.save.ProfileService;
@@ -110,7 +109,6 @@ public final class BattleScreen implements Screen {
     private final NotificationPanel notificationPanel;
     private final HoverPreviewCard hoverPreview; // Phase 5.1 R1：悬停预览卡（uiStage 最上层瞬态）
     private final ChestDialog chestDialog;
-    private final UnitDetailDialog unitDetailDialog;
     private final PauseMenuDialog pauseMenuDialog;
     private BoardInputProcessor boardProcessor;
     /** UI 抽屉（UI 抽屉化批1·骨架：只画外观和开合、不绑数据；现有 ②③ 并存，批2/3 才迁）：
@@ -229,13 +227,6 @@ public final class BattleScreen implements Screen {
                 worldCamera, shopBar, shoppingHud, battleHud, drawerPanel.bodyActor(), inputCatcher,
                 DrawerGeometry.SLIDE_PX);
         this.chestDialog = new ChestDialog(commandManager, assets, data);
-        this.unitDetailDialog = new UnitDetailDialog(commandManager, assets, contextSupplier(),
-                new UnitDetailDialog.CloseListener() {
-                    @Override
-                    public void onCloseRequested() {
-                        closeDialog(unitDetailDialog);
-                    }
-                });
         this.pauseMenuDialog = new PauseMenuDialog(commandManager, assets, dialogManager);
         this.drawerOutsideTouch = new DrawerOutsideTouchProcessor(uiStage.getViewport(),
                 new DrawerOutsideTouchProcessor.Host() {
@@ -409,8 +400,10 @@ public final class BattleScreen implements Screen {
         float alpha = frozen ? 0f : accumulator / GameBalance.LOGIC_STEP;
         worldViewport.apply();
         batch.setProjectionMatrix(worldCamera.combined);
+        // 引导文案让位（批4）：抽屉展开时按主体当前舞台右缘右移；worldScale = 1 / zoom（备战期 0.8/1.06）
         battleRenderer.draw(batch, runContext, alpha, renderClock, frozen ? 0f : delta, boardProcessor,
-                transitionController.chromeFadeAlpha()); // ② 备战席世界域绘制已退役（批2）：不再传备战席左滑位移
+                transitionController.chromeFadeAlpha(), 1f / worldCamera.zoom,
+                DrawerGeometry.drawerRect(drawerController.progress()).right());
         if (phase == GamePhase.RUN_END && !runEndSettled) { // 档案结算每局一次（裁决 D11）
             runEndSettled = true;
             ProfileService.Settlement settlement = metaService.settleRun(data, runContext);
@@ -454,12 +447,6 @@ public final class BattleScreen implements Screen {
                     resultStatusLine(runContext.getRunState())); // 横幅读 outcome + 机会制状态行（GDD §2.2）
         }
         syncChestDialog(phase);
-        if (unitDetailDialog.getParent() != null) { // 在栈才检查（isExpired 对未打开态恒 true——CP25/T7 口径）
-            unitDetailDialog.refresh(); // 详情弹窗每帧刷新（名单/装备可能经命令变化）
-            if (unitDetailDialog.isExpired()) {
-                closeDialog(unitDetailDialog); // 名单已无该单位（卖出/合并）→ 自动收起（CP25）
-            }
-        }
         runEndPanel.setVisible(phase == GamePhase.RUN_END);
         uiStage.act(delta);
         uiStage.getViewport().apply();

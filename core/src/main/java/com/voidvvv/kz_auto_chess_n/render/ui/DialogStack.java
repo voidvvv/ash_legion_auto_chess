@@ -6,7 +6,7 @@ import java.util.ArrayDeque;
  * 弹窗栈语义（CP26 纯逻辑抽取，headless 可测）：push 幂等（同一弹窗重复压栈跳过）、
  * closeTop 后进先出、clearAll 清空、isShowing 判空。UIDialogManager 委托本类；
  * Stage/Actor 组装与背板同步归宿主（Stage 需 GL，走 lwjgl3 手验——抽取先例
- * InventoryPanel.reconcilePending）。
+ * 原 InventoryPanel.reconcilePending——该面板批3 退役，逻辑现归 DrawerEquipText.reconcilePending）。
  */
 final class DialogStack<T> {
 

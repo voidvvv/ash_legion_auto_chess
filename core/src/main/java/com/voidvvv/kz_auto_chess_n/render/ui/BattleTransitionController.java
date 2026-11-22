@@ -81,16 +81,8 @@ public final class BattleTransitionController {
 
     // —— 只读姿态（棋盘域 chrome 由 Screen 转交给 BattleRenderer） ——
 
-    /** ② 备战席层水平位移（负值向左；③⑥ UI 域同参取值）：转场外恒 0 */
-    public float benchOffsetX() {
-        if (forwardPlaying()) {
-            return -snap(GameBalance.BATTLE_TRANSITION_SLIDE_LEFT_PX * forwardProgress());
-        }
-        if (reverseRemaining > 0f) {
-            return -snap(GameBalance.BATTLE_TRANSITION_SLIDE_LEFT_PX * (1f - reverseProgress()));
-        }
-        return 0f;
-    }
+    // ② 备战席层水平位移 benchOffsetX() 已退役（UI 抽屉化批2 去 ②、批4 清理）：备战席不再在世界域绘制；
+    //    抽屉主体随转场的位移/淡出见 poseExit/poseEnter（退场距离 = 构造入参 drawerSlidePx）。
 
     /** 备战层淡出系数（⑦ 出售区 / 布阵提示 / 敌阵虚影 / 部署帧）：稳态 SHOPPING 恒 1、其余稳态恒 0 */
     public float chromeFadeAlpha() {

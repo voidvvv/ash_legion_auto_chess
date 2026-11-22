@@ -56,7 +56,6 @@ class BattleTransitionControllerTest {
         controller.applyUiPose();
         assertThat(camera.zoom).isCloseTo(
                 GameBalance.SHOPPING_CAMERA_ZOOM / GameBalance.RENDER_GLOBAL_SCALE, within(1e-6f));
-        assertThat(controller.benchOffsetX()).isZero();
         assertThat(controller.chromeFadeAlpha()).isEqualTo(1f);
         assertThat(controller.isInputBlocked()).isFalse();
         assertThat(catcher.isVisible()).isFalse();
@@ -171,6 +170,16 @@ class BattleTransitionControllerTest {
     }
 
     // —— UI 抽屉化批2：退场距离参数化（原写死 140 < 抽屉宽，会滑不干净） ——
+
+    @Test
+    @DisplayName("退役留痕：BattleTransitionController 不再暴露 ② 备战席左滑位移 benchOffsetX()（备战席已不在世界域绘制）")
+    void benchOffsetXRetired() {
+        java.util.Set<String> names = new java.util.HashSet<String>();
+        for (java.lang.reflect.Method m : BattleTransitionController.class.getDeclaredMethods()) {
+            names.add(m.getName());
+        }
+        assertThat(names).doesNotContain("benchOffsetX");
+    }
 
     @Test
     @DisplayName("退场距离校验：必须 ≥ 抽屉宽 244（小于即抛 IllegalArgumentException；等于放行）")

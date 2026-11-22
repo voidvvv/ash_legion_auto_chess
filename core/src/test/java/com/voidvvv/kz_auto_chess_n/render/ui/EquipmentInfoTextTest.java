@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 装备文案格式化纯函数测试（feedback07）：详情弹窗装备行 / 背包格悬停卡 / 宝箱选项行
  * 三展示点共用同一文案源（用户裁决：禁止三处各写一份格式化）。零 Gdx 依赖，headless 直测。
- * 夹具沿 InventoryPanelTest.sword / ChestDialogTest.eq 手搓 EquipmentData 先例 +
+ * 夹具沿手搓 EquipmentData 先例（ChestDialogTest.eq；原 InventoryPanelTest.sword 已退役） ++
  * 龙心镜像（equipments.json：HP ADD 400 + REGEN 0.02/5）。
  */
 class EquipmentInfoTextTest {

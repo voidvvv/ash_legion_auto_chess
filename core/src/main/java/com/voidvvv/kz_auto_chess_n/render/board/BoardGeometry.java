@@ -5,7 +5,8 @@ import com.voidvvv.kz_auto_chess_n.config.GameBalance;
 /**
  * 布局常量与换算（render §九坐标表；纯 Java 可测，零 Gdx）。
  *
- * <p>统一虚拟坐标（render §2.2，640×360）：棋盘 ④ (224,50,192,224)、备战席 ② (20,48,108,120)。
+ * <p>统一虚拟坐标（render §2.2，640×360）：棋盘 ④ (224,50,192,224)；退役前左列 ② (20,48,108,120)
+ * （备战席 / 背包已迁入 UI 抽屉——几何见 {@code render/ui/DrawerGeometry}，命中走 {@code input/DrawerHitTest}）。
  * 行 0（敌区）在顶——格坐标 y 向上、屏幕 y 向下，cellCenterY 做翻转。
  * 全部输出整数虚拟像素（int 运算天然吸附，render §八.2）。
  */
@@ -18,19 +19,15 @@ public final class BoardGeometry {
     public static final int BOARD_Y = 50;
     public static final int BOARD_W = 192;
     public static final int BOARD_H = 224;
-    /** ② 备战席 3×3（槽 36×40） */
+    /** ② 备战席 3×3 的<b>退役前世界域矩形</b>（UI 抽屉化批2 起不再绘制、不可命中——备战席迁入抽屉头像条，
+     *  见 {@code render/ui/DrawerGeometry}）。<b>保留用途</b>（批4 清理裁定）：左列元件的极端坐标样本——
+     *  {@code RenderScaleFitTest} 的缩放边缘公式锁（左缘 20 在 s=1.25 放大档 → −55 出屏）与布局回归、
+     *  悬停卡走廊左缘断言（右缘 128）仍以它为准；不再代表任何在屏元件。 */
     public static final int BENCH_X = 20;
     public static final int BENCH_Y = 48;
     public static final int BENCH_W = 108;
     public static final int BENCH_H = 120;
 
-    /** ③ 装备背包 3×2（UI 域 InventoryPanel 定位同源；槽 36×36）。
-     *  render §九原表值 (20,140,108,100) 与 ② 备战席底边 168 压叠 28px——feedback01 修正：
-     *  下移至 172 起、槽高 36（2×36=72），底边 244 与 ⑨ 顶边相接。 */
-    public static final int INVENTORY_X = 20;
-    public static final int INVENTORY_Y = 172;
-    public static final int INVENTORY_W = 108;
-    public static final int INVENTORY_H = 72;
     /** ⑤ 羁绊面板（UI 域） */
     public static final int SYNERGY_X = 508;
     public static final int SYNERGY_Y = 48;
@@ -75,21 +72,49 @@ public final class BoardGeometry {
     public static final int SHOP_HOVER_W = 112;
     public static final int SHOP_HOVER_H = 224;
 
-    /** feedback07 背包格装备悬停卡：③ 背包（右缘 128）与 ④ 棋盘（左缘 224）之间空带内、③ 顶 172 之上。
-     *  与棋盘域卡（128,48,94,192）同带不同源——单指针命中域互斥（背包 x≤128 y172~244，棋盘/备战
-     *  候选均在界外）；底边 240 避开 ⑨ 通知（y 244 起）、顶边 140 避开 ⑥ 开战按钮（y 88~128）。 */
-    public static final int INVENTORY_HOVER_X = 132;
-    public static final int INVENTORY_HOVER_Y = 140;
-    public static final int INVENTORY_HOVER_W = 90;
-    public static final int INVENTORY_HOVER_H = 100;
-
     public static final int CELL = 32;
-    public static final int BENCH_SLOT_W = 36;
-    public static final int BENCH_SLOT_H = 40;
-    public static final int INVENTORY_SLOT_W = 36;
-    public static final int INVENTORY_SLOT_H = 36;
-    /** 备战期引导文案基线（feedback01 修正：原 y=24 落在 ⑧ 商店栏带内被半透明卡牌遮挡——移到 ④ 棋盘上边 274 之上） */
+
+    // —— 备战期引导文案（批4 收尾：方位按实机落点、抽屉展开时让位） ——
+
+    /** 引导文案基线（feedback01 修正：原 y=24 落在 ⑧ 商店栏带内被半透明卡牌遮挡——移到 ④ 棋盘上边 274 之上） */
     public static final int SHOP_HINT_Y = 280;
+    /** 抽屉展开时引导文案左缘与抽屉右缘的间隙（舞台像素） */
+    public static final int SHOP_HINT_DRAWER_GAP_PX = 4;
+
+    /**
+     * 出售区方位词——<b>与 ⑦ 出售区常量同源</b>（UI 抽屉化批4；Q10 裁决：界面坐标镜像漂移另案处理，
+     * 本次按实机落点 y-up 写）：x 过中线为「右」、y 过中线为「上」。设计表原值 (564,246) 被当 y-up 用 →
+     * 实机右上（三张探针截图核实）。待主人实机核对后可校准——改 {@link #SELL_ZONE_X/Y} 即同步改文案。
+     */
+    public static String sellZoneDirectionText() {
+        String horizontal = SELL_ZONE_X + SELL_ZONE_W / 2 >= VIRTUAL_W / 2 ? "右" : "左";
+        String vertical = SELL_ZONE_Y + SELL_ZONE_H / 2 >= VIRTUAL_H / 2 ? "上" : "下";
+        return horizontal + vertical;
+    }
+
+    /** 备战期引导文案（方位词由出售区常量派生，文字与几何不会漂移） */
+    public static final String SHOP_HINT_TEXT = "拖拽棋子布阵 · 拖至" + sellZoneDirectionText() + "出售区卖出 · 点开战";
+
+    /**
+     * 引导文案左缘的世界坐标（批4：抽屉展开时让位——否则首字压在抽屉右边框上）。
+     * 默认居中；若抽屉展开（右缘 &gt; 0，<b>舞台坐标</b>，不缩放层 1:1）且居中后的舞台左缘落在抽屉右缘 + 间隙之内，
+     * 右移到间隙之外；再把舞台坐标反算回世界坐标。
+     *
+     * @param textWidth           文案实宽（像素）
+     * @param worldScale          备战期世界域内容缩放（= 1 / worldCamera.zoom）
+     * @param drawerStageRightEdge 抽屉主体当前舞台右缘；收起（progress ≤ 0）传 0 = 不让位
+     */
+    public static float shopHintX(float textWidth, float worldScale, float drawerStageRightEdge) {
+        float centered = Math.round((VIRTUAL_W - textWidth) / 2f);
+        if (drawerStageRightEdge <= 0f) {
+            return centered;
+        }
+        float minStageLeft = drawerStageRightEdge + SHOP_HINT_DRAWER_GAP_PX;
+        if (screenX(centered, worldScale) >= minStageLeft) {
+            return centered; // 本就落在抽屉右侧：不动
+        }
+        return (minStageLeft - VIRTUAL_W / 2f) / worldScale + VIRTUAL_W / 2f;
+    }
 
     private BoardGeometry() {
     }
@@ -166,38 +191,14 @@ public final class BoardGeometry {
         return new int[]{gridX, gridY};
     }
 
-    // —— 备战席槽 ↔ 像素（列主序：slot = col×3 + row） ——
+    // —— 备战席槽 ↔ 像素：已退役（UI 抽屉化批2/批4）——备战席命中改走 input/DrawerHitTest（抽屉头像条实现，
+    //    槽号即 bench 下标）；几何见 render/ui/DrawerGeometry.stripSlot ——
 
-    public static int[] benchSlotCenter(int slotIndex) {
-        int col = slotIndex / 3;
-        int row = slotIndex % 3;
-        return new int[]{BENCH_X + col * BENCH_SLOT_W + BENCH_SLOT_W / 2,
-                BENCH_Y + row * BENCH_SLOT_H + BENCH_SLOT_H / 2};
-    }
-
-    /** 像素 → 槽索引；界外返回 -1 */
-    public static int pixelToBenchSlot(int px, int py) {
-        if (px < BENCH_X || px >= BENCH_X + BENCH_W || py < BENCH_Y || py >= BENCH_Y + BENCH_H) {
-            return -1;
-        }
-        int col = (px - BENCH_X) / BENCH_SLOT_W;
-        int row = (py - BENCH_Y) / BENCH_SLOT_H;
-        return col * 3 + row;
-    }
-
-    // —— Phase 5 CP17：⑦ 出售区命中 / ③ 背包槽定位 ——
+    // —— Phase 5 CP17：⑦ 出售区命中 ——
 
     /** 像素点是否在 ⑦ 出售区内（boardProcessor 拖拽终点判定） */
     public static boolean isInSellZone(int px, int py) {
         return px >= SELL_ZONE_X && px < SELL_ZONE_X + SELL_ZONE_W
                 && py >= SELL_ZONE_Y && py < SELL_ZONE_Y + SELL_ZONE_H;
-    }
-
-    /** ③ 背包槽中心（3 列 × 2 行；row 0 在下——scene2d y 向上） */
-    public static int[] inventorySlotCenter(int slotIndex) {
-        int col = slotIndex / 2;
-        int row = slotIndex % 2;
-        return new int[]{INVENTORY_X + col * INVENTORY_SLOT_W + INVENTORY_SLOT_W / 2,
-                INVENTORY_Y + INVENTORY_H - row * INVENTORY_SLOT_H - INVENTORY_SLOT_H / 2};
     }
 }

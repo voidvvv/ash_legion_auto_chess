@@ -35,8 +35,8 @@ import java.util.Map;
  * 只读 entities（铁律 1）。
  */
 public final class BattleRenderer {
-    /** 备战期引导文案（仅 SHOPPING 期可见，drawShopping 尾部；中文化——Fusion Pixel 已入库，降级口径见计划 §5.3-6） */
-    private static final String SHOPPING_HINT = "拖拽棋子布阵 · 拖至右下出售区卖出 · 点开战";
+    /** 备战期引导文案见 {@link BoardGeometry#SHOP_HINT_TEXT}（批4：方位词与出售区常量同源；抽屉展开时左缘让位，
+     *  见 {@link BoardGeometry#shopHintX}）。中文化——Fusion Pixel 已入库，降级口径见计划 §5.3-6 */
 
     private static final com.badlogic.gdx.graphics.Color ENEMY_ZONE_TINT =
             new com.badlogic.gdx.graphics.Color(0.26f, 0.14f, 0.14f, 1f); // 敌区暗红
@@ -87,19 +87,22 @@ public final class BattleRenderer {
      * @param renderClock 渲染帧时钟（秒）
      * @param dt          本帧时长（动画推进）
      * @param input       棋盘域输入（ghost 与落点高亮只读暴露；可为 null）
+     * @param worldScale   备战期世界域内容缩放（= 1 / worldCamera.zoom）——引导文案让位的坐标反算用
+     * @param drawerStageRightEdge 抽屉主体当前舞台右缘（收起态 ≤ 0 = 不让位）——引导文案让位用
      */
     public void draw(SpriteBatch batch, RunContext ctx, float alpha, float renderClock, float dt,
-                     BoardInputProcessor input, float chromeFadeAlpha) {
+                     BoardInputProcessor input, float chromeFadeAlpha, float worldScale,
+                     float drawerStageRightEdge) {
         syncBattleScope(ctx);
         batch.begin();
         drawGrid(batch);
         floatSlot = 0;
         if (ctx.getRunState().getPhase() == GamePhase.SHOPPING || ctx.getBattleState() == null) {
-            drawShopping(batch, ctx, chromeFadeAlpha);
+            drawShopping(batch, ctx, chromeFadeAlpha, worldScale, drawerStageRightEdge);
             drawDropOverlay(batch, ctx, input);
         } else {
             if (chromeFadeAlpha > 0f) { // 开战转场窗口：备战层 chrome 随姿态退场（render §5.6；K5 不画部署帧）
-                drawShoppingChrome(batch, ctx, chromeFadeAlpha);
+                drawShoppingChrome(batch, ctx, chromeFadeAlpha, worldScale, drawerStageRightEdge);
             }
             drawBattle(batch, ctx, alpha, renderClock, dt);
         }
@@ -166,8 +169,9 @@ public final class BattleRenderer {
     // —— 备战期：玩家部署 + 敌阵预览（侦察，口径 #25）；② 备战席已迁入 UI 抽屉头像条（UI 抽屉化批2） ——
 
     /** 备战层总入口：chrome（⑦ 提示虚影，随转场姿态）+ 玩家部署帧（随淡出系数；转场期由 UnitView 接管不画——K5） */
-    private void drawShopping(SpriteBatch batch, RunContext ctx, float chromeFadeAlpha) {
-        drawShoppingChrome(batch, ctx, chromeFadeAlpha);
+    private void drawShopping(SpriteBatch batch, RunContext ctx, float chromeFadeAlpha,
+                              float worldScale, float drawerStageRightEdge) {
+        drawShoppingChrome(batch, ctx, chromeFadeAlpha, worldScale, drawerStageRightEdge);
         Player player = ctx.getPlayer();
         for (int y = 4; y <= 6; y++) {
             for (int x = 0; x < GameBalance.BOARD_COLS; x++) {
@@ -186,7 +190,8 @@ public final class BattleRenderer {
      * 备战层 chrome：敌阵虚影（淡出=实体化一拍）+ ⑦ 出售区 + 布阵提示（淡出）。
      * ② 备战席槽 + 席上棋子的世界域绘制已退役（UI 抽屉化批2：由 DrawerPanel 头像条接管，备战席不再左滑）。
      */
-    private void drawShoppingChrome(SpriteBatch batch, RunContext ctx, float chromeFadeAlpha) {
+    private void drawShoppingChrome(SpriteBatch batch, RunContext ctx, float chromeFadeAlpha,
+                                      float worldScale, float drawerStageRightEdge) {
         for (WaveSpec spec : ctx.getRunState().getEnemyWave()) { // 敌阵侦察虚影（红框 + 半透明，P1b；转场随层淡出；恒 1★ 骨白）
             int[] center = BoardGeometry.cellCenter(spec.getGridX(), spec.getGridY());
             drawUnitFrame(batch, spec.getTemplate().getId(), PlaceholderKeys.ANIM_IDLE, 0,
@@ -194,7 +199,7 @@ public final class BattleRenderer {
                     1, SideColors.ENEMY);
         }
         drawSellZone(batch, chromeFadeAlpha);
-        drawShoppingHint(batch, chromeFadeAlpha);
+        drawShoppingHint(batch, chromeFadeAlpha, worldScale, drawerStageRightEdge);
     }
 
     /** ⑦ 出售区（render §九；棋盘域自绘，仅 SHOPPING 路径可达；fade = 转场淡出系数） */
@@ -210,13 +215,14 @@ public final class BattleRenderer {
     }
 
     /** 备战期引导文案（棋盘上方居中，不遮挡棋盘/备战席/⑧ 商店栏，feedback01 修正；字体缺文件回退时中文不渲染但不炸——§5.3-6） */
-    private void drawShoppingHint(SpriteBatch batch, float fade) {
+    private void drawShoppingHint(SpriteBatch batch, float fade, float worldScale, float drawerStageRightEdge) {
         if (hintLayout == null) {
-            hintLayout = new GlyphLayout(assets.font(), SHOPPING_HINT);
+            hintLayout = new GlyphLayout(assets.font(), BoardGeometry.SHOP_HINT_TEXT);
         }
         assets.font().setColor(1f, 1f, 1f, fade); // 用后即还（共用字体纪律）
-        assets.font().draw(batch, SHOPPING_HINT,
-                Math.round((BoardGeometry.VIRTUAL_W - hintLayout.width) / 2f), BoardGeometry.SHOP_HINT_Y);
+        // 左缘：默认居中；抽屉展开时让位到抽屉舞台右缘 + 4px 之外（批4，BoardGeometry.shopHintX 纯函数可测）
+        assets.font().draw(batch, BoardGeometry.SHOP_HINT_TEXT,
+                BoardGeometry.shopHintX(hintLayout.width, worldScale, drawerStageRightEdge), BoardGeometry.SHOP_HINT_Y);
         assets.font().setColor(com.badlogic.gdx.graphics.Color.WHITE);
     }
 

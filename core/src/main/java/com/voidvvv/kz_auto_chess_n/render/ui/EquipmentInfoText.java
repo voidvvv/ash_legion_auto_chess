@@ -39,7 +39,7 @@ public final class EquipmentInfoText {
         }
     }
 
-    /** 槽位文案（GDD §5.2 武器/盔甲/饰品；背包格内短形武/甲/饰为 InventoryPanel.slotMark 既有现状） */
+    /** 槽位文案（GDD §5.2 武器/盔甲/饰品；背包格内短形武/甲/饰见 DrawerEquipText.slotMark——沿原 InventoryPanel.slotMark 口径，该面板已退役） */
     public static String slotLabel(EquipmentSlot slot) {
         switch (slot) {
             case WEAPON:

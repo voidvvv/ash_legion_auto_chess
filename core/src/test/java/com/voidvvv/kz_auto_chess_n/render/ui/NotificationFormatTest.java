@@ -34,7 +34,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class NotificationFormatTest {
 
-    // —— 夹具（GameData 六参构造，沿 UnitDetailDialogTest 先例） ——
+    // —— 夹具（GameData 六参构造，沿手搓 GameData 先例） ——
 
     private static LinkedHashMap<String, SkillData> skillsOf(String id, String name) {
         LinkedHashMap<String, SkillData> skills = new LinkedHashMap<String, SkillData>();

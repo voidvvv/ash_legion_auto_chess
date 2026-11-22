@@ -146,10 +146,8 @@ public final class DrawerPanel extends Group implements DrawerHitTest {
         GamePhase phase = ctx.getRunState().getPhase();
         DrawerEquipText.reconcilePending(equipPending, player);
         List<Unit> bench = player.getBench();
+        selectedUnitId = DrawerSelection.resolveSelectedId(ctx, selectedUnitId); // 棋子已不在名单（卖出/合并）→ 清选中
         Unit selected = selectedUnitId >= 0 ? player.getUnitById(selectedUnitId) : null;
-        if (selected == null) {
-            selectedUnitId = -1;
-        }
         info.setPhase(phase);
         equip.setPhase(phase);
         info.setUnit(selected, ctx.getGameData());

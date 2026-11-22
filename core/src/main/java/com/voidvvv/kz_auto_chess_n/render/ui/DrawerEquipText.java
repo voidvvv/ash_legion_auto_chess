@@ -12,7 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 抽屉装备区的文案与配色纯函数（UI 抽屉化批3·Q1/Q5；自 {@code InventoryPanel}/{@code HoverPreviewCard} 背包源迁入，
+ * 抽屉装备区的文案与配色纯函数（UI 抽屉化批3·Q1/Q5；自原 InventoryPanel（已退役）/{@code HoverPreviewCard} 背包源迁入，
  * 行集仍走 {@link EquipmentInfoText}）。零 Gdx，headless 可测。
  *
  * <p>「前 6 件 +N」与背包悬停卡「折 6 列截 7 行」均已退役：网格滚全量、描述滚动框滚到底。
@@ -26,7 +26,7 @@ final class DrawerEquipText {
     /** 槽内短名列数（9px 小字 3 字 = 27px ≤ 34 槽宽） */
     static final int SHORT_NAME_COLUMNS = 3;
 
-    /** 稀有度底色 / 待定高亮（沿 InventoryPanel 口径；static final：渲染段零分配） */
+    /** 稀有度底色 / 待定高亮（沿原 InventoryPanel 口径；static final：渲染段零分配） */
     static final Color TINT_EMPTY = new Color(0.25f, 0.24f, 0.28f, 1f);
     static final Color TINT_LEGENDARY = new Color(0.55f, 0.42f, 0.12f, 1f);
     static final Color TINT_RARE = new Color(0.2f, 0.3f, 0.5f, 1f);
@@ -50,7 +50,7 @@ final class DrawerEquipText {
         return UnitInfoText.truncateColumns(name, SHORT_NAME_COLUMNS);
     }
 
-    /** 槽位短标（背包格内短形武/甲/饰——InventoryPanel.slotMark 既有现状） */
+    /** 槽位短标（背包格内短形武/甲/饰——原 InventoryPanel.slotMark 口径，该面板已退役） */
     static String slotMark(EquipmentSlot slot) {
         switch (slot) {
             case WEAPON:
@@ -90,7 +90,7 @@ final class DrawerEquipText {
         return clicked.getId();
     }
 
-    /** 待定物品已不在包（已穿 / 卖出）→ 失配自动取消；仍在包 / 无待定 → 保留（InventoryPanel.reconcilePending 迁入） */
+    /** 待定物品已不在包（已穿 / 卖出）→ 失配自动取消；仍在包 / 无待定 → 保留（自原 InventoryPanel.reconcilePending 迁入） */
     static void reconcilePending(EquipPendingState pending, Player player) {
         if (pending.hasPending() && player.findInventoryItem(pending.pendingItemId()) == null) {
             pending.clear();
@@ -103,6 +103,23 @@ final class DrawerEquipText {
             return -1;
         }
         return slot;
+    }
+
+    /**
+     * 装备大图预览的目标优先级：悬停槽的物品 → 待定物品（须仍在包，否则视为无）→ 无（null）。
+     */
+    static Equipment previewTarget(Equipment hovered, List<Equipment> inventory, int pendingItemId) {
+        if (hovered != null) {
+            return hovered;
+        }
+        if (pendingItemId >= 0) {
+            for (Equipment item : inventory) {
+                if (item.getId() == pendingItemId) {
+                    return item;
+                }
+            }
+        }
+        return null;
     }
 
     /** 写操作门控（Q6）：仅备战期允许穿戴 / 卸下 / 待定 */

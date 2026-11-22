@@ -13,14 +13,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 class BoardGeometryTest {
 
     @Test
-    @DisplayName("常量自洽：BOARD = 6×32 × 7×32、BENCH = 3×36 × 3×40、虚拟画布 640×360")
+    @DisplayName("常量自洽：BOARD = 6×32 × 7×32、虚拟画布 640×360；② 备战席 9 格的容量语义由抽屉头像条承接（可见 6 + 滚动 = BENCH_SIZE）")
     void constantsSelfConsistent() {
         assertThat(BoardGeometry.BOARD_W).isEqualTo(GameBalance.BOARD_COLS * BoardGeometry.CELL);
         assertThat(BoardGeometry.BOARD_H).isEqualTo(GameBalance.BOARD_ROWS * BoardGeometry.CELL);
-        assertThat(BoardGeometry.BENCH_W).isEqualTo(3 * BoardGeometry.BENCH_SLOT_W);
-        assertThat(BoardGeometry.BENCH_H).isEqualTo(3 * BoardGeometry.BENCH_SLOT_H);
         assertThat(BoardGeometry.VIRTUAL_W).isEqualTo(640);
         assertThat(BoardGeometry.VIRTUAL_H).isEqualTo(360);
+        // 批4 迁移：原「BENCH = 3×36 × 3×40」自洽断言 → 备战席容量由头像条承接（槽号即 bench 下标）
+        assertThat(com.voidvvv.kz_auto_chess_n.render.ui.DrawerGeometry.STRIP_VISIBLE_SLOTS).isEqualTo(6);
+        assertThat(GameBalance.BENCH_SIZE).isEqualTo(9);
+        assertThat(BoardGeometry.BENCH_X).as("退役前左列矩形样本仍在（缩放公式锁引用）").isEqualTo(20);
+        assertThat(BoardGeometry.BENCH_X + BoardGeometry.BENCH_W).isEqualTo(128);
     }
 
     @Test
@@ -104,59 +107,15 @@ class BoardGeometryTest {
         assertThat(BoardGeometry.continuousCenterY(5.5f)).isGreaterThan(BoardGeometry.continuousCenterY(6.5f));
     }
 
-    @Test
-    @DisplayName("benchSlotCenter 列主序：槽 0/1/2 同列向下、槽 3 起换列")
-    void benchSlotsColumnMajor() {
-        int[] s0 = BoardGeometry.benchSlotCenter(0);
-        int[] s1 = BoardGeometry.benchSlotCenter(1);
-        int[] s3 = BoardGeometry.benchSlotCenter(3);
-        assertThat(s0[0]).isEqualTo(s1[0]);            // 同列
-        assertThat(s1[1] - s0[1]).isEqualTo(BoardGeometry.BENCH_SLOT_H); // 向下一行
-        assertThat(s3[0] - s0[0]).isEqualTo(BoardGeometry.BENCH_SLOT_W); // 换列
-        assertThat(s3[1]).isEqualTo(s0[1]);
-    }
+    // —— ② 备战席槽 ↔ 像素四用例（benchSlotCenter / pixelToBenchSlot）已随 ② 世界域几何退役（UI 抽屉化批4）——
+    //    断言迁至 render/ui/DrawerGeometryTest（stripSlotsMapBenchIndexInOrder / stripBeyondVisibleSlotsLieOutsideContentColumn） ——
+
+    // —— Phase 5 CP17：⑤⑦⑧⑨ 区常量与命中判定（render §九 Phase 4 遗留区；③ 背包常量已随 InventoryPanel 退役） ——
 
     @Test
-    @DisplayName("benchSlotCenter ↔ pixelToBenchSlot 往返一致（全 9 槽）")
-    void benchSlotRoundTrip() {
-        for (int slot = 0; slot < GameBalance.BENCH_SIZE; slot++) {
-            int[] center = BoardGeometry.benchSlotCenter(slot);
-            assertThat(BoardGeometry.pixelToBenchSlot(center[0], center[1])).isEqualTo(slot);
-        }
-    }
-
-    @Test
-    @DisplayName("pixelToBenchSlot 界外返回 -1")
-    void pixelToBenchSlotRejectsOutside() {
-        assertThat(BoardGeometry.pixelToBenchSlot(BoardGeometry.BENCH_X - 1, 60)).isEqualTo(-1);
-        assertThat(BoardGeometry.pixelToBenchSlot(400, 60)).isEqualTo(-1);
-        assertThat(BoardGeometry.pixelToBenchSlot(30, BoardGeometry.BENCH_Y - 1)).isEqualTo(-1);
-        assertThat(BoardGeometry.pixelToBenchSlot(30, BoardGeometry.BENCH_Y + BoardGeometry.BENCH_H)).isEqualTo(-1);
-    }
-
-    @Test
-    @DisplayName("benchSlotCenter 输出整数吸附且落在槽矩形内")
-    void benchSlotCenterInsideSlotRect() {
-        for (int slot = 0; slot < 9; slot++) {
-            int col = slot / 3; // 列主序：slot = col*3 + row
-            int row = slot % 3;
-            int[] c = BoardGeometry.benchSlotCenter(slot);
-            assertThat(c[0]).isEqualTo(BoardGeometry.BENCH_X + col * BoardGeometry.BENCH_SLOT_W + BoardGeometry.BENCH_SLOT_W / 2);
-            assertThat(c[1]).isEqualTo(BoardGeometry.BENCH_Y + row * BoardGeometry.BENCH_SLOT_H + BoardGeometry.BENCH_SLOT_H / 2);
-        }
-    }
-
-    // —— Phase 5 CP17：③⑤⑦⑧⑨ 区常量与命中判定（render §九 Phase 4 遗留区） ——
-
-    @Test
-    @DisplayName("③⑤⑦⑧ 区常量与 render §九坐标表逐项对照（±4px 容差；③ 为 feedback01 修正值、⑨ 差异声明 #4 例外单独断言）")
+    @DisplayName("⑤⑦⑧ 区常量与 render §九坐标表逐项对照（±4px 容差；⑨ 差异声明 #4 例外单独断言）")
     void phase5ZonesMatchRenderLayoutTable() {
-        // render_design.md §九：③ (20,140,108,100)——原表值与 ② 压叠 28px，feedback01 修正为 (20,172,108,72)；
-        // ⑤ (508,48,112,144)、⑦ (564,246,56,46)、⑧ (0,296,640,64)
-        assertThat(BoardGeometry.INVENTORY_X).isBetween(20 - 4, 20 + 4);
-        assertThat(BoardGeometry.INVENTORY_Y).isBetween(172 - 4, 172 + 4);
-        assertThat(BoardGeometry.INVENTORY_W).isBetween(108 - 4, 108 + 4);
-        assertThat(BoardGeometry.INVENTORY_H).isBetween(72 - 4, 72 + 4);
+        // render_design.md §九：⑤ (508,48,112,144)、⑦ (564,246,56,46)、⑧ (0,296,640,64)
         assertThat(BoardGeometry.SYNERGY_X).isBetween(508 - 4, 508 + 4);
         assertThat(BoardGeometry.SYNERGY_Y).isBetween(48 - 4, 48 + 4);
         assertThat(BoardGeometry.SYNERGY_W).isBetween(112 - 4, 112 + 4);
@@ -175,11 +134,9 @@ class BoardGeometryTest {
     }
 
     @Test
-    @DisplayName("布局冲突回归：②③、③⑨、⑤⑦、⑨⑧ 相邻区互不压叠（feedback01：原 ③(140) 压叠 ② 底边 168 达 28px）")
-    void notifyZoneDoesNotOverlapInventory() {
-        assertThat(BoardGeometry.INVENTORY_Y).isGreaterThanOrEqualTo(BoardGeometry.BENCH_Y + BoardGeometry.BENCH_H);
-        assertThat(BoardGeometry.NOTIFY_Y).isGreaterThanOrEqualTo(BoardGeometry.INVENTORY_Y + BoardGeometry.INVENTORY_H);
-        // 其余相邻对也自洽：⑤ 底边不侵入 ⑦、⑨ 底边不侵入 ⑧
+    @DisplayName("布局冲突回归：⑤⑦、⑨⑧ 相邻区互不压叠（②③ 左列对已迁入抽屉——其与 ⑧① 的不压叠断言见 DrawerGeometryTest）")
+    void adjacentZonesDoNotOverlap() {
+        // ⑤ 底边不侵入 ⑦、⑨ 底边不侵入 ⑧
         assertThat(BoardGeometry.SELL_ZONE_Y).isGreaterThanOrEqualTo(BoardGeometry.SYNERGY_Y + BoardGeometry.SYNERGY_H);
         assertThat(BoardGeometry.SHOP_BAR_Y).isGreaterThanOrEqualTo(BoardGeometry.NOTIFY_Y + BoardGeometry.NOTIFY_H);
     }
@@ -194,28 +151,53 @@ class BoardGeometryTest {
         assertThat(BoardGeometry.SHOP_HINT_Y + 12).isLessThanOrEqualTo(BoardGeometry.VIRTUAL_H - 40); // 不侵入顶栏带
     }
 
+    // —— 批4 收尾：引导文案方位与出售区常量同源；抽屉展开时让位 ——
+
     @Test
-    @DisplayName("③ 背包常量自洽：3 列 × 2 行槽位铺满区域、槽 36×36")
-    void inventoryConstantsSelfConsistent() {
-        assertThat(BoardGeometry.INVENTORY_W).isEqualTo(3 * BoardGeometry.INVENTORY_SLOT_W);
-        assertThat(BoardGeometry.INVENTORY_H).isEqualTo(2 * BoardGeometry.INVENTORY_SLOT_H);
+    @DisplayName("出售区方位词由常量派生：现值 (564,246) 过中线 →「右上」（实机落点；待主人实机核对后可校准）；文案含该方位词")
+    void sellZoneDirectionTextDerivedFromConstants() {
+        assertThat(BoardGeometry.SELL_ZONE_X + BoardGeometry.SELL_ZONE_W / 2).isGreaterThan(BoardGeometry.VIRTUAL_W / 2);
+        assertThat(BoardGeometry.SELL_ZONE_Y + BoardGeometry.SELL_ZONE_H / 2).isGreaterThan(BoardGeometry.VIRTUAL_H / 2);
+        assertThat(BoardGeometry.sellZoneDirectionText()).isEqualTo("右上");
+        assertThat(BoardGeometry.SHOP_HINT_TEXT).contains("拖至右上出售区卖出").doesNotContain("右下");
     }
 
     @Test
-    @DisplayName("inventorySlotCenter：6 槽中心全在 ③ 区内且互异；row 0 在下（scene2d y 向上）")
-    void inventorySlotCentersInsideZoneAndDistinct() {
-        java.util.Set<String> seen = new java.util.HashSet<String>();
-        for (int slot = 0; slot < 6; slot++) {
-            int[] c = BoardGeometry.inventorySlotCenter(slot);
-            assertThat(c[0]).isBetween(BoardGeometry.INVENTORY_X, BoardGeometry.INVENTORY_X + BoardGeometry.INVENTORY_W - 1);
-            assertThat(c[1]).isBetween(BoardGeometry.INVENTORY_Y, BoardGeometry.INVENTORY_Y + BoardGeometry.INVENTORY_H - 1);
-            assertThat(seen.add(c[0] + "," + c[1])).isTrue();
+    @DisplayName("引导文案左缘：抽屉收起（右缘 ≤ 0）→ 居中不动")
+    void shopHintCenteredWhenDrawerCollapsed() {
+        float worldScale = GameBalance.RENDER_GLOBAL_SCALE / GameBalance.SHOPPING_CAMERA_ZOOM;
+        for (float w = 180f; w <= 300f; w += 20f) {
+            assertThat(BoardGeometry.shopHintX(w, worldScale, 0f)).isEqualTo(Math.round((640f - w) / 2f));
+            assertThat(BoardGeometry.shopHintX(w, worldScale, -244f)).as("收起态右缘为负 = 不让位")
+                    .isEqualTo(Math.round((640f - w) / 2f));
         }
-        // 槽 0（col 0 row 0）在底行：y 大于槽 1（col 0 row 1，顶行）
-        assertThat(BoardGeometry.inventorySlotCenter(0)[1]).isGreaterThan(BoardGeometry.inventorySlotCenter(1)[1]);
-        // 槽 2 起换列（col 1），x 步进一槽宽
-        assertThat(BoardGeometry.inventorySlotCenter(2)[0] - BoardGeometry.inventorySlotCenter(0)[0])
-                .isEqualTo(BoardGeometry.INVENTORY_SLOT_W);
+    }
+
+    @Test
+    @DisplayName("引导文案让位：抽屉展开（舞台右缘 246）时，文案舞台左缘 ≥ 246 + 4；原本就在抽屉右侧的超短文案不动；右缘不出虚拟宽")
+    void shopHintYieldsRightOfExpandedDrawer() {
+        float worldScale = GameBalance.RENDER_GLOBAL_SCALE / GameBalance.SHOPPING_CAMERA_ZOOM;
+        int drawerRight = com.voidvvv.kz_auto_chess_n.render.ui.DrawerGeometry.DRAWER_X
+                + com.voidvvv.kz_auto_chess_n.render.ui.DrawerGeometry.DRAWER_W;
+        for (float w = 180f; w <= 300f; w += 20f) {
+            float x = BoardGeometry.shopHintX(w, worldScale, drawerRight);
+            assertThat(BoardGeometry.screenX(x, worldScale))
+                    .as("文案宽 %.0f：舞台左缘 ≥ 抽屉右缘 + 间隙", w)
+                    .isGreaterThanOrEqualTo(drawerRight + BoardGeometry.SHOP_HINT_DRAWER_GAP_PX);
+            float centeredStageLeft = BoardGeometry.screenX(Math.round((640f - w) / 2f), worldScale);
+            if (centeredStageLeft < drawerRight) {
+                assertThat(x).as("文案宽 %.0f：居中会压抽屉 → 已右移", w).isGreaterThan(Math.round((640f - w) / 2f));
+            } else {
+                assertThat(x).as("文案宽 %.0f：居中本就不压 → 不动", w).isEqualTo(Math.round((640f - w) / 2f));
+            }
+            // 让位后仍在虚拟画布内，且不侵入 ⑦ 出售区（世界 x 564 起）
+            assertThat(x + w).isLessThan(BoardGeometry.SELL_ZONE_X);
+        }
+        // 真实文案（约 24 字 ≈ 270px）：居中落点舞台左缘 ≈ 225 < 246 → 修复前首字压抽屉右边框（协调方实机截图所见）
+        assertThat(BoardGeometry.screenX(Math.round((640f - 270f) / 2f), worldScale)).isLessThan(drawerRight);
+        // 超短文案（40px）居中后舞台左缘 = 305 ≥ 250：不动
+        float centered = Math.round((640f - 40f) / 2f);
+        assertThat(BoardGeometry.shopHintX(40f, worldScale, drawerRight)).isEqualTo(centered);
     }
 
     // —— Phase 5.1 CP8：悬停预览卡固定锚点（裁决 A；防遮挡论证见计划 §5.3-1） ——
@@ -226,11 +208,9 @@ class BoardGeometryTest {
         // 右缘不压 ④ 棋盘（224 起，留 ≥2px 间隙）
         assertThat(BoardGeometry.BOARD_HOVER_X + BoardGeometry.BOARD_HOVER_W)
                 .isLessThanOrEqualTo(BoardGeometry.BOARD_X);
-        // 左缘不压 ②③（② 底边 128 = ③ 底边 128，同一右缘）
+        // 左缘不压退役前左列（② 右缘 128 = ③ 右缘 128，同一右缘——③ 常量已随 InventoryPanel 退役，以 ② 样本为准）
         assertThat(BoardGeometry.BOARD_HOVER_X)
                 .isGreaterThanOrEqualTo(BoardGeometry.BENCH_X + BoardGeometry.BENCH_W);
-        assertThat(BoardGeometry.BOARD_HOVER_X)
-                .isGreaterThanOrEqualTo(BoardGeometry.INVENTORY_X + BoardGeometry.INVENTORY_W);
         // 下缘不压 ⑧ 商店栏（296 起；⑨ 通知 244~290 为瞬态覆盖——非模态卡移开即恢复，2026-11-21 整改口径）
         assertThat(BoardGeometry.BOARD_HOVER_Y + BoardGeometry.BOARD_HOVER_H)
                 .isLessThanOrEqualTo(BoardGeometry.SHOP_BAR_Y);

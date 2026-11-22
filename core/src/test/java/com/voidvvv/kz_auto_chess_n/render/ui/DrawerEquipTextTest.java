@@ -167,6 +167,33 @@ class DrawerEquipTextTest {
         assertThat(pending.pendingItemId()).isEqualTo(-1);
     }
 
+    // —— 装备大图预览目标优先级（批4：自 DrawerEquipSection.bind 内联逻辑抽为纯函数） ——
+
+    @Test
+    @DisplayName("预览目标：悬停槽物品优先于待定物品（即便待定的是另一件）")
+    void previewPrefersHoveredOverPending() {
+        Equipment hovered = sword(7);
+        Equipment pending = sword(5);
+        List<Equipment> inventory = Arrays.asList(pending, hovered);
+        assertThat(DrawerEquipText.previewTarget(hovered, inventory, 5)).isSameAs(hovered);
+    }
+
+    @Test
+    @DisplayName("预览目标：无悬停时回落到待定物品；待定物品已不在包 → 视为无（null）")
+    void previewFallsBackToPendingWhileInInventory() {
+        Equipment pending = sword(5);
+        List<Equipment> inventory = Arrays.asList(sword(6), pending);
+        assertThat(DrawerEquipText.previewTarget(null, inventory, 5)).isSameAs(pending);
+        assertThat(DrawerEquipText.previewTarget(null, Arrays.asList(sword(6)), 5)).as("待定已失配").isNull();
+    }
+
+    @Test
+    @DisplayName("预览目标：无悬停且无待定 → 无")
+    void previewNoneWhenNeitherHoverNorPending() {
+        assertThat(DrawerEquipText.previewTarget(null, Arrays.asList(sword(6)), -1)).isNull();
+        assertThat(DrawerEquipText.previewTarget(null, Collections.<Equipment>emptyList(), -1)).isNull();
+    }
+
     // —— 悬停归一（自 normalizeInventorySlot 迁入）与写门控 ——
 
     @Test

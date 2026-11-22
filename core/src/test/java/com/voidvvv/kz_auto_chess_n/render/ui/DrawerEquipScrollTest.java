@@ -44,6 +44,23 @@ class DrawerEquipScrollTest {
     }
 
     @Test
+    @DisplayName("全量可达：任意库存条目在某个首行下必落进 6 个可见槽之一（取消「前 6 件 +N」的回归锁）；越界下标不映射")
+    void everyInventoryItemReachableByScrolling() {
+        for (int count = 0; count <= 20; count++) {
+            for (int index = 0; index < count; index++) {
+                boolean reachable = false;
+                for (int row = 0; row <= DrawerEquipScroll.maxFirstRow(count); row++) {
+                    int first = DrawerEquipScroll.firstIndex(row);
+                    reachable |= index >= first && index < first + DrawerGeometry.EQUIP_GRID_COLS * DrawerGeometry.EQUIP_GRID_ROWS;
+                }
+                assertThat(reachable).as("库存 %d 件的第 %d 件可滚动到可见槽", count, index).isTrue();
+            }
+        }
+        // 不可滚（≤ 6 件）时首行恒 0：可见槽映射库存 [0, size)
+        assertThat(DrawerEquipScroll.firstIndex(DrawerEquipScroll.clampFirstRow(5, 4))).isZero();
+    }
+
+    @Test
     @DisplayName("滑块位置 ↔ 首行往返：轨 72 / 滑块 8 → 行程 64；首行 0 停底端、首行到最大到顶端；不可滚停底端")
     void knobOffsetRoundTrip() {
         int track = DrawerGeometry.equipScrollBar().height();

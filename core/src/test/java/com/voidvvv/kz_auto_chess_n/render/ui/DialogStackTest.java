@@ -8,7 +8,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 弹窗栈语义测试（CP26）：push 幂等、closeTop 后进先出、clearAll、isShowing。
  * UIDialogManager 的栈行为委托本纯逻辑类（Stage 组装需 GL 走 lwjgl3 手验，
- * 栈语义 headless 固化——沿 InventoryPanel.reconcilePending 抽取先例）。
+ * 栈语义 headless 固化——沿纯静态函数抽取先例）。
  */
 class DialogStackTest {
 
