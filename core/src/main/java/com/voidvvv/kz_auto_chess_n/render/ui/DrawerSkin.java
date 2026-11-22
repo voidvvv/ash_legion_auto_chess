@@ -8,7 +8,10 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.Touchable;
+import com.badlogic.gdx.scenes.scene2d.ui.ScrollPane;
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
+
+import java.util.List;
 
 /**
  * 抽屉绘制皮肤与小件（UI 抽屉化批3 批前重构：自 DrawerPanel 抽出，纯搬迁、行为不变）。
@@ -101,10 +104,35 @@ final class DrawerSkin {
         endUntinted(batch);
     }
 
+    /**
+     * 滚动框换内容：文字块按行数撑高后<b>必须作废 ScrollPane 的布局缓存</b>——ScrollPane 只在自身失效时
+     * 重算内容高度，否则沿用首次布局的旧高度（占位 1 行 = 17px），滚轮被消费却滚不动
+     * （批3 探针实证：scrollY 恒 0；回归用例见 DrawerTextCapacityTest）。
+     */
+    static void setContent(ScrollPane pane, DrawerTextBlock block, List<String> lines, float width) {
+        block.setLines(lines, width);
+        pane.invalidate();
+    }
+
     static void drawText(Batch batch, BitmapFont font, String text, float x, float top, float alpha) {
         font.setColor(1f, 1f, 1f, alpha);
         font.draw(batch, text, x, top); // y = 行顶，向下延伸
         font.setColor(1f, 1f, 1f, 1f); // 用后即还（共用字体纪律）
+    }
+
+    /**
+     * 抽屉内文字滚动框（scene2d ScrollPane，程序化拼 Style——项目无 Skin JSON）：只纵向滚动、无惯性、无过滚、
+     * 无自绘滚动条、位移不平滑（逐像素对齐）；输入只走拖动与滚轮（滚轮在 uiStage 层被它消费，不进 boardProcessor）。
+     */
+    static ScrollPane newTextScrollPane(Actor content) {
+        ScrollPane pane = new ScrollPane(content, new ScrollPane.ScrollPaneStyle());
+        pane.setSmoothScrolling(false);
+        pane.setFlickScroll(false);
+        pane.setOverscroll(false, false);
+        pane.setFadeScrollBars(false);
+        pane.setScrollBarTouch(false);
+        pane.setScrollingDisabled(true, false); // 只纵向滚
+        return pane;
     }
 
     // —— 通用小件（无业务状态） ——

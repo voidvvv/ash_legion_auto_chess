@@ -47,21 +47,21 @@ class DrawerInfoTextTest {
     }
 
     @Test
-    @DisplayName("容量常量：描述 12 列 × 6 行（120 宽 / 64 高 / 9px 小字）、标题 18 列（232 宽 / 12px）")
+    @DisplayName("容量常量：描述 12 列、不滚动可见 6 行（滚动视口 112×60 / 9px 小字；超出滚动不截断）、标题 18 列（232 宽 / 12px）")
     void capacityConstantsMatchPaneSizes() {
         assertThat(DrawerInfoText.DESC_MAX_COLUMNS).isEqualTo(12);
-        assertThat(DrawerInfoText.DESC_MAX_LINES).isEqualTo(6);
+        assertThat(DrawerInfoText.DESC_VISIBLE_LINES).isEqualTo(6);
         assertThat(DrawerInfoText.TITLE_MAX_COLUMNS).isEqualTo(18);
-        assertThat(DrawerGeometry.DESC_W - 2 * 4).as("描述框净宽 ≥ 列数 × 9px（112 ≥ 108，余 4px）")
-                .isGreaterThanOrEqualTo(DrawerInfoText.DESC_MAX_COLUMNS * 9);
-        assertThat((DrawerGeometry.DESC_W - 8) / 9).as("净宽可容的全角列数 = 12").isEqualTo(DrawerInfoText.DESC_MAX_COLUMNS);
-        assertThat(DrawerGeometry.descriptionPane().height()).isGreaterThanOrEqualTo(DrawerInfoText.DESC_MAX_LINES * 9);
+        DrawerGeometry.Rect viewport = DrawerGeometry.descriptionViewport();
+        assertThat(DrawerTextBlock.PAD_X + DrawerInfoText.DESC_MAX_COLUMNS * 9)
+                .as("12 列全角行自左留白起恰收于视口右缘").isLessThanOrEqualTo(viewport.width());
+        assertThat(viewport.height()).as("滚动视口净高 ≥ 可见 6 行 × 9px").isGreaterThanOrEqualTo(DrawerInfoText.DESC_VISIBLE_LINES * 9);
         assertThat(DrawerGeometry.titlePlate().width() - 2 * DrawerGeometry.PADDING)
                 .as("标题板净宽 ≥ 18 列 × 12px").isGreaterThanOrEqualTo(DrawerInfoText.TITLE_MAX_COLUMNS * 12);
     }
 
     @Test
-    @DisplayName("未选中：标题「未选中棋子」、介绍 = 单行占位；选中：标题写「名 N星」、介绍 = detailLines 折到 12 列")
+    @DisplayName("未选中：标题「未选中棋子」、介绍 = 单行占位；选中：标题写「名 N星」、介绍 = detailLines 折到 12 列（全量不截断）")
     void titleAndIntroForSelection() {
         assertThat(DrawerInfoText.title(null)).isEqualTo("未选中棋子");
         assertThat(DrawerInfoText.introLines(null, emptyData())).isEmpty();
@@ -75,7 +75,11 @@ class DrawerInfoTextTest {
         for (String line : lines) {
             assertThat(UnitInfoText.columns(line)).as("行宽 ≤ 12 列: %s", line).isLessThanOrEqualTo(DrawerInfoText.DESC_MAX_COLUMNS);
         }
-        assertThat(lines.size()).isLessThanOrEqualTo(DrawerInfoText.DESC_MAX_LINES);
+        List<String> raw = new ArrayList<String>();
+        for (String line : UnitInfoText.detailLines(unit, emptyData())) {
+            raw.addAll(UnitInfoText.wrap(line, DrawerInfoText.DESC_MAX_COLUMNS));
+        }
+        assertThat(lines).as("介绍 = 折行后的全量行集（无截断）").isEqualTo(raw);
     }
 
     @Test
@@ -89,7 +93,7 @@ class DrawerInfoTextTest {
     }
 
     @Test
-    @DisplayName("真实 assets 全量：24 可购棋子 × 1~3 星——标题不溢出、介绍折行后 ≤ 6 行（超出 … 收尾，登记溢出棋子数）")
+    @DisplayName("真实 assets 全量：24 可购棋子 × 1~3 星——标题不溢出、介绍 = 折行全量行集（不截断、无 …），登记超 6 行的组合数")
     void seedDataFitsTitleAndIntro() {
         int checked = 0;
         int overflow = 0;
@@ -108,22 +112,19 @@ class DrawerInfoTextTest {
                     raw.addAll(UnitInfoText.wrap(line, DrawerInfoText.DESC_MAX_COLUMNS));
                 }
                 maxRawLines = Math.max(maxRawLines, raw.size());
-                if (raw.size() > DrawerInfoText.DESC_MAX_LINES) {
+                if (raw.size() > DrawerInfoText.DESC_VISIBLE_LINES) {
                     overflow++;
                 }
                 List<String> lines = DrawerInfoText.introLines(unit, data);
                 assertThat(lines).as("%s %d星 介绍非空", template.getId(), star).isNotEmpty();
-                assertThat(lines.size()).isLessThanOrEqualTo(DrawerInfoText.DESC_MAX_LINES);
+                assertThat(lines).as("%s %d星 全量不截断", template.getId(), star).isEqualTo(raw).doesNotContain("…");
                 assertThat(lines).allSatisfy(line ->
                         assertThat(UnitInfoText.columns(line)).isLessThanOrEqualTo(DrawerInfoText.DESC_MAX_COLUMNS));
-                if (raw.size() > DrawerInfoText.DESC_MAX_LINES) {
-                    assertThat(lines.get(lines.size() - 1)).as("%s %d星 溢出以 … 收尾", template.getId(), star).isEqualTo("…");
-                }
             }
             checked++;
         }
         assertThat(checked).isEqualTo(24);
-        System.out.println("[DrawerInfoText] overflow(star-combinations)=" + overflow + "/72 maxRawWrappedLines=" + maxRawLines
-                + " capacity=" + DrawerInfoText.DESC_MAX_LINES);
+        System.out.println("[DrawerInfoText] overflow(star-combinations)=" + overflow + "/72 maxWrappedLines=" + maxRawLines
+                + " visibleWithoutScroll=" + DrawerInfoText.DESC_VISIBLE_LINES);
     }
 }

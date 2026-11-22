@@ -298,6 +298,60 @@ public final class DrawerGeometry {
                 EQUIP_GRID_ROWS * EQUIP_SLOT + (EQUIP_GAP));
     }
 
+    /** 装备网格纵向滚动条（Q1 可滚动；M07 轨横竖共用）——落在网格与大图预览之间的 8px 间隙，宽取切分线和 8 */
+    public static final int EQUIP_SCROLL_W = 8;
+    /** 装备滚动条滑块边长（M08 滑块 12 缩到轨宽 8） */
+    public static final int EQUIP_KNOB = 8;
+
+    public static Rect equipScrollBar() {
+        Rect grid = equipGrid();
+        return new Rect(grid.right(), grid.y(), EQUIP_SCROLL_W, grid.height());
+    }
+
+    // —— 装备标签页（「装备」标签 = 选中棋子三件；行数 = 每棋子装备槽数） ——
+
+    /** 装备标签页行数 = 每棋子装备槽数（GameBalance.EQUIP_SLOTS_PER_UNIT：武器 + 盔甲 + 饰品） */
+    public static final int EQUIP_TAB_ROWS = 3;
+    /** 三行（武器 / 盔甲 / 饰品）行高：3 × 18 = 54，落在 64 高的描述框内 */
+    public static final int EQUIP_TAB_ROW_H = 18;
+    public static final int EQUIP_TAB_ROW_BOX_H = 16;
+
+    /** 装备标签页第 row 行（row 0 = 武器，在上）的行矩形：与描述框同列，左右内缩 2 */
+    public static Rect equipTabRow(int row) {
+        Rect pane = descriptionPane();
+        int y = pane.top() - 4 - row * EQUIP_TAB_ROW_H - EQUIP_TAB_ROW_BOX_H;
+        return new Rect(pane.x() + 2, y, pane.width() - 4, EQUIP_TAB_ROW_BOX_H);
+    }
+
+    /** 装备标签页行内「卸下」按钮（右对齐，42×14，落在行矩形内） */
+    public static Rect equipTabUnequipButton(int row) {
+        Rect r = equipTabRow(row);
+        return new Rect(r.right() - 44, r.y() + 1, 42, EQUIP_TAB_ROW_BOX_H - 2);
+    }
+
+    // —— 滚动视口（scene2d ScrollPane；批3 硬验收：最长文案能滚到底） ——
+
+    /** 介绍描述滚动视口：描述框内缩（左右 4、上下 2）；净宽 112 → 9px 小字全角 12 列 */
+    public static Rect descriptionViewport() {
+        Rect pane = descriptionPane();
+        return new Rect(pane.x() + 4, pane.y() + 2, pane.width() - 8, pane.height() - 4);
+    }
+
+    /** 装备大图预览：图标位（上 40 高）+ 装备描述滚动框（下 32 高，左右/底下内缩 2） */
+    public static final int EQUIP_DESC_ZONE_H = 32;
+
+    public static Rect equipIconZone() {
+        Rect preview = equipPreview();
+        return new Rect(preview.x(), preview.y() + EQUIP_DESC_ZONE_H, preview.width(),
+                preview.height() - EQUIP_DESC_ZONE_H);
+    }
+
+    /** 装备描述滚动视口：净宽 98 → 全角 10 列；净高 28 → 3 行 */
+    public static Rect equipDescViewport() {
+        Rect preview = equipPreview();
+        return new Rect(preview.x() + 2, preview.y() + 2, preview.width() - 4, EQUIP_DESC_ZONE_H - 4);
+    }
+
     /**
      * 装备槽（抽屉局部坐标）：下标 = 背包库存下标，行优先、行 0 在上。
      *

@@ -268,16 +268,19 @@ public final class BoardInputProcessor implements InputProcessor {
     }
 
     /**
-     * 滚轮路由（UI 抽屉化批2）：指针（最近一次 mouseMoved 的屏幕坐标）落在抽屉头像条上 → 交给抽屉滚动并消费；
-     * 其余位置不消费（原恒 false 口径不变）。向下滚（amountY &lt; 0）= 看后面的槽。
+     * 滚轮路由（UI 抽屉化批2/批3）：指针（最近一次 mouseMoved 的屏幕坐标）落在抽屉头像条 / 装备网格上 →
+     * 交给抽屉滚动并消费；其余位置不消费（描述滚动框的滚轮由 scene2d ScrollPane 在 uiStage 层自行消费）。
+     * <b>方向</b>：libGDX 约定 {@code amountY > 0} = 向下滚 = 看后面的槽 / 行（LWJGL3 后端 {@code scrolled(−x, −y)}
+     * 取负 GLFW 偏移；与 ScrollPane 的 {@code setScrollY(amountY + 50×Δ)} 同向——批2 初版写反，批3 修正）。
      */
     @Override
     public boolean scrolled(float amountX, float amountY) {
         if (drawerHitTest == null || !hoverTracked || modalBlocked.getAsBoolean()) {
             return false;
         }
-        int steps = amountY < 0f ? Math.max(1, Math.round(-amountY)) : amountY > 0f ? -Math.max(1, Math.round(amountY)) : 0;
-        return steps != 0 && drawerHitTest.scrollStrip(hoverScreenX, hoverScreenY, steps);
+        int steps = amountY > 0f ? Math.max(1, Math.round(amountY)) : amountY < 0f ? -Math.max(1, Math.round(-amountY)) : 0;
+        return steps != 0 && (drawerHitTest.scrollStrip(hoverScreenX, hoverScreenY, steps)
+                || drawerHitTest.scrollEquip(hoverScreenX, hoverScreenY, steps));
     }
 
     // —— 渲染只读暴露（ghost 绘制与高亮，input §4.1） ——

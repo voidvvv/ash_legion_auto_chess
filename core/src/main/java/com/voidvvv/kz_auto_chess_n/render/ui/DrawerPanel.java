@@ -6,8 +6,11 @@ import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.Group;
 import com.badlogic.gdx.scenes.scene2d.Touchable;
 import com.badlogic.gdx.utils.viewport.Viewport;
+import com.voidvvv.kz_auto_chess_n.command.CommandManager;
 import com.voidvvv.kz_auto_chess_n.command.PlacementTarget;
 import com.voidvvv.kz_auto_chess_n.command.RunContext;
+import com.voidvvv.kz_auto_chess_n.entities.GamePhase;
+import com.voidvvv.kz_auto_chess_n.entities.Player;
 import com.voidvvv.kz_auto_chess_n.entities.Unit;
 import com.voidvvv.kz_auto_chess_n.input.DrawerHitTest;
 import com.voidvvv.kz_auto_chess_n.render.Assets;
@@ -50,12 +53,14 @@ public final class DrawerPanel extends Group implements DrawerHitTest {
 
     private final Supplier<RunContext> context;
     private final Viewport uiViewport;
+    private final EquipPendingState equipPending;
     /** 主体：随进度左滑 */
     private final Group body = new Group();
     /** 收起态角标（随展开淡出） */
     private final DrawerBadge badge;
     private final DrawerInfoSection info;
     private final DrawerStripSection strip;
+    private final DrawerEquipSection equip;
     /** 最近一次 apply 的开合进度（命中判定用） */
     private float progress;
     private int selectedUnitId = -1;
@@ -66,10 +71,13 @@ public final class DrawerPanel extends Group implements DrawerHitTest {
     /** 复用（unproject 输出，零分配） */
     private final Vector2 touch = new Vector2();
 
-    public DrawerPanel(Assets assets, Supplier<RunContext> context, Viewport uiViewport, Listener listener) {
+    public DrawerPanel(Assets assets, Supplier<RunContext> context, Viewport uiViewport,
+                       CommandManager commandManager, EquipPendingState equipPending, Listener listener) {
         this.context = Objects.requireNonNull(context, "context 不能为 null");
         this.uiViewport = Objects.requireNonNull(uiViewport, "uiViewport 不能为 null");
+        this.equipPending = Objects.requireNonNull(equipPending, "equipPending 不能为 null");
         Objects.requireNonNull(assets, "assets 不能为 null");
+        Objects.requireNonNull(commandManager, "commandManager 不能为 null");
         Objects.requireNonNull(listener, "listener 不能为 null");
         setTouchable(Touchable.childrenOnly);
         body.setTouchable(Touchable.enabled);
@@ -78,11 +86,12 @@ public final class DrawerPanel extends Group implements DrawerHitTest {
         NinePatches patches = new NinePatches(assets);
         // 主体（自下而上：底板与分隔条 → 信息区 → 头像条 → 装备区 → 关闭钮）
         body.addActor(new DrawerSkin.PanelBackground(patches.panel, patches.divider));
-        info = new DrawerInfoSection(assets, patches.inset, patches.title, patches.tabActive, patches.tabInactive);
+        info = new DrawerInfoSection(assets, commandManager, patches.inset, patches.title,
+                patches.tabActive, patches.tabInactive);
         strip = new DrawerStripSection(assets, patches.slot, patches.slotSelected, patches.track,
                 assets.uiRegion(UiKeys.SCROLL_KNOB.id()));
-        DrawerEquipSection equip = new DrawerEquipSection(assets, patches.slot, patches.inset,
-                assets.uiRegion(UiKeys.ICON_EQUIP_WEAPON.id()));
+        equip = new DrawerEquipSection(assets, patches.slot, patches.slotSelected, patches.inset, patches.track,
+                equipPending);
         body.addActor(info);
         body.addActor(strip);
         body.addActor(equip);
@@ -125,17 +134,28 @@ public final class DrawerPanel extends Group implements DrawerHitTest {
 
     // —— 每帧驱动（BattleScreen） ——
 
-    /** 每帧刷新（只读实体）：头像条绑定备战席、选中有效性、信息区文案（指纹变化才重建）、角标计数 */
-    public void refresh() {
+    /**
+     * 每帧刷新（只读实体）：待定失配自愈、头像条绑定备战席、选中有效性、信息区文案（指纹变化才重建）、
+     * 装备网格绑定背包、角标计数。
+     *
+     * @param dragging 拖拽中（装备格悬停预览抑制，口径 B4-2）
+     */
+    public void refresh(boolean dragging) {
         RunContext ctx = context.get();
-        List<Unit> bench = ctx.getPlayer().getBench();
-        Unit selected = selectedUnitId >= 0 ? ctx.getPlayer().getUnitById(selectedUnitId) : null;
+        Player player = ctx.getPlayer();
+        GamePhase phase = ctx.getRunState().getPhase();
+        DrawerEquipText.reconcilePending(equipPending, player);
+        List<Unit> bench = player.getBench();
+        Unit selected = selectedUnitId >= 0 ? player.getUnitById(selectedUnitId) : null;
         if (selected == null) {
             selectedUnitId = -1;
         }
+        info.setPhase(phase);
+        equip.setPhase(phase);
         info.setUnit(selected, ctx.getGameData());
         badge.setBenchCount(bench.size());
         strip.bind(bench, selected, dropTarget);
+        equip.bind(player.getInventory(), dragging);
     }
 
     /**
@@ -189,6 +209,11 @@ public final class DrawerPanel extends Group implements DrawerHitTest {
         return strip.scrollIndex();
     }
 
+    /** 装备网格首个可见行（库存下标 = 行 × 3） */
+    public int equipFirstRow() {
+        return equip.firstRow();
+    }
+
     // —— DrawerHitTest（屏幕坐标；头像格穿透后由 boardProcessor 回查） ——
 
     @Override
@@ -215,6 +240,19 @@ public final class DrawerPanel extends Group implements DrawerHitTest {
             return false;
         }
         strip.scrollBy(steps, context.get().getPlayer().getBench().size());
+        return true;
+    }
+
+    @Override
+    public boolean scrollEquip(int screenX, int screenY, int steps) {
+        if (progress <= 0f || steps == 0) {
+            return false;
+        }
+        toLocal(screenX, screenY);
+        if (!DrawerGeometry.equipSection().contains(touch.x, touch.y)) {
+            return false;
+        }
+        equip.scrollRows(steps, context.get().getPlayer().getInventory().size());
         return true;
     }
 

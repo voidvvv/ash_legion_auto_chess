@@ -37,7 +37,6 @@ import com.voidvvv.kz_auto_chess_n.render.ui.DrawerGeometry;
 import com.voidvvv.kz_auto_chess_n.render.ui.DrawerPanel;
 import com.voidvvv.kz_auto_chess_n.render.ui.EquipPendingState;
 import com.voidvvv.kz_auto_chess_n.render.ui.HoverPreviewCard;
-import com.voidvvv.kz_auto_chess_n.render.ui.InventoryPanel;
 import com.voidvvv.kz_auto_chess_n.render.ui.NotificationPanel;
 import com.voidvvv.kz_auto_chess_n.render.ui.PauseMenuDialog;
 import com.voidvvv.kz_auto_chess_n.render.ui.ResultBanner;
@@ -107,7 +106,6 @@ public final class BattleScreen implements Screen {
     private final Actor inputCatcher;
     private final RunEndPanel runEndPanel;
     private final ShopBar shopBar;
-    private final InventoryPanel inventoryPanel;
     private final SynergyPanel synergyPanel;
     private final NotificationPanel notificationPanel;
     private final HoverPreviewCard hoverPreview; // Phase 5.1 R1：悬停预览卡（uiStage 最上层瞬态）
@@ -203,7 +201,6 @@ public final class BattleScreen implements Screen {
             }
         }, contextSupplier());
         this.shopBar = new ShopBar(commandManager, assets, contextSupplier());
-        this.inventoryPanel = new InventoryPanel(assets, contextSupplier(), equipPending);
         this.synergyPanel = new SynergyPanel(assets, contextSupplier());
         this.notificationPanel = new NotificationPanel(assets, contextSupplier(), commandManager);
         this.hoverPreview = new HoverPreviewCard(assets, contextSupplier());
@@ -214,7 +211,8 @@ public final class BattleScreen implements Screen {
         // UI 抽屉装配（批1 骨架 / 批2 备战席迁入）：面板挂不缩放层（Q8）；其主体接替 ③ 参数位随转场淡出，
         // 故面板先于转场控制器构造。开/合请求一律经控制器，转场封禁位在回调处合流（§3.8）
         this.unscaledLayer = new UnscaledLayer(GameBalance.RENDER_GLOBAL_SCALE);
-        this.drawerPanel = new DrawerPanel(assets, contextSupplier(), uiStage.getViewport(), new DrawerPanel.Listener() {
+        this.drawerPanel = new DrawerPanel(assets, contextSupplier(), uiStage.getViewport(), commandManager,
+                equipPending, new DrawerPanel.Listener() {
             @Override
             public void onToggleRequested() {
                 drawerController.requestToggle(transitionController.isInputBlocked());
@@ -287,7 +285,7 @@ public final class BattleScreen implements Screen {
         uiStage.addActor(resultBanner);
         uiStage.addActor(runEndPanel);
         uiStage.addActor(shopBar);
-        uiStage.addActor(inventoryPanel);
+        // ③ InventoryPanel 已退役（UI 抽屉化批3：背包库存并入抽屉装备网格，两段式穿戴走抽屉装备格 + 棋子点击）
         // 抽屉层：位于现有面板之上、⑤⑨ 之下（UI_PLAN §3.5 绘制层级：现有面板 → 抽屉 → 羁绊/通知 → 悬停卡 → 收点）
         uiStage.addActor(unscaledLayer);
         uiStage.addActor(synergyPanel);
@@ -365,6 +363,7 @@ public final class BattleScreen implements Screen {
                             commandManager.addCommand(new EquipItemCommand(
                                     equipPending.pendingItemId(), unitId));
                             equipPending.clear();
+                            drawerPanel.select(unitId); // 批3：穿上即选中——「装备」标签页随即显示该棋子三件（用户刚点了它，合「点选谁就显示谁」）
                         } else { // Q5（UI 抽屉化批2）：点棋子 = 抽屉选中并展开——详情弹窗由抽屉「介绍」页取代
                             drawerPanel.select(unitId);
                             drawerController.requestOpen(transitionController.isInputBlocked());
@@ -437,17 +436,15 @@ public final class BattleScreen implements Screen {
         drawerPanel.setDimmed(dragFromBench);
         drawerPanel.setDropTarget(boardProcessor != null && boardProcessor.isDragging()
                 ? boardProcessor.getDropPreview() : null);
-        drawerPanel.refresh();
+        drawerPanel.refresh(boardProcessor != null && boardProcessor.isDragging()); // 拖拽中抑制装备格悬停预览（口径 B4-2）
         drawerPanel.apply(drawerController.progress());
-        inventoryPanel.refresh(); // ⑤⑨ 全程可见（BATTLE 置灰在各自 draw 内，差异声明 #8）；③ 稳态可见性归转场驱动器（K7）
         synergyPanel.refresh(runContext);
         notificationPanel.refresh(runContext);
         notificationPanel.syncBattle(runContext.getBattleState());
         hoverPreview.refresh(drawerController.progress() > 0f ? HoverCandidate.NONE // Q9：抽屉展开时压制备战期棋盘悬停卡
                         : boardProcessor == null ? HoverCandidate.NONE : boardProcessor.getHoverCandidate(),
                 shopBar.getHoveredSlot(),
-                boardProcessor != null && boardProcessor.isDragging() ? -1 : inventoryPanel.getHoveredSlot(), // feedback07：拖拽中抑制背包源（口径 B4-2）
-                frozen, frozen ? 0f : delta); // R1+feedback04+feedback07：候选/槽位/冻结位（§5.3-8）
+                frozen, frozen ? 0f : delta); // R1+feedback04：候选/槽位/冻结位（§5.3-8；背包源随 ③ 退役——批3）
         if (phase == GamePhase.BATTLE) {
             battleHud.refresh(runContext.getBattleState());
         }

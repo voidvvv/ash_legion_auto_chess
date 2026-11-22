@@ -380,6 +380,67 @@ class DrawerGeometryTest {
         assertThat(UiKeys.BTN_CLOSE.isNinePatch()).isFalse();
     }
 
+    // —— UI 抽屉化批3：装备区滚动条 / 装备标签页三行 / 描述滚动视口 ——
+
+    @Test
+    @DisplayName("装备网格纵向滚动条：恰好落在网格与大图预览之间的 8px 间隙，与网格等高；宽 8 ≥ 轨切分线和 8")
+    void equipScrollBarSitsBetweenGridAndPreview() {
+        DrawerGeometry.Rect grid = DrawerGeometry.equipGrid();
+        DrawerGeometry.Rect bar = DrawerGeometry.equipScrollBar();
+        DrawerGeometry.Rect preview = DrawerGeometry.equipPreview();
+        assertThat(bar.x()).as("轨左缘 = 网格右缘").isEqualTo(grid.right());
+        assertThat(bar.right()).as("轨右缘 = 预览左缘").isEqualTo(preview.x());
+        assertThat(bar.width()).isEqualTo(DrawerGeometry.EQUIP_SCROLL_W);
+        assertThat(bar.y()).isEqualTo(grid.y());
+        assertThat(bar.height()).isEqualTo(grid.height());
+        assertThat(bar.width()).isGreaterThanOrEqualTo(UiKeys.SCROLL_TRACK.left() + UiKeys.SCROLL_TRACK.right());
+        assertThat(DrawerGeometry.EQUIP_KNOB).isEqualTo(bar.width());
+        assertThat(overlaps(grid, bar)).isFalse();
+        assertThat(overlaps(preview, bar)).isFalse();
+    }
+
+    @Test
+    @DisplayName("装备标签页三行（武器/盔甲/饰品）落在描述框内、互不压叠、行数 = 每棋子装备槽数；每行「卸下」钮落在行内")
+    void equipTabRowsFitDescriptionPane() {
+        DrawerGeometry.Rect pane = DrawerGeometry.descriptionPane();
+        assertThat(DrawerGeometry.EQUIP_TAB_ROWS).isEqualTo(GameBalance.EQUIP_SLOTS_PER_UNIT);
+        assertThat(DrawerGeometry.EQUIP_TAB_ROWS).isEqualTo(com.voidvvv.kz_auto_chess_n.data.EquipmentSlot.values().length);
+        DrawerGeometry.Rect previous = null;
+        for (int row = 0; row < DrawerGeometry.EQUIP_TAB_ROWS; row++) {
+            DrawerGeometry.Rect r = DrawerGeometry.equipTabRow(row);
+            assertThat(inside(pane, r)).as("行 %d 落在描述框内", row).isTrue();
+            if (previous != null) {
+                assertThat(r.top()).as("行 %d 在上一行之下且不压叠", row).isLessThanOrEqualTo(previous.y());
+            }
+            previous = r;
+            DrawerGeometry.Rect button = DrawerGeometry.equipTabUnequipButton(row);
+            assertThat(inside(r, button)).as("行 %d 的卸下钮落在行内", row).isTrue();
+            assertThat(button.right()).as("钮右对齐").isEqualTo(r.right() - 2);
+            assertThat(button.x()).as("钮左缘留出 槽名(24)+物品名(36) 的文字区").isGreaterThanOrEqualTo(r.x() + 28 + 36);
+        }
+    }
+
+    @Test
+    @DisplayName("描述滚动视口：介绍视口在描述框内（左右各缩 4、上下各缩 2）；装备预览 = 图标位(上 40) + 描述视口(下 32)，两者铺满预览且不压叠")
+    void scrollableViewportsFit() {
+        DrawerGeometry.Rect pane = DrawerGeometry.descriptionPane();
+        DrawerGeometry.Rect viewport = DrawerGeometry.descriptionViewport();
+        assertThat(inside(pane, viewport)).isTrue();
+        assertThat(viewport.width()).isEqualTo(pane.width() - 8);
+        assertThat(viewport.height()).isEqualTo(pane.height() - 4);
+        DrawerGeometry.Rect preview = DrawerGeometry.equipPreview();
+        DrawerGeometry.Rect icon = DrawerGeometry.equipIconZone();
+        DrawerGeometry.Rect desc = DrawerGeometry.equipDescViewport();
+        assertThat(inside(preview, icon)).isTrue();
+        assertThat(inside(preview, desc)).isTrue();
+        assertThat(overlaps(icon, desc)).isFalse();
+        assertThat(icon.y()).as("图标位自描述带顶起（预览底 + 32）").isEqualTo(preview.y() + DrawerGeometry.EQUIP_DESC_ZONE_H);
+        assertThat(desc.top()).as("描述视口在描述带内四边各缩 2——与图标位之间留 2px 呼吸间隙").isEqualTo(icon.y() - 2);
+        assertThat(icon.height()).isEqualTo(preview.height() - DrawerGeometry.EQUIP_DESC_ZONE_H);
+        assertThat(desc.width()).isEqualTo(preview.width() - 4);
+        assertThat(desc.height()).isEqualTo(DrawerGeometry.EQUIP_DESC_ZONE_H - 4);
+    }
+
     @Test
     @DisplayName("关闭钮落在标题板内、贴抽屉右上角，不越出抽屉")
     void closeButtonInsideTitlePlate() {

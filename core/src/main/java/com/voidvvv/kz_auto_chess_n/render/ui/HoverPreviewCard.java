@@ -19,15 +19,14 @@ import java.util.List;
 import java.util.function.Supplier;
 
 /**
- * 悬停预览卡（Phase 5.1 R1，裁决 A：固定锚、不跟随鼠标、只读精简；feedback04 敌方悬停；
- * feedback07 背包格装备卡）。棋盘域/商店卡/背包格各一锚点、各一 {@link HoverStateMachine}
- * （三源互斥——单指针不同时悬停多处，棋盘源优先）；棋子卡行集由
- * {@link UnitInfoText#previewLines} 生成（模板级，不含 spend/已穿装备——R1 口径限于棋子卡，
- * 背包格卡展示装备本体，行集走 EquipmentInfoText，差异声明 #D1）。
+ * 悬停预览卡（Phase 5.1 R1，裁决 A：固定锚、不跟随鼠标、只读精简；feedback04 敌方悬停）。
+ * 棋盘域/商店卡各一锚点、各一 {@link HoverStateMachine}（两源互斥——单指针不同时悬停多处，棋盘源优先）；
+ * 棋子卡行集由 {@link UnitInfoText#previewLines} 生成（模板级，不含 spend/已穿装备——R1 口径限于棋子卡）。
  * 2026-11-21 主人整改：v5 全量文案（机制通道 17 词）后棋子卡<b>完整容纳全部文本不截断</b>——
  * 卡高自适应行数（棋盘卡 9 列/商店卡 11 列，卡内字号 0.75×＝9px），最长真实组合由
- * UnitInfoTextSeedDataTest 的容量断言锁定（27/24 行 ≤ 锚区 252/224）；装备卡维持折行截断
- * （§5.3-4，完整信息走详情弹窗）。
+ * UnitInfoTextSeedDataTest 的容量断言锁定（27/24 行 ≤ 锚区 252/224）。
+ * UI 抽屉化批3（Q5）：feedback07 的<b>背包格装备卡（第三源）退役</b>——装备信息改在抽屉装备区
+ * 「大图预览 + 可滚动描述」呈现（{@code DrawerEquipSection}），其行集 / 悬停归一断言迁至 DrawerEquipTextTest。
  * 棋盘候选经 {@link HoverCandidate} 携带模板（feedback04：敌方虚影/敌侧战斗单位无玩家
  * 实例，不回查名单——名单核验移至查询侧重命中）；敌方候选首行加"（敌方）"标记。
  * 非模态瞬态：uiStage 最上层普通 Actor，无输入监听、不阻断任何交互。
@@ -44,9 +43,6 @@ public final class HoverPreviewCard extends Actor {
     /** 折行列宽（§5.3-5 口径 (W - 8) / 卡内字号宽 取整：(94-8)/9 = 9；(112-8)/9 = 11） */
     static final int BOARD_MAX_COLUMNS = 9;
     static final int SHOP_MAX_COLUMNS = 11;
-    /** feedback07 背包格装备卡（维持原口径）：折行列宽 (90-8)/12 = 6；行容量 (100-8)/12 = 7 */
-    private static final int INVENTORY_MAX_COLUMNS = 6;
-    private static final int INVENTORY_LINE_CAPACITY = 7;
     /** 敌方候选首行标记（feedback04 视觉区分：廉价文案行方案，红描边弃用——见交付报告） */
     private static final String ENEMY_MARKER_LINE = "（敌方）";
 
@@ -56,8 +52,6 @@ public final class HoverPreviewCard extends Actor {
     private final Supplier<RunContext> context;
     private final HoverStateMachine boardHover = new HoverStateMachine();
     private final HoverStateMachine shopHover = new HoverStateMachine();
-    /** feedback07 背包格第三源（驻留键 = 槽位索引；与双源同一状态机实现） */
-    private final HoverStateMachine inventoryHover = new HoverStateMachine();
     private List<String> lines = Collections.emptyList();
     private float drawX;
     private float drawY;
@@ -75,25 +69,19 @@ public final class HoverPreviewCard extends Actor {
      * @param boardCandidate 棋盘域悬停候选（§6.CP6 getHoverCandidate，抑制已在查询侧施加；
      *                       SHOPPING 玩家/虚影、BATTLE 敌我战斗单位，候选键即状态机驻留键）
      * @param shopSlot       商店悬停槽位（§6.CP7 getHoveredSlot；空槽/非 SHOPPING 在此归一为 -1）
-     * @param inventorySlot  背包悬停槽位（feedback07 CP-B3 getHoveredSlot；拖拽抑制在调用方传 -1，
-     *                       BATTLE 置灰/空槽/越界在此归一为 -1——口径 B4-1/B4-2）
-     * @param suppressed     frozen（paused || 弹窗模态）——三源共用抑制位（§5.3-8）
+     * @param suppressed     frozen（paused || 弹窗模态）——两源共用抑制位（§5.3-8）
      * @param delta          帧间隔秒（冻结时调用方传 0）
      */
-    public void refresh(HoverCandidate boardCandidate, int shopSlot, int inventorySlot,
-                        boolean suppressed, float delta) {
+    public void refresh(HoverCandidate boardCandidate, int shopSlot, boolean suppressed, float delta) {
         RunContext ctx = context.get();
         boolean shopping = ctx.getRunState().getPhase() == GamePhase.SHOPPING;
         int shop = shopping && shopSlot >= 0 && ctx.getShop().slotAt(shopSlot) != null ? shopSlot : -1;
-        int inventory = normalizeInventorySlot(ctx.getRunState().getPhase(), inventorySlot,
-                ctx.getPlayer().getInventory().size()); // BATTLE 置灰/空槽/越界 → -1（口径 B4-1）
         boardHover.update(boardCandidate.key(), suppressed, delta);
         shopHover.update(shop, suppressed, delta);
-        inventoryHover.update(inventory, suppressed, delta);
         recompute(ctx, boardCandidate);
     }
 
-    /** 行集与卡位重算（优先级：棋盘 > 商店 > 背包——单指针物理互斥，优先级为防御性定义；
+    /** 行集与卡位重算（优先级：棋盘 > 商店——单指针物理互斥，优先级为防御性定义；
      *  可见键必等于本帧候选键——update 在候选变化帧即时清可见） */
     private void recompute(RunContext ctx, HoverCandidate boardCandidate) {
         if (boardHover.visibleId() >= 0) {
@@ -109,13 +97,6 @@ public final class HoverPreviewCard extends Actor {
             lines = shopCardLines(shopTemplate, ctx.getGameData());
             placeAdaptive(BoardGeometry.SHOP_HOVER_X, BoardGeometry.SHOP_HOVER_Y,
                     BoardGeometry.SHOP_HOVER_W, BoardGeometry.SHOP_HOVER_H);
-            return;
-        }
-        if (inventoryHover.visibleId() >= 0) { // feedback07 背包格装备卡（第三源）
-            lines = inventoryCardLines(ctx.getPlayer().getInventory()
-                    .get(inventoryHover.visibleId()).getTemplate());
-            place(BoardGeometry.INVENTORY_HOVER_X, BoardGeometry.INVENTORY_HOVER_Y,
-                    BoardGeometry.INVENTORY_HOVER_W, BoardGeometry.INVENTORY_HOVER_H);
             return;
         }
         lines = Collections.emptyList();
@@ -137,24 +118,6 @@ public final class HoverPreviewCard extends Actor {
     /** 商店卡行集（纯静态，headless 可测）：previewLines 折行——全量不截断（容量同上锁定） */
     static List<String> shopCardLines(UnitData template, GameData data) {
         return UnitInfoText.previewLines(template, data, SHOP_MAX_COLUMNS);
-    }
-
-    /** 背包格装备卡行集（feedback07；纯静态，headless 可测）：lines 逐行折行 → 容量截断（§5.3-4 同口径） */
-    static List<String> inventoryCardLines(EquipmentData template) {
-        List<String> wrapped = new ArrayList<String>();
-        for (String line : EquipmentInfoText.lines(template)) {
-            wrapped.addAll(UnitInfoText.wrap(line, INVENTORY_MAX_COLUMNS));
-        }
-        return UnitInfoText.clipLines(wrapped, INVENTORY_LINE_CAPACITY);
-    }
-
-    /** 背包悬停归一（feedback07 口径 B4-1；纯函数三参）：BATTLE 置灰期（差异声明 #8——非交互只读
-     *  快照）/ 空槽（slot ≥ 背包数）/ 负值 → -1；抑制施加于查询侧（§5.3-8 同口径） */
-    static int normalizeInventorySlot(GamePhase phase, int slot, int inventorySize) {
-        if (phase == GamePhase.BATTLE || slot < 0 || slot >= inventorySize) {
-            return -1;
-        }
-        return slot;
     }
 
     private void place(int x, int y, int w, int h) {

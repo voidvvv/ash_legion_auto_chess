@@ -12,16 +12,16 @@ import java.util.List;
  * 抽屉信息区文案（UI 抽屉化批2：选中棋子 → 标题板写名、描述框写介绍；行集复用 {@link UnitInfoText}）。
  * 纯函数、零 Gdx。
  *
- * <p>容量口径：描述框 {@link DrawerGeometry#DESC_W} 宽 × 64 高，9px 小字（0.75×12）→ 全角
- * {@link #DESC_MAX_COLUMNS} 列 × {@link #DESC_MAX_LINES} 行；超出以 … 收尾（完整滚动见批3 的 ScrollPane）。
- * 标题板 232 宽 / 12px 字 → 全角 {@link #TITLE_MAX_COLUMNS} 列。
+ * <p>容量口径：描述滚动视口 {@link DrawerGeometry#descriptionViewport()} 宽 × 高，9px 小字（0.75×12）→ 全角
+ * {@link #DESC_MAX_COLUMNS} 列；不滚动可见 {@link #DESC_VISIBLE_LINES} 行，<b>超出由 ScrollPane 滚到底、不截断</b>
+ * （批2 过渡态的「前 5 行 + …」已退役）。标题板 232 宽 / 12px 字 → 全角 {@link #TITLE_MAX_COLUMNS} 列。
  */
 public final class DrawerInfoText {
 
     /** 描述框净宽 112px（120 − 左右各 4）÷ 9px = 全角 12 列 */
     public static final int DESC_MAX_COLUMNS = 12;
-    /** 描述框净高 58px（64 − 上留白 4）÷ 9px 行高 → 6 行 */
-    public static final int DESC_MAX_LINES = 6;
+    /** 描述滚动视口净高 60px 不滚动时可见的行数（超出靠 ScrollPane 滚动——批3 硬验收，不再截断） */
+    public static final int DESC_VISIBLE_LINES = 6;
     /** 标题板净宽 220px（232 − 左右各 6）÷ 12px → 全角 18 列 */
     public static final int TITLE_MAX_COLUMNS = 18;
 
@@ -41,8 +41,8 @@ public final class DrawerInfoText {
     }
 
     /**
-     * 「介绍」标签页行集：{@link UnitInfoText#detailLines}（名/星/费/累计花费 → 属性 → 技能 → 双羁绊）
-     * 逐行折到 {@link #DESC_MAX_COLUMNS} 列，再截到 {@link #DESC_MAX_LINES} 行（超出 … 收尾）。
+     * 「介绍」标签页行集（<b>全量、不截断</b>——批3：描述框改 ScrollPane，最长真实文案滚到底）：
+     * {@link UnitInfoText#detailLines}（名/星/费/累计花费 → 属性 → 技能 → 双羁绊）逐行折到 {@link #DESC_MAX_COLUMNS} 列。
      * 未选中 → 空列表（调用方改画占位行 {@link #noSelectionIntro()}）。
      */
     public static List<String> introLines(Unit unit, GameData data) {
@@ -53,7 +53,7 @@ public final class DrawerInfoText {
         for (String line : UnitInfoText.detailLines(unit, data)) {
             wrapped.addAll(UnitInfoText.wrap(line, DESC_MAX_COLUMNS));
         }
-        return UnitInfoText.clipLines(wrapped, DESC_MAX_LINES);
+        return wrapped;
     }
 
     /** 未选中时的介绍占位行 */

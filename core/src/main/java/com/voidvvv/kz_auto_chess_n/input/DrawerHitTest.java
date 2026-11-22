@@ -20,4 +20,11 @@ public interface DrawerHitTest {
      * @return 是否消费（指针不在头像条上 = false，事件不拦）
      */
     boolean scrollStrip(int screenX, int screenY, int steps);
+
+    /**
+     * 滚轮落在装备网格上（UI 抽屉化批3·Q1 网格可滚动）：滚动若干行（正 = 看后面的行）。
+     *
+     * @return 是否消费（指针不在装备网格上 = false，事件不拦）
+     */
+    boolean scrollEquip(int screenX, int screenY, int steps);
 }

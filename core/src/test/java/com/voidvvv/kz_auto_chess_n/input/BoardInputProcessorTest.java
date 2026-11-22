@@ -95,7 +95,25 @@ class BoardInputProcessorTest {
             }
             return over;
         }
+
+        /** 装备网格滚轮桩：(EQUIP_X, EQUIP_Y) → 消费并累计步数；其余不消费 */
+        int equipScrollSteps;
+
+        @Override
+        public boolean scrollEquip(int screenX, int screenY, int steps) {
+            lastScreenX = screenX;
+            lastScreenY = screenY;
+            if (!open || screenX != EQUIP_X || screenY != EQUIP_Y) {
+                return false;
+            }
+            equipScrollSteps += steps;
+            return true;
+        }
     }
+
+    /** 装备网格内一点（屏幕坐标；不与头像条 / 棋盘 / 出售区重叠） */
+    private static final int EQUIP_X = 120;
+    private static final int EQUIP_Y = 120;
 
     /** 每个用例独享一个桩（可变状态不跨用例泄漏） */
     private static FakeDrawerHitTest hit() {
@@ -478,7 +496,7 @@ class BoardInputProcessorTest {
     }
 
     @Test
-    @DisplayName("滚轮接头像条：指针在头像格上 → 传给抽屉并消费（向下滚 = 看后面的槽）；指针在别处或无命中接口 → 不消费")
+    @DisplayName("滚轮接头像条：指针在头像格上 → 传给抽屉并消费（amountY>0 = 向下滚 = 看后面的槽，与 ScrollPane 同向）；指针在别处或无命中接口 → 不消费")
     void wheelOverStripScrollsDrawer() {
         RunContext ctx = shoppingContext();
         FakeDrawerHitTest hit = hit();
@@ -486,20 +504,39 @@ class BoardInputProcessorTest {
                 () -> ctx, () -> false, null, hit);
 
         processor.mouseMoved(BENCH0_X, BENCH0_Y);
-        assertThat(processor.scrolled(0f, -1f)).isTrue();
+        assertThat(processor.scrolled(0f, 1f)).as("向下滚 1 格").isTrue();
         assertThat(hit.scrollSteps).isEqualTo(1);
-        assertThat(processor.scrolled(0f, 1f)).isTrue();
+        assertThat(processor.scrolled(0f, -1f)).as("向上滚 1 格（LWJGL3：GLFW 向上为正、后端取负 → amountY<0）").isTrue();
         assertThat(hit.scrollSteps).as("反向一步抵消").isZero();
         assertThat(processor.scrolled(0f, 0f)).as("零滚动量不消费").isFalse();
 
         processor.mouseMoved(400, 60);
-        assertThat(processor.scrolled(0f, -1f)).isFalse();
+        assertThat(processor.scrolled(0f, 1f)).isFalse();
         assertThat(hit.scrollSteps).isZero();
 
         BoardInputProcessor legacy = new BoardInputProcessor(new IdentityViewport(), new CommandManager(),
                 () -> ctx, () -> false);
         legacy.mouseMoved(BENCH0_X, BENCH0_Y);
-        assertThat(legacy.scrolled(0f, -1f)).as("未注入抽屉：恒不消费（原口径）").isFalse();
+        assertThat(legacy.scrolled(0f, 1f)).as("未注入抽屉：恒不消费（原口径）").isFalse();
+    }
+
+    @Test
+    @DisplayName("滚轮落装备网格（UI 抽屉化批3·Q1 网格可滚动）：头像条未消费时接着问装备网格并消费；两处都不在 → 不消费；方向与头像条/ScrollPane 一致")
+    void wheelOverEquipGridScrollsDrawer() {
+        RunContext ctx = shoppingContext();
+        FakeDrawerHitTest hit = hit();
+        BoardInputProcessor processor = new BoardInputProcessor(new IdentityViewport(), new CommandManager(),
+                () -> ctx, () -> false, null, hit);
+
+        processor.mouseMoved(EQUIP_X, EQUIP_Y);
+        assertThat(processor.scrolled(0f, 1f)).as("向下滚 1 行").isTrue();
+        assertThat(hit.equipScrollSteps).isEqualTo(1);
+        assertThat(processor.scrolled(0f, 2f)).as("两格 = 两行").isTrue();
+        assertThat(hit.equipScrollSteps).isEqualTo(3);
+        assertThat(hit.scrollSteps).as("头像条步数不受影响").isZero();
+
+        hit.open = false; // 抽屉收起：两处皆不命中
+        assertThat(processor.scrolled(0f, 1f)).isFalse();
     }
 
     @Test
