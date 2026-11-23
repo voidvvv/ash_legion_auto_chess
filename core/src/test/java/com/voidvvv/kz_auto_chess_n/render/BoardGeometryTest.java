@@ -127,10 +127,14 @@ class BoardGeometryTest {
         assertThat(BoardGeometry.SHOP_BAR_Y).isBetween(296 - 4, 296 + 4);
         assertThat(BoardGeometry.SHOP_BAR_H).isBetween(64 - 4, 64 + 4);
         // ⑨ render §九原值 (20,230,128,60) 与 ③ 底边 240 重叠 10px——差异声明 #4 改 (20,244,128,46)
-        assertThat(BoardGeometry.NOTIFY_X).isEqualTo(20);
-        assertThat(BoardGeometry.NOTIFY_Y).isEqualTo(244);
-        assertThat(BoardGeometry.NOTIFY_W).isEqualTo(128);
-        assertThat(BoardGeometry.NOTIFY_H).isEqualTo(46);
+        assertThat(BoardGeometry.NOTIFY_SMALL_X).isEqualTo(20);
+        assertThat(BoardGeometry.NOTIFY_SMALL_Y).isEqualTo(232);
+        assertThat(BoardGeometry.NOTIFY_SMALL_W).isEqualTo(104);
+        assertThat(BoardGeometry.NOTIFY_SMALL_H).isEqualTo(58);
+        assertThat(BoardGeometry.NOTIFY_LARGE_X).isEqualTo(20);
+        assertThat(BoardGeometry.NOTIFY_LARGE_Y).isEqualTo(92);
+        assertThat(BoardGeometry.NOTIFY_LARGE_W).isEqualTo(196);
+        assertThat(BoardGeometry.NOTIFY_LARGE_H).isEqualTo(188);
     }
 
     @Test
@@ -138,7 +142,7 @@ class BoardGeometryTest {
     void adjacentZonesDoNotOverlap() {
         // ⑤ 底边不侵入 ⑦、⑨ 底边不侵入 ⑧
         assertThat(BoardGeometry.SELL_ZONE_Y).isGreaterThanOrEqualTo(BoardGeometry.SYNERGY_Y + BoardGeometry.SYNERGY_H);
-        assertThat(BoardGeometry.SHOP_BAR_Y).isGreaterThanOrEqualTo(BoardGeometry.NOTIFY_Y + BoardGeometry.NOTIFY_H);
+        assertThat(BoardGeometry.SHOP_BAR_Y).isGreaterThanOrEqualTo(BoardGeometry.NOTIFY_SMALL_Y + BoardGeometry.NOTIFY_SMALL_H);
     }
 
     @Test

@@ -57,10 +57,26 @@ public final class HoverPreviewCard extends Actor {
     private float drawY;
     private float drawW;
     private float drawH;
+    /** 可见卡矩形缓存（零分配；品质改造 §1.5b 展开通知重叠闸数据源） */
+    private final int[] cardRect = new int[4];
 
     public HoverPreviewCard(Assets assets, Supplier<RunContext> context) {
         this.assets = assets;
         this.context = context;
+    }
+
+    /** 是否有可见卡（品质改造 §1.5b：展开通知与其重叠时暂停绘制通知） */
+    public boolean hasVisibleCard() {
+        return !lines.isEmpty();
+    }
+
+    /** 可见卡矩形（缓存数组零分配，{x, y, w, h} 取整像素；无可见卡时内容无意义） */
+    public int[] visibleCardRect() {
+        cardRect[0] = Math.round(drawX);
+        cardRect[1] = Math.round(drawY);
+        cardRect[2] = Math.round(drawW);
+        cardRect[3] = Math.round(drawH);
+        return cardRect;
     }
 
     /**

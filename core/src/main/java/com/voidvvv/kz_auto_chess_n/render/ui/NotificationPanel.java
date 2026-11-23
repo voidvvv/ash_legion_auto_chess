@@ -2,7 +2,9 @@ package com.voidvvv.kz_auto_chess_n.render.ui;
 
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.Batch;
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.scenes.scene2d.Group;
+import com.badlogic.gdx.scenes.scene2d.Touchable;
 import com.voidvvv.kz_auto_chess_n.command.CommandManager;
 import com.voidvvv.kz_auto_chess_n.command.GameCommand;
 import com.voidvvv.kz_auto_chess_n.command.RunContext;
@@ -11,6 +13,7 @@ import com.voidvvv.kz_auto_chess_n.data.SkillData;
 import com.voidvvv.kz_auto_chess_n.entities.BattleState;
 import com.voidvvv.kz_auto_chess_n.entities.BattleUnit;
 import com.voidvvv.kz_auto_chess_n.entities.CombatEvent;
+import com.voidvvv.kz_auto_chess_n.entities.GamePhase;
 import com.voidvvv.kz_auto_chess_n.entities.Side;
 import com.voidvvv.kz_auto_chess_n.render.Assets;
 import com.voidvvv.kz_auto_chess_n.render.EventInbox;
@@ -24,7 +27,12 @@ import java.util.function.Supplier;
 
 /**
  * ⑨ 事件通知（render §5.5）：三流合并（命令 onExecuted + 战斗 CombatEvent + RunState.notices）。
- * 小窗最近 4 行常驻；L 键（GlobalKeyProcessor）切大窗（最近 200 行，无过滤——WARNING-6）。
+ * 品质改造 §1.5b：缩小态 (20,232,104,58) 四行行高 12、按字宽省略；L 键展开 (20,92,196,188)；
+ * 日志存入保留长版本、绘制时按两尺寸各自实测宽度省略；<b>禁触控</b>；隐藏期（抽屉展开 / 结果终局 /
+ * 弹窗）只收集不画；展开通知与可见悬停卡矩形重叠时仅暂停绘制、移开恢复、保留 L 键状态。
+ *
+ * <p>附着守卫（§1.5b）：{@link BattleScope} 以 BattleState 引用身份做守卫——同一实例连续刷新
+ * 只前进游标（修同实例逐帧 attach 从头回读）；BattleScreen 先同步战斗引用再刷事件。
  */
 public final class NotificationPanel extends Group {
 
@@ -32,14 +40,18 @@ public final class NotificationPanel extends Group {
     private final Supplier<RunContext> context;
     private final NotificationLog log = new NotificationLog();
     private final EventInbox inbox = new EventInbox();
-    /** 当前附着战斗（feedback06：事件主体 id → 单位名解析源；与 inbox 生命周期对齐——attach 赋值 / detach 置 null） */
-    private BattleState battleState;
+    private final BattleScope scope = new BattleScope();
     /** 命令行中转队列（onExecuted 回调线程与渲染帧解耦——渲染帧统一消费） */
     private final List<String> pendingCommandLines = new ArrayList<String>();
+    /** 行宽实测（GlyphLayout 懒建复用——渲染段零分配） */
+    private GlyphLayout measureLayout;
+    /** 本帧绘制抑制位（Screen 依 §1.5b 规则逐帧写入——收集照常、仅停画） */
+    private boolean drawSuppressed;
 
     public NotificationPanel(Assets assets, Supplier<RunContext> context, CommandManager commandManager) {
         this.assets = assets;
         this.context = context;
+        setTouchable(Touchable.disabled); // §1.5b：通知禁触控（透明接收器留 UI 顶层）
         commandManager.addListener(new CommandManager.CommandExecutedListener() {
             @Override
             public void onExecuted(GameCommand command, boolean success) {
@@ -48,20 +60,50 @@ public final class NotificationPanel extends Group {
         });
     }
 
-    /** 战斗作用域同步（Screen 观察调用；attach 于战斗创建帧 = 0 事件，无历史回灌）。
-     *  同时保留 BattleState 引用供 formatEvent 解析事件主体（feedback06）；detach 置 null 可 GC */
-    public void syncBattle(BattleState state) {
-        this.battleState = state;
-        if (state == null) {
-            inbox.detach();
-        } else {
-            inbox.attach(state);
+    /**
+     * 战斗作用域绑定（品质改造 §1.5b 附着守卫）：以 BattleState 引用身份判定——同一实例连续
+     * syncBattle 不再 attach（EventInbox 游标只前进，不从头回读）；引用变化 / 置 null 才重附着。
+     * BattleState 引用另供 formatEvent 解析事件主体（feedback06）。
+     */
+    static final class BattleScope {
+        private BattleState bound;
+        private final EventInbox inbox = new EventInbox();
+
+        void sync(BattleState state) {
+            if (state == bound) {
+                return; // 同实例：游标不动（修相同实例逐帧 attach 从头回读）
+            }
+            bound = state;
+            if (state == null) {
+                inbox.detach();
+            } else {
+                inbox.attach(state);
+            }
         }
+
+        /** 新事件段消费（未附着 = 空操作） */
+        void forEachNew(Consumer<CombatEvent> consumer) {
+            inbox.forEachNew(consumer);
+        }
+
+        BattleState boundState() {
+            return bound;
+        }
+    }
+
+    /** 战斗作用域同步（Screen 每帧、先于 refresh 调用——§1.5b 修帧序） */
+    public void syncBattle(BattleState state) {
+        scope.sync(state);
     }
 
     /** 当前附着战斗（未附着 = null；包级实例 getter 供 headless 生命周期测试观察——沿 ShopBar.getHoveredSlot 暴露形态） */
     BattleState currentBattle() {
-        return battleState;
+        return scope.boundState();
+    }
+
+    /** 本帧绘制抑制（Screen 依 §1.5b 规则逐帧写入；收集不受影响——隐藏期继续消费） */
+    public void setDrawSuppressed(boolean suppressed) {
+        this.drawSuppressed = suppressed;
     }
 
     /** 便捷重载：取构造注入的上下文（Screen 可免传 ctx） */
@@ -77,10 +119,10 @@ public final class NotificationPanel extends Group {
                 appended[0]++;
             }
         }
-        inbox.forEachNew(new Consumer<CombatEvent>() {
+        scope.forEachNew(new Consumer<CombatEvent>() {
             @Override
             public void accept(CombatEvent event) {
-                String line = formatEvent(event, ctx.getGameData(), battleState);
+                String line = formatEvent(event, ctx.getGameData(), scope.boundState());
                 if (line != null && log.appendCapped(line, appended[0])) {
                     appended[0]++; // 超限丢弃（§5.5 防刷屏，WARNING-6）
                 }
@@ -100,8 +142,8 @@ public final class NotificationPanel extends Group {
         }
     }
 
-    /** 通知行截断列宽上限（feedback06 口径 A2-3）：16 列 = 192px，NOTIFY_X+6 起 → 右缘 218 < 棋盘左缘 224；
-     *  覆盖全部现实文案（4 字名 +（敌方）+「 施放 」+ 5 字技能名 ≈ 15.5 列），截断仅极端防御 */
+    /** 通知行长版本列宽上限（feedback06 口径 A2-3）：16 列 = 192px ≥ 展开窗可用宽 184px——
+     *  日志存入保留可供展开态使用的长版本，两尺寸各自再按实测宽度省略（§1.5b） */
     static final int NOTIFY_MAX_COLUMNS = 16;
 
     /** 战斗事件行（仅 UNIT_DIED/CAST——HIT/HEALED 过噪跳过，口径 #13 不扩；feedback06 加主体名：
@@ -140,35 +182,94 @@ public final class NotificationPanel extends Group {
         log.toggleLargeMode();
     }
 
+    /**
+     * §1.5b 隐藏规则（Screen 逐帧判定后经 {@link #setDrawSuppressed} 写入；纯函数可测）：
+     * 抽屉展开（进度 &gt; 0）、结果 / 终局相位、弹窗可见 → 只收集不画。
+     */
+    public static boolean suppressedByLayout(boolean drawerOpen, boolean resultOrEndPhase, boolean modalShowing) {
+        return drawerOpen || resultOrEndPhase || modalShowing;
+    }
+
+    /** 结果 / 终局相位判定（§1.5b「结果/终局」） */
+    public static boolean isResultOrEndPhase(GamePhase phase) {
+        return phase == GamePhase.RESULT || phase == GamePhase.RUN_END;
+    }
+
+    /**
+     * 展开通知与可见悬停卡矩形重叠 → 仅暂停绘制（移开恢复、L 键状态保留；§1.5b）。
+     * 小窗 (20,232,104,58) 与两悬停卡锚区（128/508 起）不相交，恒不触发。
+     */
+    public static boolean overlapsVisibleHoverCard(boolean largeMode, int[] hoverRect) {
+        if (!largeMode || hoverRect == null) {
+            return false;
+        }
+        return BoardGeometry.rectsOverlap(BoardGeometry.NOTIFY_LARGE_X, BoardGeometry.NOTIFY_LARGE_Y,
+                BoardGeometry.NOTIFY_LARGE_W, BoardGeometry.NOTIFY_LARGE_H,
+                hoverRect[0], hoverRect[1], hoverRect[2], hoverRect[3]);
+    }
+
+    /** 展开态（Screen 供重叠闸判定；L 键状态保留——§1.5b） */
+    public boolean isLargeMode() {
+        return log.isLargeMode();
+    }
+
     @Override
     public void draw(Batch batch, float parentAlpha) {
+        if (drawSuppressed) {
+            return; // 只收集不画（§1.5b）：隐藏期与悬停卡重叠期，L 键状态保留
+        }
+        List<String> lines = log.visibleLines();
+        if (log.isLargeMode()) {
+            drawLarge(batch, lines);
+            return; // 展开时收起小窗（§1.5b）
+        }
         Color old = batch.getColor();
         batch.setColor(0.05f, 0.05f, 0.08f, 0.7f * parentAlpha);
         batch.draw(assets.region(PlaceholderKeys.PANEL_9SLICE),
-                BoardGeometry.NOTIFY_X, BoardGeometry.NOTIFY_Y,
-                BoardGeometry.NOTIFY_W, BoardGeometry.NOTIFY_H);
+                BoardGeometry.NOTIFY_SMALL_X, BoardGeometry.NOTIFY_SMALL_Y,
+                BoardGeometry.NOTIFY_SMALL_W, BoardGeometry.NOTIFY_SMALL_H);
         batch.setColor(old);
-        List<String> lines = log.visibleLines();
-        float y = BoardGeometry.NOTIFY_Y + BoardGeometry.NOTIFY_H - 8f;
+        float textX = BoardGeometry.NOTIFY_SMALL_X + BoardGeometry.NOTIFY_PADDING_PX;
+        float maxWidth = BoardGeometry.NOTIFY_SMALL_W - 2f * BoardGeometry.NOTIFY_PADDING_PX;
+        float y = BoardGeometry.NOTIFY_SMALL_Y + BoardGeometry.NOTIFY_SMALL_H
+                - BoardGeometry.NOTIFY_PADDING_PX - BoardGeometry.NOTIFY_FIRST_BASELINE_INSET_PX;
         int count = 0;
         for (int i = lines.size() - 1; i >= 0 && count < NotificationLog.SMALL_WINDOW_LINES; i--, count++) {
-            assets.font().draw(batch, lines.get(i), BoardGeometry.NOTIFY_X + 6f, y);
-            y -= 12f;
-        }
-        if (log.isLargeMode()) {
-            drawLarge(batch);
+            assets.font().draw(batch, ellipsize(lines.get(i), maxWidth), textX, y);
+            y -= BoardGeometry.NOTIFY_LINE_HEIGHT;
         }
     }
 
-    private void drawLarge(Batch batch) {
+    /** 展开窗（§1.5b：(20,92,196,188)；按实测宽度省略，容量沿用日志 200 行） */
+    private void drawLarge(Batch batch, List<String> lines) {
+        Color old = batch.getColor();
         batch.setColor(0.05f, 0.05f, 0.08f, 0.88f);
-        batch.draw(assets.region(PlaceholderKeys.PANEL_9SLICE), 320f, 40f, 300f, 250f);
-        batch.setColor(Color.WHITE);
-        float y = 275f;
-        List<String> lines = log.visibleLines();
-        for (int i = lines.size() - 1; i >= 0 && y > 50f; i--) {
-            assets.font().draw(batch, lines.get(i), 330f, y);
-            y -= 12f;
+        batch.draw(assets.region(PlaceholderKeys.PANEL_9SLICE),
+                BoardGeometry.NOTIFY_LARGE_X, BoardGeometry.NOTIFY_LARGE_Y,
+                BoardGeometry.NOTIFY_LARGE_W, BoardGeometry.NOTIFY_LARGE_H);
+        batch.setColor(old);
+        float textX = BoardGeometry.NOTIFY_LARGE_X + BoardGeometry.NOTIFY_PADDING_PX;
+        float maxWidth = BoardGeometry.NOTIFY_LARGE_W - 2f * BoardGeometry.NOTIFY_PADDING_PX;
+        float y = BoardGeometry.NOTIFY_LARGE_Y + BoardGeometry.NOTIFY_LARGE_H
+                - BoardGeometry.NOTIFY_PADDING_PX - BoardGeometry.NOTIFY_FIRST_BASELINE_INSET_PX;
+        for (int i = lines.size() - 1; i >= 0 && y > BoardGeometry.NOTIFY_LARGE_Y
+                + BoardGeometry.NOTIFY_PADDING_PX; i--) {
+            assets.font().draw(batch, ellipsize(lines.get(i), maxWidth), textX, y);
+            y -= BoardGeometry.NOTIFY_LINE_HEIGHT;
         }
+    }
+
+    /** 按当前字体实测宽度省略（§1.5b「两尺寸按当前字体测宽」；GlyphLayout 懒建复用零稳态分配） */
+    private String ellipsize(final String line, float maxWidth) {
+        if (measureLayout == null) {
+            measureLayout = new GlyphLayout();
+        }
+        return NotificationFormat.ellipsize(line, maxWidth, new NotificationFormat.WidthMeasurer() {
+            @Override
+            public float widthOf(String text) {
+                measureLayout.setText(assets.font(), text);
+                return measureLayout.width;
+            }
+        });
     }
 }

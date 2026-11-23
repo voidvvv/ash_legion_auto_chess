@@ -26,6 +26,9 @@ final class DrawerStripSection extends Group {
 
     private static final float KNOB_SIZE = 12f;
     private static final float UNIT_FRAME = 32f;
+    /** 空槽实底/边透明度（品质改造 §1.3：底 α0.22、边 α0.25） */
+    private static final float EMPTY_SLOT_BG_ALPHA = 0.22f;
+    private static final float EMPTY_SLOT_BORDER_ALPHA = 0.25f;
 
     private final Assets assets;
     private final StripSlot[] slots = new StripSlot[DrawerGeometry.STRIP_VISIBLE_SLOTS];
@@ -114,13 +117,31 @@ final class DrawerStripSection extends Group {
         @Override
         public void draw(Batch batch, float parentAlpha) {
             float alpha = DrawerSkin.alphaOf(this, parentAlpha);
-            DrawerSkin.drawPatch(batch, slotPatch, rect.x(), rect.y(), rect.width(), rect.height(), alpha);
-            if (unit != null) {
-                UnitFramePainter.draw(batch, assets, unit.getTemplate().getId(), PlaceholderKeys.ANIM_IDLE, 0,
-                        rect.x() + (rect.width() - UNIT_FRAME) / 2f, rect.y() + (rect.height() - UNIT_FRAME) / 2f,
-                        UNIT_FRAME, false, alpha, StarColors.of(unit.getStar()));
+            if (unit == null) {
+                drawEmptySlot(batch, alpha); // §1.3：空槽实底降目标 α0.22 / 边 α0.25（保留选中 / 落点高亮）
+                return;
             }
+            DrawerSkin.drawPatch(batch, slotPatch, rect.x(), rect.y(), rect.width(), rect.height(), alpha);
+            UnitFramePainter.draw(batch, assets, unit.getTemplate().getId(), PlaceholderKeys.ANIM_IDLE, 0,
+                    rect.x() + (rect.width() - UNIT_FRAME) / 2f, rect.y() + (rect.height() - UNIT_FRAME) / 2f,
+                    UNIT_FRAME, false, alpha, StarColors.of(unit.getStar()));
             if (highlight) {
+                DrawerSkin.drawPatch(batch, selectedPatch, rect.x(), rect.y(), rect.width(), rect.height(), alpha);
+            }
+        }
+
+        /** 空槽（品质改造 §1.3：底 α0.22、边 α0.25；可交互控件与装备高亮不涉及——空槽无内容可亮） */
+        private void drawEmptySlot(Batch batch, float alpha) {
+            DrawerSkin.drawPatch(batch, slotPatch, rect.x(), rect.y(), rect.width(), rect.height(),
+                    alpha * EMPTY_SLOT_BG_ALPHA);
+            TextureRegion white = assets.region(PlaceholderKeys.WHITE);
+            batch.setColor(1f, 1f, 1f, alpha * EMPTY_SLOT_BORDER_ALPHA);
+            batch.draw(white, rect.x(), rect.y(), rect.width(), 1);
+            batch.draw(white, rect.x(), rect.y() + rect.height() - 1, rect.width(), 1);
+            batch.draw(white, rect.x(), rect.y(), 1, rect.height());
+            batch.draw(white, rect.x() + rect.width() - 1, rect.y(), 1, rect.height());
+            batch.setColor(com.badlogic.gdx.graphics.Color.WHITE);
+            if (highlight) { // 落点预览落在空槽：选中框照常叠加（拖拽反馈优先，§1.3）
                 DrawerSkin.drawPatch(batch, selectedPatch, rect.x(), rect.y(), rect.width(), rect.height(), alpha);
             }
         }

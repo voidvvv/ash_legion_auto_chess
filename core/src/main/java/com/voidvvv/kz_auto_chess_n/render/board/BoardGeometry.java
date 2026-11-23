@@ -48,11 +48,55 @@ public final class BoardGeometry {
     /** ⑧ 商店栏（UI 域 ShopBar，全宽 640） */
     public static final int SHOP_BAR_Y = 296;
     public static final int SHOP_BAR_H = 64;
-    /** ⑨ 事件通知小窗（render §九原值 y=230 与 ③ 底边 240 重叠 10px——差异声明 #4，改 244 起） */
-    public static final int NOTIFY_X = 20;
-    public static final int NOTIFY_Y = 244;
-    public static final int NOTIFY_W = 128;
-    public static final int NOTIFY_H = 46;
+    /** ⑨ 事件通知小窗（品质改造 §1.5b：缩小态 (20,232,104,58)、内边距 6、四行行高 12、按字宽省略） */
+    public static final int NOTIFY_SMALL_X = 20;
+    public static final int NOTIFY_SMALL_Y = 232;
+    public static final int NOTIFY_SMALL_W = 104;
+    public static final int NOTIFY_SMALL_H = 58;
+    /** ⑨ 通知展开窗（品质改造 §1.5b：L 键展开 (20,92,196,188)，展开时收起小窗） */
+    public static final int NOTIFY_LARGE_X = 20;
+    public static final int NOTIFY_LARGE_Y = 92;
+    public static final int NOTIFY_LARGE_W = 196;
+    public static final int NOTIFY_LARGE_H = 188;
+    /** 通知窗内边距与行高（§1.5b） */
+    public static final int NOTIFY_PADDING_PX = 6;
+    public static final int NOTIFY_LINE_HEIGHT = 12;
+    /** 首行基线自窗顶内边距的额外缩进（12px 字形上伸 ≈9px——首行顶缘不越窗） */
+    public static final int NOTIFY_FIRST_BASELINE_INSET_PX = 4;
+
+    // —— 棋盘棋体绘制（品质改造 §1.3：38px 正方、底边 cy−16 锚点、脚下影子、条带基线） ——
+
+    /** 棋子绘制边长（棋盘 idle / 战斗 / 拖拽影统一 38px 正方、横向居中；
+     *  外接框 38/32 = +18.75% ≈ 设计书「约大 19%」） */
+    public static final int UNIT_DRAW_PX = 38;
+    /** 棋子底边锚点（cy−16 = 格底缘；未放大帧与死亡缩放共用，脚部基准与鼠标格命中不变） */
+    public static final int UNIT_FOOT_ANCHOR_Y = 16;
+    /** 脚下影子 18×4（格内底缘铺开） */
+    public static final int UNIT_SHADOW_W = 18;
+    public static final int UNIT_SHADOW_H = 4;
+    /** 血条（宽 24 高 3，基线 cy+21）与能量 / 充能 1px 条基线（§1.3） */
+    public static final int BAR_HP_W = 24;
+    public static final int BAR_HP_H = 3;
+    public static final int BAR_HP_BASELINE = 21;
+    public static final int BAR_ENERGY_BASELINE = 25;
+    public static final int BAR_CHARGE_BASELINE = 27;
+    /** 合法落点绿线内缩（§1.3：2px 绿线内缩 5px，与威胁边均露出） */
+    public static final int DROP_OK_LINE_INSET_PX = 5;
+
+    /** 矩形相交（品质改造 §1.5b：展开通知与可见悬停卡重叠 → 仅暂停绘制、移开恢复） */
+    public static boolean rectsOverlap(int ax, int ay, int aw, int ah, int bx, int by, int bw, int bh) {
+        return ax < bx + bw && bx < ax + aw && ay < by + bh && by < ay + ah;
+    }
+
+    /** 棋子绘制左缘（横向居中：cx − 38/2） */
+    public static int unitDrawLeft(int cx) {
+        return cx - UNIT_DRAW_PX / 2;
+    }
+
+    /** 棋子绘制底缘（cy−16 锚点） */
+    public static int unitDrawBottom(int cy) {
+        return cy - UNIT_FOOT_ANCHOR_Y;
+    }
 
     // —— Phase 5.1 R1：悬停预览卡固定锚点（裁决 A；防遮挡论证见计划 §5.3-1） ——
 

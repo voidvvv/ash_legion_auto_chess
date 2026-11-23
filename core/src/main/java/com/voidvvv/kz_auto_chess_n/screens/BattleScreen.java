@@ -331,15 +331,15 @@ public final class BattleScreen implements Screen {
 
     /**
      * uiStage 根下的 Actor 添加序 = 绘制序 = 命中优先级（后加者在上；headless 可测——装配唯一入口）。
-     * 自下而上：顶栏 ① / ⑥ / 战斗 HUD / 横幅 / 终局面板 / ⑧ 商店栏 → ⑤ 羁绊 → ⑨ 通知 → <b>抽屉层</b> →
-     * 悬停卡（瞬态）→ 转场收点。抽屉层高于 ⑨（批4·主人裁决 A 案：展开期间通知被盖住属已接受代价），
-     * 仍低于悬停卡与转场收点。
+     * 品质改造 §1.5b 自下而上：常驻 HUD（顶栏 ① / ⑥ / 战斗 HUD / ⑧ 商店栏）→ ⑤ 羁绊 → ⑨ 通知 →
+     * <b>抽屉层</b> → 悬停卡（瞬态）→ <b>结果遮罩与终局</b> → 转场收点（模态弹窗在 dialogStage，恒最上）。
+     * 抽屉展开 / 结果终局 / 弹窗期通知只收集不画（drawSuppressed）——层序与遮挡规则解耦。
      */
     static Actor[] uiLayerOrder(Actor topBar, Actor shoppingHud, Actor battleHud, Actor resultBanner,
                                 Actor runEndPanel, Actor shopBar, Actor synergyPanel, Actor notificationPanel,
                                 Actor drawerLayer, Actor hoverPreview, Actor inputCatcher) {
-        return new Actor[]{topBar, shoppingHud, battleHud, resultBanner, runEndPanel, shopBar,
-                synergyPanel, notificationPanel, drawerLayer, hoverPreview, inputCatcher};
+        return new Actor[]{topBar, shoppingHud, battleHud, shopBar, synergyPanel, notificationPanel,
+                drawerLayer, hoverPreview, resultBanner, runEndPanel, inputCatcher};
     }
 
     /** 上下文供应者（面板/横幅共用——值随 restartRun 换新） */
@@ -480,8 +480,8 @@ public final class BattleScreen implements Screen {
         drawerPanel.refresh(boardProcessor != null && boardProcessor.isDragging()); // 拖拽中抑制装备格悬停预览（口径 B4-2）
         drawerPanel.apply(drawerController.progress());
         synergyPanel.refresh(runContext);
+        notificationPanel.syncBattle(runContext.getBattleState()); // §1.5b：先同步战斗引用再刷事件（附着守卫）
         notificationPanel.refresh(runContext);
-        notificationPanel.syncBattle(runContext.getBattleState());
         hoverPreview.refresh(drawerController.progress() > 0f ? HoverCandidate.NONE // Q9：抽屉展开时压制备战期棋盘悬停卡
                         : boardProcessor == null ? HoverCandidate.NONE : boardProcessor.getHoverCandidate(),
                 shopBar.getHoveredSlot(),
@@ -489,6 +489,14 @@ public final class BattleScreen implements Screen {
         if (phase == GamePhase.BATTLE) {
             battleHud.refresh(runContext.getBattleState());
         }
+        // §1.5b 通知绘制闸：隐藏期只收集不画；展开通知与可见悬停卡重叠 → 仅暂停绘制（移开恢复，L 键状态保留）。
+        // 相位以步进后重读值为准（§1.5b）——stepSimulation 本帧可能已推进相位（如开战转场）
+        notificationPanel.setDrawSuppressed(NotificationPanel.suppressedByLayout(
+                drawerController.progress() > 0f,
+                NotificationPanel.isResultOrEndPhase(runContext.getRunState().getPhase()),
+                dialogManager.isShowing())
+                || NotificationPanel.overlapsVisibleHoverCard(notificationPanel.isLargeMode(),
+                        hoverPreview.hasVisibleCard() ? hoverPreview.visibleCardRect() : null));
         resultBanner.setVisible(phase == GamePhase.RESULT);
         if (phase == GamePhase.RESULT && runContext.getBattleState() != null) {
             resultBanner.refresh(runContext.getBattleState().getOutcome(),

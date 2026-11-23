@@ -29,9 +29,9 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * SynergyPanel 预演口径测试（CP24；WARNING-4）：备战期按<b>已上场名单</b>预演达档羁绊
- * ——备战席同名不计；行序 = GameData 声明序；空态占位 "-"。
- * resolve 本体由 SynergySystemTest 背书，此处测面板行拼装的上场口径。
+ * SynergyPanel 预演口径测试（CP24；WARNING-4；品质改造 §1.5a 三态）：备战期按<b>已上场名单</b>
+ * 预演达档羁绊——备战席同名不计；行序 = GameData 声明序；空态无「-」，零部署与有部署无激活
+ * 各自给出方向文案。resolve 本体由 SynergySystemTest 背书，此处测面板行拼装的上场口径。
  */
 class SynergyPanelTest {
 
@@ -86,21 +86,25 @@ class SynergyPanelTest {
     }
 
     @Test
-    @DisplayName("WARNING-4 口径：仅备战席的兽人不计——2 兽人在席 → 空态占位")
+    @DisplayName("WARNING-4 口径：仅备战席的兽人不计——2 兽人在席不达档（§1.5a 零部署态，非「未激活」）")
     void benchOnlyUnitsDoNotCount() {
         RunContext ctx = context();
         ctx.getPlayer().addToBench(new Unit(1, unit("a", "兽人", "战士"), 1));
         ctx.getPlayer().addToBench(new Unit(2, unit("b", "兽人", "战士"), 1));
-        assertThat(SynergyPanel.previewLines(ctx, SYSTEM)).containsExactly("-");
+        // §1.5a 的「部署」= 上场：席上同名不计入 → 既不出「兽人 (2)」也不进「未激活羁绊」态
+        assertThat(SynergyPanel.previewLines(ctx, SYSTEM)).containsExactly(
+                SynergyPanel.EMPTY_ZERO_MAIN, SynergyPanel.EMPTY_ZERO_SUB);
+        assertThat(SynergyPanel.isEmptyState(SynergyPanel.previewLines(ctx, SYSTEM))).isTrue();
     }
 
     @Test
-    @DisplayName("上阵 1 + 席 1：只计上场的 1，未达 2 档 → 空态")
+    @DisplayName("上阵 1 + 席 1：只计上场的 1，未达 2 档 → 未激活羁绊空态（§1.5a）")
     void mixedDeploymentCountsDeployedOnly() {
         RunContext ctx = context();
         deploy(ctx, unit("a", "兽人", "战士"), 0);
         ctx.getPlayer().addToBench(new Unit(2, unit("b", "兽人", "战士"), 1));
-        assertThat(SynergyPanel.previewLines(ctx, SYSTEM)).containsExactly("-");
+        assertThat(SynergyPanel.previewLines(ctx, SYSTEM)).containsExactly(
+                SynergyPanel.EMPTY_NONE_MAIN, SynergyPanel.EMPTY_NONE_SUB_1, SynergyPanel.EMPTY_NONE_SUB_2);
     }
 
     @Test
@@ -114,8 +118,20 @@ class SynergyPanelTest {
     }
 
     @Test
-    @DisplayName("空上场 → 空态占位 -")
+    @DisplayName("零部署 →「上阵棋子后 / 查看羁绊」（§1.5a；空态无「-」）")
     void emptyDeploymentShowsPlaceholder() {
-        assertThat(SynergyPanel.previewLines(context(), SYSTEM)).containsExactly("-");
+        assertThat(SynergyPanel.previewLines(context(), SYSTEM)).containsExactly(
+                SynergyPanel.EMPTY_ZERO_MAIN, SynergyPanel.EMPTY_ZERO_SUB);
+        assertThat(SynergyPanel.isEmptyState(SynergyPanel.previewLines(context(), SYSTEM))).isTrue();
+    }
+
+    @Test
+    @DisplayName("§1.5a：空态文案不再含「-」占位（激活态与空态互斥可判）")
+    void emptyStatesHaveNoDashPlaceholder() {
+        for (List<String> lines : Arrays.asList(
+                SynergyPanel.previewLines(context(), SYSTEM),
+                SynergyPanel.previewLines(context(), SYSTEM))) {
+            assertThat(lines).doesNotContain("-");
+        }
     }
 }

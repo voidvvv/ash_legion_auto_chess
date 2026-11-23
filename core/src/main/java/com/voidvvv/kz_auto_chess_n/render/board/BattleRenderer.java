@@ -39,20 +39,34 @@ public final class BattleRenderer {
     /** 备战期引导文案见 {@link BoardGeometry#SHOP_HINT_TEXT}（批4：方位词与出售区常量同源；抽屉展开时左缘让位，
      *  见 {@link BoardGeometry#shopHintX}）。中文化——Fusion Pixel 已入库，降级口径见计划 §5.3-6 */
 
-    private static final com.badlogic.gdx.graphics.Color ENEMY_ZONE_TINT =
-            new com.badlogic.gdx.graphics.Color(0.26f, 0.14f, 0.14f, 1f); // 敌区暗红
-    private static final com.badlogic.gdx.graphics.Color BUFFER_ZONE_TINT =
-            new com.badlogic.gdx.graphics.Color(0.12f, 0.11f, 0.10f, 1f); // 缓冲带
-    private static final com.badlogic.gdx.graphics.Color PLAYER_ZONE_TINT =
-            new com.badlogic.gdx.graphics.Color(0.13f, 0.20f, 0.14f, 1f); // 玩家区暗绿
+    /** 敌区格底（#2A2028——§1.3，邻格亮度差 ≤4；包级供亮度差验收件直读） */
+    static final com.badlogic.gdx.graphics.Color ENEMY_ZONE_TINT =
+            new com.badlogic.gdx.graphics.Color(0.165f, 0.125f, 0.157f, 1f);
+    /** 缓冲带格底（#20252B；包级供亮度差验收件直读） */
+    static final com.badlogic.gdx.graphics.Color BUFFER_ZONE_TINT =
+            new com.badlogic.gdx.graphics.Color(0.125f, 0.145f, 0.169f, 1f);
+    /** 友区格底（#1D292B；包级供亮度差验收件直读） */
+    static final com.badlogic.gdx.graphics.Color PLAYER_ZONE_TINT =
+            new com.badlogic.gdx.graphics.Color(0.114f, 0.161f, 0.169f, 1f);
+    /** 格线（#87939B α0.18） */
     private static final com.badlogic.gdx.graphics.Color GRID_LINE_TINT =
-            new com.badlogic.gdx.graphics.Color(0f, 0f, 0f, 0.35f);
-    private static final com.badlogic.gdx.graphics.Color DROP_OK_TINT =
-            new com.badlogic.gdx.graphics.Color(0.3f, 1f, 0.4f, 0.35f);  // 合法落点绿
+            new com.badlogic.gdx.graphics.Color(0.529f, 0.576f, 0.608f, 0.18f);
+    /** 棋盘外框（#87939B α0.34，1px） */
+    private static final com.badlogic.gdx.graphics.Color BOARD_FRAME_TINT =
+            new com.badlogic.gdx.graphics.Color(0.529f, 0.576f, 0.608f, 0.34f);
+    /** 合法落点填色（#80E0B0 α0.30——放棋体下面，§1.3 填色制） */
+    private static final com.badlogic.gdx.graphics.Color DROP_OK_FILL =
+            new com.badlogic.gdx.graphics.Color(0.502f, 0.878f, 0.690f, 0.30f);
+    /** 合法落点绿线（#80E0B0 α0.95，内缩 5px——与威胁边均露出） */
+    private static final com.badlogic.gdx.graphics.Color DROP_OK_LINE =
+            new com.badlogic.gdx.graphics.Color(0.502f, 0.878f, 0.690f, 0.95f);
     private static final com.badlogic.gdx.graphics.Color DROP_BAD_TINT =
-            new com.badlogic.gdx.graphics.Color(1f, 0.3f, 0.3f, 0.3f);   // 非法落点红
+            new com.badlogic.gdx.graphics.Color(1f, 0.3f, 0.3f, 0.3f);   // 非法落点红（保持红色反馈）
     private static final com.badlogic.gdx.graphics.Color SELL_DROP_TINT =
-            new com.badlogic.gdx.graphics.Color(1f, 0.8f, 0.25f, 0.45f);  // 出售区悬停金
+            new com.badlogic.gdx.graphics.Color(1f, 0.8f, 0.25f, 0.45f);  // 出售区拖入高亮（§1.3 恢复高亮）
+    /** 出售区空闲底（§1.3：底 α0.24、文字 α0.65） */
+    private static final com.badlogic.gdx.graphics.Color SELL_ZONE_IDLE =
+            new com.badlogic.gdx.graphics.Color(0.45f, 0.32f, 0.16f, 0.24f);
 
     // —— 战前危险提示（品质改造 §1.1；画法参数取 §1.3 初版，观感统一留批 4） ——
     /** 琥珀（A 破阵踏 #F2B544） */
@@ -131,11 +145,12 @@ public final class BattleRenderer {
         drawGrid(batch);
         floatSlot = 0;
         if (ctx.getRunState().getPhase() == GamePhase.SHOPPING || ctx.getBattleState() == null) {
-            drawShopping(batch, ctx, chromeFadeAlpha, worldScale, drawerStageRightEdge);
+            drawLegalDropFill(batch, input); // §1.3：合法落点填色放棋体下面
+            drawShopping(batch, ctx, chromeFadeAlpha, worldScale, drawerStageRightEdge, input);
             drawDropOverlay(batch, ctx, input);
         } else {
             if (chromeFadeAlpha > 0f) { // 开战转场窗口：备战层 chrome 随姿态退场（render §5.6；K5 不画部署帧）
-                drawShoppingChrome(batch, ctx, chromeFadeAlpha, worldScale, drawerStageRightEdge);
+                drawShoppingChrome(batch, ctx, chromeFadeAlpha, worldScale, drawerStageRightEdge, input);
             }
             drawBattle(batch, ctx, alpha, renderClock, dt);
         }
@@ -186,6 +201,14 @@ public final class BattleRenderer {
                 batch.draw(white, px, py, 1, BoardGeometry.CELL); // 格线（左边）
             }
         }
+        batch.setColor(BOARD_FRAME_TINT); // 棋盘外框（§1.3：1px α0.34）
+        batch.draw(white, BoardGeometry.BOARD_X, BoardGeometry.BOARD_Y,
+                BoardGeometry.BOARD_W, 1);
+        batch.draw(white, BoardGeometry.BOARD_X, BoardGeometry.BOARD_Y + BoardGeometry.BOARD_H - 1,
+                BoardGeometry.BOARD_W, 1);
+        batch.draw(white, BoardGeometry.BOARD_X, BoardGeometry.BOARD_Y, 1, BoardGeometry.BOARD_H);
+        batch.draw(white, BoardGeometry.BOARD_X + BoardGeometry.BOARD_W - 1, BoardGeometry.BOARD_Y,
+                1, BoardGeometry.BOARD_H);
         batch.setColor(com.badlogic.gdx.graphics.Color.WHITE);
     }
 
@@ -203,17 +226,17 @@ public final class BattleRenderer {
 
     /** 备战层总入口：chrome（⑦ 提示虚影，随转场姿态）+ 玩家部署帧（随淡出系数；转场期由 UnitView 接管不画——K5） */
     private void drawShopping(SpriteBatch batch, RunContext ctx, float chromeFadeAlpha,
-                              float worldScale, float drawerStageRightEdge) {
-        drawShoppingChrome(batch, ctx, chromeFadeAlpha, worldScale, drawerStageRightEdge);
+                              float worldScale, float drawerStageRightEdge, BoardInputProcessor input) {
+        drawShoppingChrome(batch, ctx, chromeFadeAlpha, worldScale, drawerStageRightEdge, input);
         Player player = ctx.getPlayer();
-        for (int y = 4; y <= 6; y++) {
+        for (int y = 4; y <= 6; y++) { // 逐行自屏幕上往下绘制（y 大者在屏幕上方，先画）
             for (int x = 0; x < GameBalance.BOARD_COLS; x++) {
                 Unit unit = player.deployedAt(x, y);
                 if (unit != null) {
                     int[] center = BoardGeometry.cellCenter(x, y);
                     drawUnitFrame(batch, unit.getTemplate().getId(),
                             PlaceholderKeys.ANIM_IDLE, 0, center[0], center[1], false,
-                            chromeFadeAlpha, unit.getStar(), SideColors.PLAYER);
+                            chromeFadeAlpha, unit.getStar(), SideColors.PLAYER_MARK, 1f);
                 }
             }
         }
@@ -224,15 +247,16 @@ public final class BattleRenderer {
      * ② 备战席槽 + 席上棋子的世界域绘制已退役（UI 抽屉化批2：由 DrawerPanel 头像条接管，备战席不再左滑）。
      */
     private void drawShoppingChrome(SpriteBatch batch, RunContext ctx, float chromeFadeAlpha,
-                                      float worldScale, float drawerStageRightEdge) {
-        for (WaveSpec spec : ctx.getRunState().getEnemyWave()) { // 敌阵侦察虚影（红框 + 半透明，P1b；转场随层淡出；恒 1★ 骨白）
+                                      float worldScale, float drawerStageRightEdge,
+                                      BoardInputProcessor input) {
+        for (WaveSpec spec : ctx.getRunState().getEnemyWave()) { // 敌阵侦察虚影（底角标 + 半透明，P1b/§1.3；转场随层淡出；恒 1★ 骨白）
             int[] center = BoardGeometry.cellCenter(spec.getGridX(), spec.getGridY());
             drawUnitFrame(batch, spec.getTemplate().getId(), PlaceholderKeys.ANIM_IDLE, 0,
                     center[0], center[1], true, SideColors.ENEMY_PREVIEW_ALPHA * chromeFadeAlpha,
-                    1, SideColors.ENEMY);
+                    1, SideColors.ENEMY_MARK, 0.78f); // §1.3：备战敌影 α0.78
         }
         drawThreatPreviews(batch, ctx, chromeFadeAlpha);
-        drawSellZone(batch, chromeFadeAlpha);
+        drawSellZone(batch, chromeFadeAlpha, input != null && input.isDropOnSellZone());
         drawShoppingHint(batch, chromeFadeAlpha, worldScale, drawerStageRightEdge);
     }
 
@@ -348,18 +372,43 @@ public final class BattleRenderer {
         assets.font().setColor(com.badlogic.gdx.graphics.Color.WHITE); // 用后即还（共用字体纪律）
     }
 
-    /** 格实线框（内缩 2px、线宽 2px、整数对齐——render §八.2；SideColors.drawBorder 同结构） */
+    /** 合法落点填色（品质改造 §1.3：#80E0B0 α0.30，棋体之下——先于棋体绘制） */
+    private void drawLegalDropFill(SpriteBatch batch, BoardInputProcessor input) {
+        if (input == null || !input.isDragging()) {
+            return;
+        }
+        com.voidvvv.kz_auto_chess_n.command.PlacementTarget preview = input.getDropPreview();
+        if (preview instanceof com.voidvvv.kz_auto_chess_n.command.PlacementTarget.Cell) {
+            com.voidvvv.kz_auto_chess_n.command.PlacementTarget.Cell cell =
+                    (com.voidvvv.kz_auto_chess_n.command.PlacementTarget.Cell) preview;
+            batch.setColor(DROP_OK_FILL);
+            batch.draw(assets.region(PlaceholderKeys.WHITE),
+                    BoardGeometry.BOARD_X + cell.gridX * BoardGeometry.CELL,
+                    BoardGeometry.BOARD_Y + BoardGeometry.BOARD_H - (cell.gridY + 1) * BoardGeometry.CELL,
+                    BoardGeometry.CELL, BoardGeometry.CELL);
+            batch.setColor(com.badlogic.gdx.graphics.Color.WHITE);
+        }
+    }
+
+    /** 格实线框（内缩/线宽可参；整数对齐——render §八.2） */
+    private void drawCellRectFrame(SpriteBatch batch, TextureRegion white, int px, int py,
+                                   com.badlogic.gdx.graphics.Color color, float alpha,
+                                   int inset, int thickness) {
+        batch.setColor(color.r, color.g, color.b, alpha);
+        int inner = inset;
+        int span = BoardGeometry.CELL - 2 * inner;
+        batch.draw(white, px + inner, py + inner, span, thickness);
+        batch.draw(white, px + inner, py + BoardGeometry.CELL - inner - thickness, span, thickness);
+        batch.draw(white, px + inner, py + inner + thickness, thickness, span - 2 * thickness);
+        batch.draw(white, px + BoardGeometry.CELL - inner - thickness, py + inner + thickness,
+                thickness, span - 2 * thickness);
+        batch.setColor(com.badlogic.gdx.graphics.Color.WHITE);
+    }
+
+    /** 格实线框（威胁边口径：内缩 2px、线宽 2px——§1.3） */
     private void drawThreatFrame(SpriteBatch batch, TextureRegion white, int px, int py,
                                  com.badlogic.gdx.graphics.Color color, float alpha) {
-        batch.setColor(color.r, color.g, color.b, alpha);
-        int inner = THREAT_INSET_PX;
-        int span = BoardGeometry.CELL - 2 * inner;
-        batch.draw(white, px + inner, py + inner, span, THREAT_EDGE_PX);
-        batch.draw(white, px + inner, py + BoardGeometry.CELL - inner - THREAT_EDGE_PX, span, THREAT_EDGE_PX);
-        batch.draw(white, px + inner, py + inner + THREAT_EDGE_PX, THREAT_EDGE_PX, span - 2 * THREAT_EDGE_PX);
-        batch.draw(white, px + BoardGeometry.CELL - inner - THREAT_EDGE_PX, py + inner + THREAT_EDGE_PX,
-                THREAT_EDGE_PX, span - 2 * THREAT_EDGE_PX);
-        batch.setColor(com.badlogic.gdx.graphics.Color.WHITE);
+        drawCellRectFrame(batch, white, px, py, color, alpha, THREAT_INSET_PX, THREAT_EDGE_PX);
     }
 
     /** 格短虚线框（§1.3 邻格 5px 亮 / 3px 间隔节律） */
@@ -436,14 +485,15 @@ public final class BattleRenderer {
         batch.setColor(com.badlogic.gdx.graphics.Color.WHITE);
     }
 
-    /** ⑦ 出售区（render §九；棋盘域自绘，仅 SHOPPING 路径可达；fade = 转场淡出系数） */
-    private void drawSellZone(SpriteBatch batch, float fade) {
+    /** ⑦ 出售区（render §九；棋盘域自绘，仅 SHOPPING 路径可达；fade = 转场淡出系数）。
+     *  品质改造 §1.3：空闲底 α0.24 / 文字 α0.65，拖入恢复高亮（金红 + 文字全亮） */
+    private void drawSellZone(SpriteBatch batch, float fade, boolean hovering) {
         TextureRegion panel = assets.region(PlaceholderKeys.PANEL_9SLICE);
-        batch.setColor(0.45f, 0.32f, 0.16f, 0.9f * fade);
+        batch.setColor(hovering ? SELL_DROP_TINT : SELL_ZONE_IDLE);
         batch.draw(panel, BoardGeometry.SELL_ZONE_X, BoardGeometry.SELL_ZONE_Y,
                 BoardGeometry.SELL_ZONE_W, BoardGeometry.SELL_ZONE_H);
         batch.setColor(com.badlogic.gdx.graphics.Color.WHITE);
-        assets.font().setColor(1f, 1f, 1f, fade); // 用后即还（共用字体纪律）
+        assets.font().setColor(1f, 1f, 1f, (hovering ? 1f : 0.65f) * fade); // 用后即还（共用字体纪律）
         assets.font().draw(batch, "出售", BoardGeometry.SELL_ZONE_X + 16f, BoardGeometry.SELL_ZONE_Y + 28f);
         assets.font().setColor(com.badlogic.gdx.graphics.Color.WHITE);
     }
@@ -472,6 +522,7 @@ public final class BattleRenderer {
         for (int i = 0; i < viewList.size(); i++) {
             viewList.get(i).update(renderClock, dt);
         }
+        sortViewsByScreenYDescending(renderClock); // §1.3：逐行自屏幕上往下绘制棋体（下方覆盖上方）
         for (int i = 0; i < viewList.size(); i++) {
             viewList.get(i).draw(batch, renderClock);
         }
@@ -486,6 +537,21 @@ public final class BattleRenderer {
         }
         for (int i = 0; i < floats.size(); i++) {
             floats.get(i).draw(batch, assets);
+        }
+    }
+
+    /** 绘制序按屏幕 y 降序（品质改造 §1.3「逐行由屏幕上往下绘制棋体」）：近乎有序 → 插入排序零分配；
+     *  viewList 顺序不影响 id 查找（unitViews 为映射） */
+    private void sortViewsByScreenYDescending(float renderClock) {
+        for (int i = 1; i < viewList.size(); i++) {
+            UnitView view = viewList.get(i);
+            int y = view.virtualY(renderClock);
+            int j = i - 1;
+            while (j >= 0 && viewList.get(j).virtualY(renderClock) < y) {
+                viewList.set(j + 1, viewList.get(j));
+                j--;
+            }
+            viewList.set(j + 1, view);
         }
     }
 
@@ -568,17 +634,22 @@ public final class BattleRenderer {
         return HitShakeAxis.resolve(attacker.virtualX(renderClock), targetX, event.getTargetId());
     }
 
-    /** 占位单位帧绘制（中心定位；enemyFace = 水平翻转；star 星级色 tint；border 敌我色框，null 不画；alpha 整体透明度）。
-     *  帧本体委托 {@link UnitFramePainter}（UI 抽屉化批2：与抽屉头像格 / 立绘共用同一套取帧-翻转-tint-还原） */
+    /** 占位单位帧绘制（品质改造 §1.3：38px 正方、横向居中、底边 cy−16 锚点 + 脚下影子 + 底角标；
+     *  enemyFace = 水平翻转；star 星级色 tint；markColor 敌我底角标色；shadowAlpha 影子透明度；
+     *  alpha 整体透明度）。帧本体委托 {@link UnitFramePainter}（与抽屉头像格 / 立绘共用同一套取帧-翻转-tint-还原） */
     private void drawUnitFrame(SpriteBatch batch, String unitId, String anim, int frame,
                                int cx, int cy, boolean enemyFace, float alpha, int star,
-                               com.badlogic.gdx.graphics.Color border) {
+                               com.badlogic.gdx.graphics.Color markColor, float shadowAlpha) {
+        TextureRegion white = assets.region(PlaceholderKeys.WHITE);
+        batch.setColor(UnitView.UNIT_SHADOW.r, UnitView.UNIT_SHADOW.g, UnitView.UNIT_SHADOW.b,
+                shadowAlpha * alpha);
+        batch.draw(white, BoardGeometry.unitDrawLeft(cx), BoardGeometry.unitDrawBottom(cy),
+                BoardGeometry.UNIT_SHADOW_W, BoardGeometry.UNIT_SHADOW_H);
+        batch.setColor(com.badlogic.gdx.graphics.Color.WHITE);
         UnitFramePainter.draw(batch, assets, unitId, anim, frame,
-                cx - BoardGeometry.CELL / 2f, cy - BoardGeometry.CELL / 2f, BoardGeometry.CELL,
-                enemyFace, alpha, StarColors.of(star));
-        if (border != null) {
-            SideColors.drawBorder(batch, assets.region(PlaceholderKeys.WHITE), cx, cy, border);
-        }
+                BoardGeometry.unitDrawLeft(cx), BoardGeometry.unitDrawBottom(cy),
+                BoardGeometry.UNIT_DRAW_PX, enemyFace, alpha, StarColors.of(star));
+        SideColors.drawCornerMark(batch, white, cx, cy, markColor);
     }
 
     // —— 拖拽 ghost 与落点高亮（input §4.3 表现层预校验；handler 层门控独立） ——
@@ -588,26 +659,27 @@ public final class BattleRenderer {
             return;
         }
         TextureRegion white = assets.region(PlaceholderKeys.WHITE);
-        if (input.isDropOnSellZone()) { // ⑦ 出售区悬停：金红高亮（可卖出提示）
-            batch.setColor(SELL_DROP_TINT);
-            batch.draw(white, BoardGeometry.SELL_ZONE_X, BoardGeometry.SELL_ZONE_Y,
-                    BoardGeometry.SELL_ZONE_W, BoardGeometry.SELL_ZONE_H);
-            batch.setColor(com.badlogic.gdx.graphics.Color.WHITE);
-            return;
-        }
+        // ⑦ 出售区拖入高亮已由 drawSellZone 按 isDropOnSellZone 恢复（§1.3）
         com.voidvvv.kz_auto_chess_n.command.PlacementTarget preview = input.getDropPreview();
         if (preview instanceof com.voidvvv.kz_auto_chess_n.command.PlacementTarget.Cell) {
             com.voidvvv.kz_auto_chess_n.command.PlacementTarget.Cell cell =
                     (com.voidvvv.kz_auto_chess_n.command.PlacementTarget.Cell) preview;
-            batch.setColor(DROP_OK_TINT);
-            batch.draw(white, BoardGeometry.BOARD_X + cell.gridX * BoardGeometry.CELL,
-                    BoardGeometry.BOARD_Y + BoardGeometry.BOARD_H - (cell.gridY + 1) * BoardGeometry.CELL,
-                    BoardGeometry.CELL, BoardGeometry.CELL);
+            // 合法落点绿线（§1.3：2px 内缩 5px，棋体之上、与威胁边均露出；填色已在棋体下面）
+            batch.setColor(DROP_OK_LINE);
+            int px = BoardGeometry.BOARD_X + cell.gridX * BoardGeometry.CELL;
+            int py = BoardGeometry.BOARD_Y + BoardGeometry.BOARD_H - (cell.gridY + 1) * BoardGeometry.CELL;
+            int inset = BoardGeometry.DROP_OK_LINE_INSET_PX;
+            int span = BoardGeometry.CELL - 2 * inset;
+            batch.draw(white, px + inset, py + inset, span, THREAT_EDGE_PX);
+            batch.draw(white, px + inset, py + BoardGeometry.CELL - inset - THREAT_EDGE_PX, span, THREAT_EDGE_PX);
+            batch.draw(white, px + inset, py + inset + THREAT_EDGE_PX, THREAT_EDGE_PX, span - 2 * THREAT_EDGE_PX);
+            batch.draw(white, px + BoardGeometry.CELL - inset - THREAT_EDGE_PX, py + inset + THREAT_EDGE_PX,
+                    THREAT_EDGE_PX, span - 2 * THREAT_EDGE_PX);
         } else if (preview instanceof com.voidvvv.kz_auto_chess_n.command.PlacementTarget.Bench) {
             // 备战席落点高亮已随 ② 迁入抽屉：由 DrawerPanel 在头像格上叠选中框（世界域无备战席可画）
         } else {
             int[] cell = BoardGeometry.pixelToCell((int) input.getDragVirtualX(), (int) input.getDragVirtualY());
-            if (cell != null) { // 悬停棋盘但非法行（敌区/缓冲带）：红高亮
+            if (cell != null) { // 悬停棋盘但非法行（敌区/缓冲带）：红高亮（§1.3 保持红色反馈）
                 batch.setColor(DROP_BAD_TINT);
                 batch.draw(white, BoardGeometry.BOARD_X + cell[0] * BoardGeometry.CELL,
                         BoardGeometry.BOARD_Y + BoardGeometry.BOARD_H - (cell[1] + 1) * BoardGeometry.CELL,

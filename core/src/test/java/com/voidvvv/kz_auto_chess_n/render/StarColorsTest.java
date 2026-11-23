@@ -34,12 +34,12 @@ class StarColorsTest {
     }
 
     @Test
-    @DisplayName("星级色与敌我框色（SideColors 蓝/红）保持可辨色距（RGB 欧氏距离 > 0.3）")
+    @DisplayName("星级色与敌我底角标色（品质改造 §1.3 #84C9AF/#E6816B）保持可辨色距（RGB 欧氏距离 > 0.3）")
     void distanceFromSideColors() {
         Color[] stars = {StarColors.STAR_1, StarColors.STAR_2, StarColors.STAR_3};
         for (Color star : stars) {
-            assertThat(rgbDistance(star, SideColors.PLAYER)).isGreaterThan(0.3f);
-            assertThat(rgbDistance(star, SideColors.ENEMY)).isGreaterThan(0.3f);
+            assertThat(rgbDistance(star, SideColors.PLAYER_MARK)).isGreaterThan(0.3f);
+            assertThat(rgbDistance(star, SideColors.ENEMY_MARK)).isGreaterThan(0.3f);
         }
     }
 
