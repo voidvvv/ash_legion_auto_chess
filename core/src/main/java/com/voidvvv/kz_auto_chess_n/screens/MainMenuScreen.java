@@ -3,12 +3,14 @@ package com.voidvvv.kz_auto_chess_n.screens;
 import com.badlogic.gdx.Game;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Screen;
-import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Batch;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
+import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.voidvvv.kz_auto_chess_n.data.GameData;
@@ -29,12 +31,14 @@ public final class MainMenuScreen implements Screen {
     private final GameData data;
     private final MetaService metaService;
     private final Stage stage;
+    private final Texture background;
 
     public MainMenuScreen(Game game, Assets assets, GameData data, MetaService metaService) {
         this.game = game;
         this.assets = assets;
         this.data = data;
         this.metaService = metaService;
+        this.background = assets.mainMenuBackground();
         this.stage = new Stage(new FitViewport(BoardGeometry.VIRTUAL_W, BoardGeometry.VIRTUAL_H));
         addMenuButton("开始远征", 190f, new Runnable() {
             @Override
@@ -76,11 +80,16 @@ public final class MainMenuScreen implements Screen {
     @Override
     public void render(float delta) {
         ScreenUtils.clear(0.05f, 0.04f, 0.08f, 1f);
-        stage.getBatch().begin();
-        assets.font().getData().setScale(2f);
-        assets.font().draw(stage.getBatch(), "余烬军团", 276f, 300f); // 标题（lore 暂定名）
-        assets.font().getData().setScale(1f);
-        stage.getBatch().end();
+        stage.getViewport().apply();
+        Batch batch = stage.getBatch();
+        batch.setProjectionMatrix(stage.getCamera().combined);
+        batch.begin();
+        batch.draw(background, 0f, 0f, BoardGeometry.VIRTUAL_W, BoardGeometry.VIRTUAL_H);
+        BitmapFont font = assets.font();
+        font.getData().setScale(2f);
+        font.draw(batch, "余烬军团", 0f, 300f, BoardGeometry.VIRTUAL_W, Align.center, false);
+        font.getData().setScale(1f);
+        batch.end();
         stage.act(delta);
         stage.draw();
     }
@@ -131,10 +140,10 @@ public final class MainMenuScreen implements Screen {
 
         @Override
         public void draw(Batch batch, float parentAlpha) {
-            Color old = batch.getColor();
+            float oldColor = batch.getPackedColor();
             batch.setColor(0.75f, 0.35f, 0.25f, parentAlpha);
             batch.draw(assets.region(PlaceholderKeys.PANEL_9SLICE), getX(), getY(), getWidth(), getHeight());
-            batch.setColor(old);
+            batch.setPackedColor(oldColor);
             assets.font().draw(batch, text, getX() + 160f / 2f - text.length() * 6f, getY() + 23f);
         }
     }
