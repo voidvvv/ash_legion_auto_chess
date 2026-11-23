@@ -1,5 +1,6 @@
 package com.voidvvv.kz_auto_chess_n.render.ui;
 
+import com.voidvvv.kz_auto_chess_n.entities.RunMode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -39,5 +40,26 @@ class TopBarTextTest {
     void deterministicForSameInputs() {
         assertThat(TopBar.statusText(4, 9, 2, 3))
                 .isEqualTo(TopBar.statusText(4, 9, 2, 3));
+    }
+
+    // —— 品质改造 §0.1：测试档顶栏标识 ——
+
+    @Test
+    @DisplayName("测试档：前缀「测试档 999」，其余字段与正式口径同构（品质改造 §0.1）")
+    void testPeriodPrefix() {
+        assertThat(TopBar.statusText(1, 999, 1, 0, RunMode.TEST_PERIOD_999))
+                .isEqualTo("测试档 999  轮次 1/25  金币 999  等级 1（0/4）");
+        assertThat(TopBar.statusText(25, 999, 7, 0, RunMode.TEST_PERIOD_999))
+                .isEqualTo("测试档 999  轮次 25/25  金币 999  等级 7（满级）");
+    }
+
+    @Test
+    @DisplayName("正式模式：与既有 4 参口径逐字一致（存量调用零漂移）")
+    void normalModeMatchesLegacySignature() {
+        assertThat(TopBar.statusText(7, 33, 7, 0, RunMode.NORMAL))
+                .isEqualTo(TopBar.statusText(7, 33, 7, 0))
+                .isEqualTo("轮次 7/25  金币 33  等级 7（满级）");
+        assertThat(TopBar.statusText(1, 999, 1, 0, RunMode.NORMAL))
+                .doesNotContain("测试档"); // 正式局不加标识
     }
 }

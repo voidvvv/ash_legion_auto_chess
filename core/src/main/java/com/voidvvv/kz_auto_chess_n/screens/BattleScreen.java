@@ -19,6 +19,7 @@ import com.voidvvv.kz_auto_chess_n.data.GameData;
 import com.voidvvv.kz_auto_chess_n.entities.ChestOrigin;
 import com.voidvvv.kz_auto_chess_n.entities.GamePhase;
 import com.voidvvv.kz_auto_chess_n.entities.Player;
+import com.voidvvv.kz_auto_chess_n.entities.RunMode;
 import com.voidvvv.kz_auto_chess_n.entities.RunModifiers;
 import com.voidvvv.kz_auto_chess_n.entities.RunState;
 import com.voidvvv.kz_auto_chess_n.entities.SequentialIdIssuer;
@@ -121,6 +122,8 @@ public final class BattleScreen implements Screen {
 
     /** 本局 seed（UI 域边界给定——RunSetup 传入；RESTART 换新，Q3 裁决口径 Phase 6 落地） */
     private long seed;
+    /** 运行模式（品质改造 §0.1：不可变模式参数，构造期冻结——测试档口径的分支唯一判定源） */
+    private final RunMode mode;
     /** 本局场景/英雄（RunSetup 选定；RESTART 沿用） */
     private final String selectedSceneId;
     private final String selectedHeroId;
@@ -143,25 +146,39 @@ public final class BattleScreen implements Screen {
     /** ×1/×2 变速（口径 #5：只乘 accumulator 消费速率，不进模拟路径） */
     private float speedFactor = 1f;
 
-    /** 新局（RunSetup 域边界事件三参 + 档案门面） */
+    /** 新局（RunSetup 域边界事件三参 + 档案门面）——正式模式（品质改造 §0.1 既有构造器默认正式） */
     public BattleScreen(Game game, Assets assets, GameData data, MetaService metaService,
                         long seed, String sceneId, String heroId) {
-        this(game, assets, data, metaService, seed, sceneId, heroId, null);
+        this(game, assets, data, metaService, seed, sceneId, heroId, null, RunMode.NORMAL);
     }
 
-    /** 续玩（主菜单「继续远征」：快照在 show() 复原，跳过 StartRun） */
+    /** 续玩（主菜单「继续远征」：快照在 show() 复原，跳过 StartRun）——恒正式模式（品质改造 §0.1：
+     *  正式「继续远征」按快照原值恢复，档案轨全开；历史 999 金局无标志，续玩保留存量余额） */
     public BattleScreen(Game game, Assets assets, GameData data, MetaService metaService,
                         RunSnapshot snapshot) {
         this(game, assets, data, metaService, snapshot.getSeed(), snapshot.getSceneId(),
-                snapshot.getHeroId(), snapshot);
+                snapshot.getHeroId(), snapshot, RunMode.NORMAL);
+    }
+
+    /**
+     * 测试档局装配（品质改造 §0.1）：启动参数 {@code --test-gold=999}（或无值形式）指定的
+     * 首屏测试局——固定森林、无英雄、999 金、存档隔离。seed 取装配时刻时钟（沿 RunSetup 口径）。
+     * 唯一非常规模式入口：模式不可变，RESTART 沿用（测试档重开仍在测试档）。
+     */
+    public static BattleScreen newTestPeriodRun(Game game, Assets assets, GameData data,
+                                                MetaService metaService) {
+        return new BattleScreen(game, assets, data, metaService, System.nanoTime(),
+                TEST_PERIOD_SCENE_ID, null, null, RunMode.TEST_PERIOD_999);
     }
 
     private BattleScreen(Game game, Assets assets, GameData data, MetaService metaService,
-                         long seed, String sceneId, String heroId, RunSnapshot resumedSnapshot) {
+                         long seed, String sceneId, String heroId, RunSnapshot resumedSnapshot,
+                         RunMode mode) {
         this.game = game;
         this.assets = assets;
         this.data = data;
         this.metaService = metaService;
+        this.mode = java.util.Objects.requireNonNull(mode, "mode 不能为 null");
         this.seed = seed;
         this.selectedSceneId = sceneId;
         this.selectedHeroId = heroId;
@@ -197,7 +214,7 @@ public final class BattleScreen implements Screen {
             public void onMenuRequested() {
                 game.setScreen(new MainMenuScreen(game, assets, data, metaService));
             }
-        }, contextSupplier());
+        }, contextSupplier(), mode);
         this.shopBar = new ShopBar(commandManager, assets, contextSupplier());
         this.synergyPanel = new SynergyPanel(assets, contextSupplier());
         this.notificationPanel = new NotificationPanel(assets, contextSupplier(), commandManager);
@@ -420,13 +437,18 @@ public final class BattleScreen implements Screen {
                 DrawerGeometry.drawerRect(drawerController.progress()).right());
         if (phase == GamePhase.RUN_END && !runEndSettled) { // 档案结算每局一次（裁决 D11）
             runEndSettled = true;
-            ProfileService.Settlement settlement = metaService.settleRun(data, runContext);
-            runEndPanel.setSettlementLines(RunSettlementText.lines(settlement, data));
-            metaService.clearRunSnapshot(); // RUN_END 自动删档（快照轨终点）
+            if (archiveWritesAllowed(mode)) {
+                ProfileService.Settlement settlement = metaService.settleRun(data, runContext);
+                runEndPanel.setSettlementLines(RunSettlementText.lines(settlement, data));
+                metaService.clearRunSnapshot(); // RUN_END 自动删档（快照轨终点）
+            }
+            // 测试档旁路（品质改造 §0.1 存档隔离）：不结算档案、不删档——含正式快照的档案原样保留；
+            // 终局熟练度行由 RunEndPanel 按模式隐藏
         }
         if (phase != GamePhase.SHOPPING) { // 快照轨：进入备战首帧写、离开复位（裁决 D10）
             snapshotCurrent = false;
-        } else if (runContext.getRunState().isRunStarted() && !snapshotCurrent) {
+        } else if (archiveWritesAllowed(mode) && runContext.getRunState().isRunStarted()
+                && !snapshotCurrent) {
             metaService.saveRunSnapshot(runContext);
             snapshotCurrent = true;
         }
@@ -552,8 +574,11 @@ public final class BattleScreen implements Screen {
         saveSnapshotIfShopping();
     }
 
-    /** 快照补写（pause/hide；战斗/结算期不写——存档点仅备战） */
+    /** 快照补写（pause/hide；战斗/结算期不写——存档点仅备战）；测试档旁路（品质改造 §0.1 存档隔离） */
     private void saveSnapshotIfShopping() {
+        if (!archiveWritesAllowed(mode)) {
+            return; // 测试局不补写：暂停/离屏不动正式存档
+        }
         if (runContext != null && runContext.getRunState().isRunStarted()
                 && runContext.getRunState().getPhase() == GamePhase.SHOPPING) {
             metaService.saveRunSnapshot(runContext);
@@ -568,18 +593,52 @@ public final class BattleScreen implements Screen {
         // Assets 归 Main 持有，不在此弃
     }
 
-    /** 组装新鲜上下文（seed/sceneId/heroId 来自 RunSetup 域边界；起始金含英雄加成——裁决 D2） */
+    /** 测试档固定场景（品质改造 §0.1「999 档固定森林」；包级常量供验收件直测） */
+    static final String TEST_PERIOD_SCENE_ID = "scene_forest";
+
+    /**
+     * 档案域写入口闸（品质改造 §0.1 存档隔离）：测试局一律旁路——首次备战写快照、暂停/离屏补写、
+     * 终局删档与档案结算全部跳过。含正式快照的档案进出测试局前后字节一致（纯 JVM 验收件）；
+     * 正式「继续远征」仍按快照原值恢复（本闸不拦读路径）。
+     */
+    static boolean archiveWritesAllowed(RunMode mode) {
+        return !mode.isTestPeriod();
+    }
+
+    /** 组装新鲜上下文（seed/sceneId/heroId 来自 RunSetup 域边界；起始金含英雄加成——裁决 D2）。
+     *  测试档（品质改造 §0.1）：固定 scene_forest、无英雄（修正恒 EMPTY）、恰好 999 金，
+     *  不读档案（{@code metaService.resolveRunModifiers} 不进测试分支）。 */
     private RunContext newContext(long runSeed) {
-        String sceneId = selectedSceneId != null && data.getScene(selectedSceneId) != null
-                ? selectedSceneId : data.getScenes().keySet().iterator().next(); // 防御回退首场景
-        RunModifiers modifiers = metaService.resolveRunModifiers(selectedHeroId, data);
-        // 起始金：测试档（--test-gold=<n> 启动参数，见 GameBalance.applyLaunchArgs）优先，
-        // 否则正式口径 START_GOLD=10（GDD §3.2）；单元测试/控制台仍走 START_GOLD=10，经济类断言不受影响。
-        // 英雄被动金币加成由调用方叠加（裁决 D2）。
-        int startGold = GameBalance.effectiveStartGold() + modifiers.getStartGoldBonus();
-        return new RunContext(new Player(startGold),
-                new RunState(runSeed, sceneId, selectedHeroId, modifiers, new SequentialIdIssuer()),
-                data, new RandomGenerator(runSeed), shopSystem);
+        boolean testPeriod = mode.isTestPeriod();
+        return assembleContext(data, shopSystem, runSeed,
+                testPeriod ? TEST_PERIOD_SCENE_ID : selectedSceneId,
+                testPeriod ? null : selectedHeroId,
+                mode,
+                testPeriod ? RunModifiers.EMPTY : metaService.resolveRunModifiers(selectedHeroId, data));
+    }
+
+    /** 上下文装配（纯函数、零 GL——品质改造 §0.1 验收件直测）：场景防御回退首场景 +
+     *  起始金按模式结算（{@link #startGold}）+ 模式冻结进上下文（TopBar/RunEndPanel 读同源）。
+     *  测试档强制无英雄修正——调用方误传英雄/熟练度加成在此丢弃（口径单点，不靠调用方自觉）。 */
+    static RunContext assembleContext(GameData data, ShopSystem shop, long runSeed, String sceneId,
+                                      String heroId, RunMode mode, RunModifiers modifiers) {
+        String resolvedScene = sceneId != null && data.getScene(sceneId) != null
+                ? sceneId : data.getScenes().keySet().iterator().next(); // 防御回退首场景
+        RunModifiers effectiveModifiers = mode.isTestPeriod() ? RunModifiers.EMPTY : modifiers;
+        return new RunContext(new Player(startGold(mode, effectiveModifiers)),
+                new RunState(runSeed, resolvedScene,
+                        mode.isTestPeriod() ? null : heroId, // 测试档无英雄（与修正 EMPTY 同源）
+                        effectiveModifiers, new SequentialIdIssuer()),
+                data, new RandomGenerator(runSeed), shop, mode);
+    }
+
+    /** 新局起始金（品质改造 §0.1）：测试档恒 {@link GameBalance#TEST_PERIOD_START_GOLD}=999
+     *  （不叠加熟练度/英雄加成）；正式口径 {@link GameBalance#START_GOLD} + 局外加成（裁决 D2——
+     *  白板 10 金，薇拉/奥兰多 12、格雷克 14）。测试局退出后的正式新局不受启动参数残留影响。 */
+    static int startGold(RunMode mode, RunModifiers modifiers) {
+        return mode.isTestPeriod()
+                ? GameBalance.TEST_PERIOD_START_GOLD
+                : GameBalance.START_GOLD + modifiers.getStartGoldBonus();
     }
 
     /** RUN_END 重开：同英雄同场景新 seed + 清弹窗/残留命令/结算旗标 + 复入 startRun */

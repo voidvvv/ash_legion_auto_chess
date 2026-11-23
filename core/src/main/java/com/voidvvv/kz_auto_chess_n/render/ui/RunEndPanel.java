@@ -9,6 +9,7 @@ import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.voidvvv.kz_auto_chess_n.command.RunContext;
 import com.voidvvv.kz_auto_chess_n.config.GameBalance;
 import com.voidvvv.kz_auto_chess_n.entities.RunEndCause;
+import com.voidvvv.kz_auto_chess_n.entities.RunMode;
 import com.voidvvv.kz_auto_chess_n.render.Assets;
 import com.voidvvv.kz_auto_chess_n.render.PlaceholderKeys;
 import com.voidvvv.kz_auto_chess_n.render.board.BoardGeometry;
@@ -19,6 +20,8 @@ import java.util.List;
  * 终局面板（RUN_END，Phase 6 = RunResult 形态 MVP——裁决 D6）：成因文案 + 存活轮次 +
  * 档案结算行（熟练度/升级/解锁，BattleScreen 观察注入）+ 本局 seed + RESTART + 返回主菜单。
  * 档案写入归 BattleScreen→MetaService（Screen 点火器——裁决 D11），本类只读展示。
+ *
+ * <p>品质改造 §0.1：测试档终局隐藏熟练度行（不结算档案故无行可回退）。
  */
 public final class RunEndPanel extends Group {
 
@@ -36,15 +39,24 @@ public final class RunEndPanel extends Group {
     private final RestartListener restartListener;
     private final MenuListener menuListener;
     private final java.util.function.Supplier<RunContext> context;
+    /** 运行模式（品质改造 §0.1：不可变模式参数——测试档终局隐藏熟练度行） */
+    private final RunMode mode;
     /** 结算行（RUN_END 首帧由 Screen 注入；null = 尚未结算，回退旧行） */
     private List<String> settlementLines;
 
+    /** 兼容构造（存量调用方）：正式模式（品质改造 §0.1 既有构造器默认正式） */
     public RunEndPanel(Assets assets, RestartListener restartListener, MenuListener menuListener,
                        java.util.function.Supplier<RunContext> context) {
+        this(assets, restartListener, menuListener, context, RunMode.NORMAL);
+    }
+
+    public RunEndPanel(Assets assets, RestartListener restartListener, MenuListener menuListener,
+                       java.util.function.Supplier<RunContext> context, RunMode mode) {
         this.assets = assets;
         this.restartListener = restartListener;
         this.menuListener = menuListener;
         this.context = context;
+        this.mode = java.util.Objects.requireNonNull(mode, "mode 不能为 null");
         Actor restart = new EndButton("重新开始", 120f, 300f, new Runnable() {
             @Override
             public void run() {
@@ -84,10 +96,17 @@ public final class RunEndPanel extends Group {
                 assets.font().draw(batch, line, 252f, y);
                 y -= 20f;
             }
-        } else {
-            assets.font().draw(batch, "熟练度 +" + ctx.getRunState().getMasteryAwarded(), 262f, 218f);
+        } else if (fallbackMasteryLine(ctx.getRunState(), mode) != null) {
+            assets.font().draw(batch, fallbackMasteryLine(ctx.getRunState(), mode), 262f, 218f);
         }
         assets.font().draw(batch, "种子 " + ctx.getRunState().getSeed(), 285f, 126f);
+    }
+
+    /** 结算行缺省回退（纯函数；品质改造 §0.1）：测试档终局隐藏熟练度行（null = 不画）——
+     *  测试局不结算档案，回退行只会造成「有熟练度进账」的假信号。 */
+    static String fallbackMasteryLine(com.voidvvv.kz_auto_chess_n.entities.RunState runState,
+                                      RunMode mode) {
+        return mode.isTestPeriod() ? null : "熟练度 +" + runState.getMasteryAwarded();
     }
 
     /** 终局标题三值（render §九；工作值待调）：COMPLETED 远征通关 / ABANDONED 远征已放弃 / DEFEATED 远征失败 */

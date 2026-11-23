@@ -81,7 +81,10 @@ public final class GameBalance {
      *  未启用时生产路径走 {@link #START_GOLD}=10 正式口径，单元测试/控制台不受影响。 */
     public static final int TEST_PERIOD_START_GOLD = 999;
     /** 运行时测试档覆盖（-1 = 关闭，默认）。仅 {@link #applyLaunchArgs(String[])} 写入、
-     *  经 BattleScreen.newContext 通过 {@link #effectiveStartGold()} 消费；无其他写点。 */
+     *  经 {@code RunMode.fromLaunchOverride} 解析为首屏运行模式（品质改造 §0.1）；
+     *  起始金由 {@code BattleScreen.startGold(RunMode, RunModifiers)} 按模式结算
+     *  （测试档恒 {@link #TEST_PERIOD_START_GOLD}、正式恒 {@link #START_GOLD} + 局外加成），
+     *  无其他写点。 */
     public static int testStartGoldOverride = -1;
 
     /** 解析启动参数（Lwjgl3Launcher 入口调用）：{@code --test-gold=<n>} 启用测试档起始金；
@@ -107,8 +110,10 @@ public final class GameBalance {
         }
     }
 
-    /** 新局起始金币：测试档启用时取覆盖值（{@code --test-gold=<n>} 的 n；无值形式 = 测试档典型值），
-     *  否则正式口径 {@link #START_GOLD}。英雄被动金币加成由调用方叠加（裁决 D2）。 */
+    /** 启动参数解析结果只读视图（{@code --test-gold=<n>} 的 n；无值形式 = 测试档典型值；未启用 =
+     *  正式口径 {@link #START_GOLD}）。品质改造 §0.1 起：新局起始金改由
+     *  {@code BattleScreen.startGold(RunMode, RunModifiers)} 按模式结算，本函数不再参与起始金，
+     *  保留为解析口径断言面（GameLaunchArgsTest）。 */
     public static int effectiveStartGold() {
         return testStartGoldOverride >= 0 ? testStartGoldOverride : START_GOLD;
     }
