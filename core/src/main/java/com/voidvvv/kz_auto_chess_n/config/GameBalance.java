@@ -76,11 +76,42 @@ public final class GameBalance {
     public static final float BATTLE_SPEED_FACTOR_FAST = 2f;
 
     // —— 经济 ——
-    public static final int START_GOLD = 10;
-    /** 测试期开局金币覆盖（生产路径 BattleScreen.newContext 独享；TODO(测试期临时值，正式版恢复 10)——
-     *  单元测试/控制台仍走 START_GOLD=10 正式口径，经济类断言不受影响。
-     *  一键恢复：本常量改回 10（或 BattleScreen 调用点换回 START_GOLD）即回正式值。 */
-    public static final int TEST_PERIOD_START_GOLD_OVERRIDE = 999; // TODO(测试期临时值，正式版恢复 10)
+    public static final int START_GOLD = 10; // 正式口径（GDD §3.2：开局 10 金）
+    /** 测试档起始金币值：仅经启动参数 {@code --test-gold=<n>} 启用（见 {@link #applyLaunchArgs}）；
+     *  未启用时生产路径走 {@link #START_GOLD}=10 正式口径，单元测试/控制台不受影响。 */
+    public static final int TEST_PERIOD_START_GOLD = 999;
+    /** 运行时测试档覆盖（-1 = 关闭，默认）。仅 {@link #applyLaunchArgs(String[])} 写入、
+     *  经 BattleScreen.newContext 通过 {@link #effectiveStartGold()} 消费；无其他写点。 */
+    public static int testStartGoldOverride = -1;
+
+    /** 解析启动参数（Lwjgl3Launcher 入口调用）：{@code --test-gold=<n>} 启用测试档起始金；
+     *  无参 / 空参 / 非法值一律回到关闭态。 */
+    public static void applyLaunchArgs(String[] args) {
+        testStartGoldOverride = -1;
+        if (args == null) {
+            return;
+        }
+        for (String arg : args) {
+            if (arg == null || !arg.startsWith("--test-gold")) {
+                continue;
+            }
+            if (arg.startsWith("--test-gold=")) {
+                try {
+                    testStartGoldOverride = Math.max(0, Integer.parseInt(arg.substring("--test-gold=".length())));
+                } catch (NumberFormatException ignored) {
+                    testStartGoldOverride = -1; // 非法值按未启用处理
+                }
+            } else if (arg.equals("--test-gold")) {
+                testStartGoldOverride = TEST_PERIOD_START_GOLD; // 无值形式 = 测试档典型值 999
+            }
+        }
+    }
+
+    /** 新局起始金币：测试档启用时取覆盖值（{@code --test-gold=<n>} 的 n；无值形式 = 测试档典型值），
+     *  否则正式口径 {@link #START_GOLD}。英雄被动金币加成由调用方叠加（裁决 D2）。 */
+    public static int effectiveStartGold() {
+        return testStartGoldOverride >= 0 ? testStartGoldOverride : START_GOLD;
+    }
     public static final int SHOP_REFRESH_COST = 2;
     public static final int BUY_EXP_COST = 4;
     public static final int BUY_EXP_GAIN = 4;

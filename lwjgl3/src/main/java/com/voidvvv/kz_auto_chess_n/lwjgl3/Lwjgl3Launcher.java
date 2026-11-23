@@ -3,11 +3,13 @@ package com.voidvvv.kz_auto_chess_n.lwjgl3;
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3Application;
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3ApplicationConfiguration;
 import com.voidvvv.kz_auto_chess_n.Main;
+import com.voidvvv.kz_auto_chess_n.config.GameBalance;
 
 /** Launches the desktop (LWJGL3) application. */
 public class Lwjgl3Launcher {
     public static void main(String[] args) {
         if (StartupHelper.startNewJvmIfRequired()) return; // This handles macOS support and helps on Windows.
+        GameBalance.applyLaunchArgs(args); // 测试档入口：--test-gold=<n>（缺省关闭，正式口径开局 10 金）
         createApplication();
     }
 

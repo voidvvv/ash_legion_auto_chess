@@ -41,15 +41,26 @@ public final class BattleConsoleMain {
     /**
      * @param args args[0] = seed（缺省 42）；args[1] = round（缺省 5，越过 minRound 门控有杂兵多样性）；
      *             args[2] = dataDir（缺省 ../assets/data，相对 core/）
+     *
+     * <p>同种子对拍入口（品质改造批0）：以相同 seed/round 跑两次，{@code diff} stdout 即事件流逐位对拍——
+     * 输出全确定性：单 RNG 贯穿波次与暴击、单位 id 自 {@link SequentialIdIssuer} 从头发号、部署固定。
      */
     public static void main(String[] args) {
         long seed = args.length > 0 ? Long.parseLong(args[0]) : 42L;
         int round = args.length > 1 ? Integer.parseInt(args[1]) : 5;
         String dataDir = args.length > 2 ? args[2] : "../assets/data";
+        System.out.println(renderBattle(seed, round, dataDir));
+    }
 
+    /**
+     * 渲染整场战斗的确定性文本流（品质改造批0：同种子对拍入口）。
+     * 以相同 seed/round 调用两次，两次返回值逐位一致——即事件流对拍的实现口径（§0.2）。
+     */
+    static String renderBattle(long seed, int round, String dataDir) {
+        StringBuilder out = new StringBuilder();
         GameData data = JsonLoader.loadFromDirectory(new FileHandle(new File(dataDir)));
         for (String warning : data.getWarnings()) {
-            System.out.println("[软告警] " + warning);
+            out.append("[软告警] ").append(warning).append('\n');
         }
         String sceneId = data.getScenes().keySet().iterator().next(); // 首个场景（种子仅森林）
 
@@ -69,20 +80,23 @@ public final class BattleConsoleMain {
                 RunModifiers.EMPTY, round); // D10：敌方羁绊档位随轮次截断
         battleSystem.runToEnd(state, MAX_TICKS);
 
-        System.out.println("=== 余烬军团 · 整场战斗模拟（seed=" + seed + ", round=" + round + ", scene=" + sceneId + "）===");
-        printSynergies("玩家羁绊", state.getPlayerSynergies());
-        printSynergies("敌方羁绊", state.getEnemySynergies());
-        printRoster(state);
-        System.out.println("--- 事件流 ---");
+        out.append("=== 余烬军团 · 整场战斗模拟（seed=").append(seed).append(", round=").append(round)
+                .append(", scene=").append(sceneId).append("）===\n");
+        appendSynergies(out, "玩家羁绊", state.getPlayerSynergies());
+        appendSynergies(out, "敌方羁绊", state.getEnemySynergies());
+        appendRoster(out, state);
+        out.append("--- 事件流 ---\n");
         for (CombatEvent event : state.getEvents()) {
-            System.out.println(event);
+            out.append(event).append('\n');
         }
-        System.out.println("--- 结局 ---");
-        System.out.println(String.format(Locale.ROOT, "outcome=%s | tick=%d | elapsed=%.1fs | 存活 玩家%d/敌方%d",
+        out.append("--- 结局 ---\n");
+        out.append(String.format(Locale.ROOT, "outcome=%s | tick=%d | elapsed=%.1fs | 存活 玩家%d/敌方%d\n",
                 state.getOutcome(), state.getTick(), state.getElapsed(),
                 state.aliveCount(Side.PLAYER), state.aliveCount(Side.ENEMY)));
-        System.out.println("=== RNG 消耗合计：" + rng.getConsumedCount()
-                + " 次（波次生成 " + waveRngCost + " + 暴击 roll " + (rng.getConsumedCount() - waveRngCost) + "）===");
+        out.append("=== RNG 消耗合计：").append(rng.getConsumedCount())
+                .append(" 次（波次生成 ").append(waveRngCost).append(" + 暴击 roll ")
+                .append(rng.getConsumedCount() - waveRngCost).append("）===\n");
+        return out.toString();
     }
 
     /** 买入（发号）→ 入席 → 部署（买卖经济归 Phase 5，此处直构演示） */
@@ -93,7 +107,7 @@ public final class BattleConsoleMain {
         player.deploy(unit, gridX, gridY);
     }
 
-    private static void printSynergies(String label, SynergySnapshot snapshot) {
+    private static void appendSynergies(StringBuilder out, String label, SynergySnapshot snapshot) {
         StringBuilder line = new StringBuilder(label + ": ");
         if (snapshot.isEmpty()) {
             line.append("（无）");
@@ -102,14 +116,14 @@ public final class BattleConsoleMain {
                 line.append(active.getName()).append('×').append(active.getThresholdCount()).append(' ');
             }
         }
-        System.out.println(line.toString().trim());
+        out.append(line.toString().trim()).append('\n');
     }
 
-    private static void printRoster(BattleState state) {
-        System.out.println("--- 阵容表 ---");
+    private static void appendRoster(StringBuilder out, BattleState state) {
+        out.append("--- 阵容表 ---\n");
         for (BattleUnit unit : state.getUnits()) {
-            System.out.println(String.format(Locale.ROOT,
-                    "id %d | %-4s | %-14s | (%d,%d) | hp %.0f/%.0f atk %.1f armor %.0f aspd %.2f range %.0f ms %.2f | 技能 %s",
+            out.append(String.format(Locale.ROOT,
+                    "id %d | %-4s | %-14s | (%d,%d) | hp %.0f/%.0f atk %.1f armor %.0f aspd %.2f range %.0f ms %.2f | 技能 %s\n",
                     unit.getId(), unit.getSide() == Side.PLAYER ? "玩家" : "敌方",
                     unit.getTemplate().getName(), unit.getGridX(), unit.getGridY(),
                     unit.getCurrentHp(), unit.getEffective(StatKey.HP),
