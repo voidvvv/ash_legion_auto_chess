@@ -178,6 +178,11 @@ public final class PaiDuelDriver {
             startBattle();
         }
 
+        /** isOver 观察-委托（Screen 渲染循环同款时序；stepwise 驱动的收尾步——§0.2/批6 记录器用） */
+        public void observeBattleOver() {
+            flow.onBattleOver(ctx);
+        }
+
         /** 注入胜局（§0.3 账本独立验证）：开战后直接判胜并走观察-委托，不消耗交战随机 */
         public void injectWin() {
             startBattle();

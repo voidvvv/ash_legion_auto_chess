@@ -227,13 +227,16 @@ public final class AudioScheduler {
         this.player = player;
     }
 
-    /** 战斗作用域同步（§1.2：按战斗对象身份单独 EventInbox，换对象才 attach；含最后一逻辑帧） */
+    /** 战斗作用域同步（§1.2：按战斗对象身份单独 EventInbox，换对象才 attach；含最后一逻辑帧）。
+     *  战斗实例切换同时复位按战斗记账的状态（亡者集合/施法限频表——battle id 每战重发，跨战不沿用） */
     public void syncBattle(BattleState state) {
         if (state == bound) {
             return;
         }
         bound = state;
         resultPlayed = false; // 新战斗实例：结果声重新可播（同一 BattleState 只播一次）
+        killedVictims.clear();
+        castStartBySource.clear();
         if (state == null) {
             inbox.detach();
         } else {
