@@ -70,8 +70,10 @@ class TestPeriodEconomyTest {
         for (Tier tier : tiers()) {
             ShopSystem shop = new ShopSystem();
             shop.restoreSlots(Arrays.asList(data.getUnit(ONE_COST_ID), null, null, null, null));
-            RunContext ctx = BattleScreen.assembleContext(data, shop, 42L, "scene_forest",
-                    null, tier.mode, tier.modifiers);
+            RunContext ctx = tier.mode.isTestPeriod()
+                    ? RunAssembler.assembleTestPeriod(data, shop, 42L)
+                    : RunAssembler.assembleNormal(data, shop, 42L, "scene_forest", null,
+                            tier.modifiers);
             assertThat(ctx.getPlayer().getGold())
                     .as("%s 起始金（实际余额）", tier.label).isEqualTo(tier.expectedStartGold);
 

@@ -59,6 +59,12 @@ public final class MainMenuScreen implements Screen {
                 game.setScreen(new CodexScreen(game, assets, data, metaService));
             }
         });
+        addMenuButton("测试样片", 58f, new Runnable() { // 图鉴下（品质改造 §0.2 对拍入口）
+            @Override
+            public void run() {
+                game.setScreen(new SampleMenuScreen(game, assets, data, metaService));
+            }
+        });
         Gdx.input.setInputProcessor(stage);
     }
 

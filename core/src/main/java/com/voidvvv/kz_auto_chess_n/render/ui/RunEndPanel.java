@@ -21,7 +21,8 @@ import java.util.List;
  * 档案结算行（熟练度/升级/解锁，BattleScreen 观察注入）+ 本局 seed + RESTART + 返回主菜单。
  * 档案写入归 BattleScreen→MetaService（Screen 点火器——裁决 D11），本类只读展示。
  *
- * <p>品质改造 §0.1：测试档终局隐藏熟练度行（不结算档案故无行可回退）。
+ * <p>品质改造 §0.1/§0.2：档案轨关闭的局（测试档 / 对拍）终局隐藏熟练度行（不结算档案故无行可
+ * 回退）；对拍局通关标题「对拍完成」、重开钮「按同种子重开」。
  */
 public final class RunEndPanel extends Group {
 
@@ -57,7 +58,7 @@ public final class RunEndPanel extends Group {
         this.menuListener = menuListener;
         this.context = context;
         this.mode = java.util.Objects.requireNonNull(mode, "mode 不能为 null");
-        Actor restart = new EndButton("重新开始", 120f, 300f, new Runnable() {
+        Actor restart = new EndButton(restartLabel(mode), 120f, 300f, new Runnable() {
             @Override
             public void run() {
                 restartListener.onRestart();
@@ -86,10 +87,10 @@ public final class RunEndPanel extends Group {
         batch.setColor(Color.WHITE);
         RunContext ctx = context.get();
         assets.font().getData().setScale(2f);
-        assets.font().draw(batch, endTitleText(ctx.getRunState().getEndCause()), 272f, 268f); // 4 字 ×24px 居中
+        assets.font().draw(batch, endTitleText(ctx.getRunState().getEndCause(), mode), 272f, 268f); // 4 字 ×24px 居中
         assets.font().getData().setScale(1f);
         int round = ctx.getRunState().getRound();
-        assets.font().draw(batch, "抵达第 " + round + "/" + GameBalance.TOTAL_ROUNDS + " 轮", 280f, 240f);
+        assets.font().draw(batch, "抵达第 " + round + "/" + ctx.totalRounds() + " 轮", 280f, 240f);
         if (settlementLines != null) {
             float y = 218f;
             for (String line : settlementLines) {
@@ -102,15 +103,24 @@ public final class RunEndPanel extends Group {
         assets.font().draw(batch, "种子 " + ctx.getRunState().getSeed(), 285f, 126f);
     }
 
-    /** 结算行缺省回退（纯函数；品质改造 §0.1）：测试档终局隐藏熟练度行（null = 不画）——
-     *  测试局不结算档案，回退行只会造成「有熟练度进账」的假信号。 */
+    /** 结算行缺省回退（纯函数；品质改造 §0.1/§0.2）：档案轨关闭的局（测试档 / 对拍）终局隐藏
+     *  熟练度行（null = 不画）——不结算档案，回退行只会造成「有熟练度进账」的假信号。 */
     static String fallbackMasteryLine(com.voidvvv.kz_auto_chess_n.entities.RunState runState,
                                       RunMode mode) {
-        return mode.isTestPeriod() ? null : "熟练度 +" + runState.getMasteryAwarded();
+        return mode.closesArchiveTrack() ? null : "熟练度 +" + runState.getMasteryAwarded();
     }
 
-    /** 终局标题三值（render §九；工作值待调）：COMPLETED 远征通关 / ABANDONED 远征已放弃 / DEFEATED 远征失败 */
+    /** 终局标题（存量 1 参口径——正式局） */
     static String endTitleText(RunEndCause cause) {
+        return endTitleText(cause, com.voidvvv.kz_auto_chess_n.entities.RunMode.NORMAL);
+    }
+
+    /** 终局标题（品质改造 §0.2）：对拍局通关 = 「对拍完成」，败/弃走原流程文案；
+     *  正式局 COMPLETED 远征通关 / ABANDONED 远征已放弃 / DEFEATED 远征失败（render §九） */
+    static String endTitleText(RunEndCause cause, RunMode mode) {
+        if (mode.isSampleDuel() && cause == RunEndCause.COMPLETED) {
+            return "对拍完成";
+        }
         if (cause == null) {
             return "远征通关"; // 防御：RUN_END 期 endCause 必非 null
         }
@@ -123,6 +133,11 @@ public final class RunEndPanel extends Group {
             default:
                 return "远征通关";
         }
+    }
+
+    /** 重开按钮文案（品质改造 §0.2）：对拍「按同种子重开」（原题原种子重建上下文），其余「重新开始」 */
+    static String restartLabel(RunMode mode) {
+        return mode.isSampleDuel() ? "按同种子重开" : "重新开始";
     }
 
     /** 终局双钮共用壳 */
