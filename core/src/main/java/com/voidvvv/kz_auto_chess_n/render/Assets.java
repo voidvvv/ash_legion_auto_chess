@@ -4,6 +4,7 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.audio.Music;
 import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.files.FileHandle;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.NinePatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
@@ -46,6 +47,7 @@ public final class Assets {
     /** UI 九宫格缓存（id → NinePatch；轻量对象，随 Assets 生命周期） */
     private final Map<String, NinePatch> uiPatches = new HashMap<String, NinePatch>();
     private BitmapFont font;
+    private Texture mainMenuBackground;
     /** FX 软告警去重（每键一次） */
     private final Set<String> warnedFxKeys = new HashSet<String>();
     /** 音效池（cue → Sound；本类持有并 dispose——品质改造 §1.2） */
@@ -198,7 +200,16 @@ public final class Assets {
         return font;
     }
 
-    /** Main.dispose 调：字体、音效/BGM、真素材（单位/UI）与占位 Texture 全弃 */
+    /** 主菜单重建时复用同一张纹理，由 Assets 统一释放。 */
+    public Texture mainMenuBackground() {
+        if (mainMenuBackground == null) {
+            mainMenuBackground = new Texture(Gdx.files.internal("art/ui/main_menu_background.png"));
+            mainMenuBackground.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        }
+        return mainMenuBackground;
+    }
+
+    /** Main.dispose 调：字体、音效/BGM、主菜单背景、真素材（单位/UI）与占位 Texture 全弃 */
     public void dispose() {
         if (font != null) {
             font.dispose();
@@ -211,6 +222,10 @@ public final class Assets {
         if (bgm != null) {
             bgm.dispose();
             bgm = null;
+        }
+        if (mainMenuBackground != null) {
+            mainMenuBackground.dispose();
+            mainMenuBackground = null;
         }
         realArt.dispose();
         uiArt.dispose();
