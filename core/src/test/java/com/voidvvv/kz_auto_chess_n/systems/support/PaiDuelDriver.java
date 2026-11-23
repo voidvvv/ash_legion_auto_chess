@@ -49,6 +49,38 @@ public final class PaiDuelDriver {
         return JsonLoader.loadFromDirectory(new FileHandle(new File("../assets/data")));
     }
 
+    /** §1.1 探测表站位（依次为 W / M / S）：题 A 聚拢→分散、题 B 祭司在后→战士在后 */
+    public enum Layout {
+        /** A 聚拢：W(2,4) / M(1,4) / S(2,5) */
+        A_CLUSTER(PaiTestScript.Topic.A, new int[][]{{2, 4}, {1, 4}, {2, 5}}),
+        /** A 分散：W(2,4) / M(0,4) / S(0,6) */
+        A_SCATTER(PaiTestScript.Topic.A, new int[][]{{2, 4}, {0, 4}, {0, 6}}),
+        /** B 祭司在后：W(2,5) / M(2,6) / S(2,4) */
+        B_PRIEST_BACK(PaiTestScript.Topic.B, new int[][]{{2, 5}, {2, 6}, {2, 4}}),
+        /** B 战士在后：W(2,6) / M(2,5) / S(2,4) */
+        B_WARRIOR_BACK(PaiTestScript.Topic.B, new int[][]{{2, 6}, {2, 5}, {2, 4}});
+
+        public final PaiTestScript.Topic topic;
+        public final int[][] cells;
+
+        Layout(PaiTestScript.Topic topic, int[][] cells) {
+            this.topic = topic;
+            this.cells = cells;
+        }
+    }
+
+    /** 按布局开一局（§1.1 对拍购买固定：首屏 W/M/S、余 7 金，按 W、M、S 顺序买入并部署） */
+    public static Session openLayout(GameData data, Layout layout, long seed) {
+        Session session = Session.start(data, layout.topic, seed);
+        session.buyTemplate(PaiTestScript.W);
+        session.buyTemplate(PaiTestScript.M);
+        session.buyTemplate(PaiTestScript.S);
+        for (int[] cell : layout.cells) {
+            session.deployNextBench(cell[0], cell[1]);
+        }
+        return session;
+    }
+
     /** 一次无头对拍会话（同题同种子可重复构建；重开 = 重新 start，商店随上下文重建） */
     public static final class Session {
         private final RunFlowSystem flow = new RunFlowSystem();
@@ -139,6 +171,11 @@ public final class PaiDuelDriver {
             startBattle();
             battleSystem.runToEnd(lastBattle, MAX_TICKS);
             flow.onBattleOver(ctx);
+        }
+
+        /** 开战但不推进（§1.1 预判对齐观察面：开局索敌 targetId 在 step 前已定） */
+        public void startBattleOnly() {
+            startBattle();
         }
 
         /** 注入胜局（§0.3 账本独立验证）：开战后直接判胜并走观察-委托，不消耗交战随机 */

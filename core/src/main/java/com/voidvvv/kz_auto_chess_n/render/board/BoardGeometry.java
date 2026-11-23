@@ -81,6 +81,45 @@ public final class BoardGeometry {
     /** 抽屉展开时引导文案左缘与抽屉右缘的间隙（舞台像素） */
     public static final int SHOP_HINT_DRAWER_GAP_PX = 4;
 
+    // —— 战前危险提示区（品质改造 §1.1：棋盘下缘、虚拟世界矩形 (224,14,324,32)、两行基线 42/28） ——
+
+    public static final int THREAT_HINT_X = 224;
+    public static final int THREAT_HINT_Y = 14;
+    public static final int THREAT_HINT_W = 324;
+    public static final int THREAT_HINT_H = 32;
+    /** 两行文案基线（y-up；第一行在上） */
+    public static final int THREAT_HINT_LINE1_Y = 42;
+    public static final int THREAT_HINT_LINE2_Y = 28;
+    /** 文案左内边距（相对提示区左缘） */
+    public static final int THREAT_HINT_TEXT_INSET_PX = 8;
+
+    /** 规则行文案（§1.1 原文） */
+    public static final String THREAT_COPY_BREAK_STOMP = "破阵踏：目标及相邻四格，拉开站位";
+    public static final String THREAT_COPY_EXECUTE = "处决：优先盯最靠后的棋子，让战士站最后";
+    /** 单威胁第二行说明（§1.1 原文） */
+    public static final String THREAT_NOTE_SINGLE = "开局预判，目标会随交战变化";
+    /** 双威胁栏头（§1.1：「规则行统一以开局预判为栏头缩写，维持两条正文可读空间」） */
+    public static final String THREAT_HEADER = "开局预判";
+
+    /**
+     * 战前提示两行文案（纯函数可测；§1.1 排版口径）：
+     * 单威胁 = 规则行 + 「开局预判，目标会随交战变化」；双威胁 = 「开局预判」栏头缩写入首行 +
+     * 规则行两条正文各占一行（A 在前，与预判输出序同源）。无威胁返回空数组（不绘制）。
+     *
+     * @param threatCount 命中威胁条数（0/1/2；仅两题，恒 ≤ 2）
+     * @param firstCopy   第一条（或唯一一条）威胁的规则行
+     * @param secondCopy  第二条威胁的规则行（单威胁传 null）
+     */
+    public static String[] threatHintLines(int threatCount, String firstCopy, String secondCopy) {
+        if (threatCount <= 0) {
+            return new String[0];
+        }
+        if (threatCount >= 2 && secondCopy != null) {
+            return new String[]{THREAT_HEADER + " " + firstCopy, secondCopy};
+        }
+        return new String[]{firstCopy, THREAT_NOTE_SINGLE};
+    }
+
     /**
      * 出售区方位词——<b>与 ⑦ 出售区常量同源</b>（UI 抽屉化批4；Q10 裁决：界面坐标镜像漂移另案处理，
      * 本次按实机落点 y-up 写）：x 过中线为「右」、y 过中线为「上」。设计表原值 (564,246) 被当 y-up 用 →

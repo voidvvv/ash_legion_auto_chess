@@ -19,6 +19,7 @@ import com.voidvvv.kz_auto_chess_n.render.EventInbox;
 import com.voidvvv.kz_auto_chess_n.render.FloatTextFormat;
 import com.voidvvv.kz_auto_chess_n.render.PlaceholderKeys;
 import com.voidvvv.kz_auto_chess_n.render.StarColors;
+import com.voidvvv.kz_auto_chess_n.systems.ThreatPredictor;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -53,6 +54,34 @@ public final class BattleRenderer {
     private static final com.badlogic.gdx.graphics.Color SELL_DROP_TINT =
             new com.badlogic.gdx.graphics.Color(1f, 0.8f, 0.25f, 0.45f);  // 出售区悬停金
 
+    // —— 战前危险提示（品质改造 §1.1；画法参数取 §1.3 初版，观感统一留批 4） ——
+    /** 琥珀（A 破阵踏 #F2B544） */
+    private static final com.badlogic.gdx.graphics.Color THREAT_AMBER =
+            new com.badlogic.gdx.graphics.Color(0.949f, 0.710f, 0.267f, 1f);
+    /** 红橙（B 处决 #FF785D） */
+    private static final com.badlogic.gdx.graphics.Color THREAT_RED_ORANGE =
+            new com.badlogic.gdx.graphics.Color(1f, 0.471f, 0.365f, 1f);
+    /** 危险格淡底（§1.3：A α0.23 / B α0.22） */
+    private static final com.badlogic.gdx.graphics.Color THREAT_FILL_AMBER =
+            new com.badlogic.gdx.graphics.Color(0.949f, 0.710f, 0.267f, 0.23f);
+    private static final com.badlogic.gdx.graphics.Color THREAT_FILL_RED =
+            new com.badlogic.gdx.graphics.Color(1f, 0.471f, 0.365f, 0.22f);
+    /** 来源格角标衬底（§1.3 #15171C） */
+    private static final com.badlogic.gdx.graphics.Color THREAT_MARK_BACKING =
+            new com.badlogic.gdx.graphics.Color(0.082f, 0.090f, 0.110f, 1f);
+    /** 提示文字浅色（§1.1：浅色 12px 字深色底；字体原生 12px） */
+    private static final com.badlogic.gdx.graphics.Color THREAT_TEXT_TINT =
+            new com.badlogic.gdx.graphics.Color(0.92f, 0.94f, 0.96f, 1f);
+    private static final float THREAT_EDGE_ALPHA = 0.95f;
+    private static final int THREAT_INSET_PX = 2;
+    private static final int THREAT_EDGE_PX = 2;
+    private static final int THREAT_CORNER_ARM_PX = 6;
+    private static final int THREAT_SOURCE_MARK_W = 6;
+    private static final int THREAT_SOURCE_MARK_H = 2;
+    /** 邻格短虚线节律（§1.3：5px 亮 / 3px 间隔） */
+    private static final int THREAT_DASH_ON_PX = 5;
+    private static final int THREAT_DASH_OFF_PX = 3;
+
     private final Assets assets;
     /** 当前附着的战斗实例（null = 备战期/无战斗；变化即 rebuild/clear） */
     private BattleState trackedBattle;
@@ -73,6 +102,10 @@ public final class BattleRenderer {
     private int floatSlot;
     /** 引导文案排版缓存（懒建一次，零稳态分配） */
     private GlyphLayout hintLayout;
+    /** 战前预判缓存（零稳态分配）：敌阵引用或部署指纹变化才重算（§1.1） */
+    private java.util.List<ThreatPredictor.Preview> threatPreviews;
+    private java.util.List<WaveSpec> threatWaveRef;
+    private int threatFingerprint;
 
     public BattleRenderer(Assets assets) {
         this.assets = assets;
@@ -198,8 +231,209 @@ public final class BattleRenderer {
                     center[0], center[1], true, SideColors.ENEMY_PREVIEW_ALPHA * chromeFadeAlpha,
                     1, SideColors.ENEMY);
         }
+        drawThreatPreviews(batch, ctx, chromeFadeAlpha);
         drawSellZone(batch, chromeFadeAlpha);
         drawShoppingHint(batch, chromeFadeAlpha, worldScale, drawerStageRightEdge);
+    }
+
+    // —— 战前危险提示（品质改造 §1.1；§1.4：战前标记只描述开局，真实命中以事件为准） ——
+
+    /** 格左下角像素 x（y-up；drawGrid 同式） */
+    private static int threatCellLeftX(int gridX) {
+        return BoardGeometry.BOARD_X + gridX * BoardGeometry.CELL;
+    }
+
+    /** 格左下角像素 y（行 0 在顶翻转口径同 drawGrid） */
+    private static int threatCellBottomY(int gridY) {
+        return BoardGeometry.BOARD_Y + BoardGeometry.BOARD_H - (gridY + 1) * BoardGeometry.CELL;
+    }
+
+    /** 战前预判缓存读取（敌阵引用 + 部署指纹（id 与格位加权和）任一变化才重算——零稳态分配） */
+    private java.util.List<ThreatPredictor.Preview> threatPreviews(RunContext ctx) {
+        java.util.List<WaveSpec> wave = ctx.getRunState().getEnemyWave();
+        int fingerprint = 0;
+        for (int y = 4; y <= 6; y++) {
+            for (int x = 0; x < GameBalance.BOARD_COLS; x++) {
+                Unit unit = ctx.getPlayer().deployedAt(x, y);
+                if (unit != null) {
+                    fingerprint = fingerprint * 31 + (unit.getId() ^ (x * 7) ^ (y * 13));
+                }
+            }
+        }
+        if (threatPreviews != null && threatWaveRef == wave && fingerprint == threatFingerprint) {
+            return threatPreviews;
+        }
+        threatPreviews = ThreatPredictor.predict(ctx.getGameData(), wave, ctx.getPlayer());
+        threatWaveRef = wave;
+        threatFingerprint = fingerprint;
+        return threatPreviews;
+    }
+
+    /** 威胁色（A 琥珀 / B 红橙） */
+    private static com.badlogic.gdx.graphics.Color threatColor(ThreatPredictor.Kind kind) {
+        return kind == ThreatPredictor.Kind.BREAK_STOMP ? THREAT_AMBER : THREAT_RED_ORANGE;
+    }
+
+    private static com.badlogic.gdx.graphics.Color threatFill(ThreatPredictor.Kind kind) {
+        return kind == ThreatPredictor.Kind.BREAK_STOMP ? THREAT_FILL_AMBER : THREAT_FILL_RED;
+    }
+
+    private static String threatCopy(ThreatPredictor.Kind kind) {
+        return kind == ThreatPredictor.Kind.BREAK_STOMP
+                ? BoardGeometry.THREAT_COPY_BREAK_STOMP : BoardGeometry.THREAT_COPY_EXECUTE;
+    }
+
+    /**
+     * 战前危险提示绘制（§1.1）：敌原格角标；A = 预测主目标格实线框 + 十字四邻琥珀短虚线 + 淡底；
+     * B = 预测目标格四红橙角 + 后排短虚线括号；未上棋只画敌角标。危险格已由预判裁到合法棋盘
+     * （保留缓冲带格展示形状）；随 chromeFadeAlpha 淡出，转场/BATTLE/RESULT 由 draw 分支保证不达。
+     */
+    private void drawThreatPreviews(SpriteBatch batch, RunContext ctx, float fade) {
+        java.util.List<ThreatPredictor.Preview> previews = threatPreviews(ctx);
+        if (previews.isEmpty()) {
+            return;
+        }
+        TextureRegion white = assets.region(PlaceholderKeys.WHITE);
+        for (ThreatPredictor.Preview preview : previews) {
+            com.badlogic.gdx.graphics.Color color = threatColor(preview.getKind());
+            com.badlogic.gdx.graphics.Color fill = threatFill(preview.getKind());
+            if (preview.hasTarget()) {
+                int targetPx = threatCellLeftX(preview.getTargetGridX());
+                int targetPy = threatCellBottomY(preview.getTargetGridY());
+                if (preview.getKind() == ThreatPredictor.Kind.BREAK_STOMP) {
+                    for (int[] cell : preview.getDangerCells()) { // 十字四邻（主目标格除外）：淡底 + 短虚线
+                        if (cell[0] == preview.getTargetGridX() && cell[1] == preview.getTargetGridY()) {
+                            continue;
+                        }
+                        int px = threatCellLeftX(cell[0]);
+                        int py = threatCellBottomY(cell[1]);
+                        batch.setColor(fill.r, fill.g, fill.b, fill.a * fade);
+                        batch.draw(white, px, py, BoardGeometry.CELL, BoardGeometry.CELL);
+                        drawThreatDashedFrame(batch, white, px, py, color, THREAT_EDGE_ALPHA * fade);
+                    }
+                    drawThreatFrame(batch, white, targetPx, targetPy, color, THREAT_EDGE_ALPHA * fade);
+                } else {
+                    batch.setColor(fill.r, fill.g, fill.b, fill.a * fade);
+                    batch.draw(white, targetPx, targetPy, BoardGeometry.CELL, BoardGeometry.CELL);
+                    drawThreatCorners(batch, white, targetPx, targetPy, color, THREAT_EDGE_ALPHA * fade);
+                    drawBacklineBracket(batch, white, preview.getBacklineRowY(), color, fade);
+                }
+            }
+            drawThreatSourceMark(batch, white, threatCellLeftX(preview.getEnemyGridX()),
+                    threatCellBottomY(preview.getEnemyGridY()), color, fade);
+        }
+        drawThreatHint(batch, previews, fade);
+    }
+
+    /** 提示文案（棋盘下缘 (224,14,324,32) 深色底 + 浅色 12px 字，两行基线 42/28——§1.1） */
+    private void drawThreatHint(SpriteBatch batch, java.util.List<ThreatPredictor.Preview> previews,
+                                float fade) {
+        String secondCopy = previews.size() > 1 ? threatCopy(previews.get(1).getKind()) : null;
+        String[] lines = BoardGeometry.threatHintLines(previews.size(),
+                threatCopy(previews.get(0).getKind()), secondCopy);
+        if (lines.length == 0) {
+            return;
+        }
+        TextureRegion white = assets.region(PlaceholderKeys.WHITE);
+        batch.setColor(0f, 0f, 0f, 0.62f * fade);
+        batch.draw(white, BoardGeometry.THREAT_HINT_X, BoardGeometry.THREAT_HINT_Y,
+                BoardGeometry.THREAT_HINT_W, BoardGeometry.THREAT_HINT_H);
+        batch.setColor(com.badlogic.gdx.graphics.Color.WHITE);
+        assets.font().setColor(THREAT_TEXT_TINT.r, THREAT_TEXT_TINT.g, THREAT_TEXT_TINT.b, fade);
+        float textX = BoardGeometry.THREAT_HINT_X + BoardGeometry.THREAT_HINT_TEXT_INSET_PX;
+        assets.font().draw(batch, lines[0], textX, BoardGeometry.THREAT_HINT_LINE1_Y);
+        if (lines.length > 1) {
+            assets.font().draw(batch, lines[1], textX, BoardGeometry.THREAT_HINT_LINE2_Y);
+        }
+        assets.font().setColor(com.badlogic.gdx.graphics.Color.WHITE); // 用后即还（共用字体纪律）
+    }
+
+    /** 格实线框（内缩 2px、线宽 2px、整数对齐——render §八.2；SideColors.drawBorder 同结构） */
+    private void drawThreatFrame(SpriteBatch batch, TextureRegion white, int px, int py,
+                                 com.badlogic.gdx.graphics.Color color, float alpha) {
+        batch.setColor(color.r, color.g, color.b, alpha);
+        int inner = THREAT_INSET_PX;
+        int span = BoardGeometry.CELL - 2 * inner;
+        batch.draw(white, px + inner, py + inner, span, THREAT_EDGE_PX);
+        batch.draw(white, px + inner, py + BoardGeometry.CELL - inner - THREAT_EDGE_PX, span, THREAT_EDGE_PX);
+        batch.draw(white, px + inner, py + inner + THREAT_EDGE_PX, THREAT_EDGE_PX, span - 2 * THREAT_EDGE_PX);
+        batch.draw(white, px + BoardGeometry.CELL - inner - THREAT_EDGE_PX, py + inner + THREAT_EDGE_PX,
+                THREAT_EDGE_PX, span - 2 * THREAT_EDGE_PX);
+        batch.setColor(com.badlogic.gdx.graphics.Color.WHITE);
+    }
+
+    /** 格短虚线框（§1.3 邻格 5px 亮 / 3px 间隔节律） */
+    private void drawThreatDashedFrame(SpriteBatch batch, TextureRegion white, int px, int py,
+                                       com.badlogic.gdx.graphics.Color color, float alpha) {
+        batch.setColor(color.r, color.g, color.b, alpha);
+        int inner = THREAT_INSET_PX;
+        int span = BoardGeometry.CELL - 2 * inner;
+        drawDashedEdgeH(batch, white, px + inner, py + inner, span);
+        drawDashedEdgeH(batch, white, px + inner, py + BoardGeometry.CELL - inner - THREAT_EDGE_PX, span);
+        drawDashedEdgeV(batch, white, px + inner, py + inner, span);
+        drawDashedEdgeV(batch, white, px + BoardGeometry.CELL - inner - THREAT_EDGE_PX, py + inner, span);
+        batch.setColor(com.badlogic.gdx.graphics.Color.WHITE);
+    }
+
+    private void drawDashedEdgeH(SpriteBatch batch, TextureRegion white, int x, int y, int length) {
+        int step = THREAT_DASH_ON_PX + THREAT_DASH_OFF_PX;
+        for (int offset = 0; offset < length; offset += step) {
+            batch.draw(white, x + offset, y, Math.min(THREAT_DASH_ON_PX, length - offset), THREAT_EDGE_PX);
+        }
+    }
+
+    private void drawDashedEdgeV(SpriteBatch batch, TextureRegion white, int x, int y, int length) {
+        int step = THREAT_DASH_ON_PX + THREAT_DASH_OFF_PX;
+        for (int offset = 0; offset < length; offset += step) {
+            batch.draw(white, x, y + offset, THREAT_EDGE_PX, Math.min(THREAT_DASH_ON_PX, length - offset));
+        }
+    }
+
+    /** 格四角标记（每角 6px 臂长 / 2px 线宽——§1.3 B 预测目标） */
+    private void drawThreatCorners(SpriteBatch batch, TextureRegion white, int px, int py,
+                                   com.badlogic.gdx.graphics.Color color, float alpha) {
+        batch.setColor(color.r, color.g, color.b, alpha);
+        int left = px + THREAT_INSET_PX;
+        int right = px + BoardGeometry.CELL - THREAT_INSET_PX;
+        int bottom = py + THREAT_INSET_PX;
+        int top = py + BoardGeometry.CELL - THREAT_INSET_PX;
+        batch.draw(white, left, bottom, THREAT_CORNER_ARM_PX, THREAT_EDGE_PX);
+        batch.draw(white, left, bottom, THREAT_EDGE_PX, THREAT_CORNER_ARM_PX);
+        batch.draw(white, right - THREAT_CORNER_ARM_PX, bottom, THREAT_CORNER_ARM_PX, THREAT_EDGE_PX);
+        batch.draw(white, right - THREAT_EDGE_PX, bottom, THREAT_EDGE_PX, THREAT_CORNER_ARM_PX);
+        batch.draw(white, left, top - THREAT_EDGE_PX, THREAT_CORNER_ARM_PX, THREAT_EDGE_PX);
+        batch.draw(white, left, top - THREAT_CORNER_ARM_PX, THREAT_EDGE_PX, THREAT_CORNER_ARM_PX);
+        batch.draw(white, right - THREAT_CORNER_ARM_PX, top - THREAT_EDGE_PX, THREAT_CORNER_ARM_PX, THREAT_EDGE_PX);
+        batch.draw(white, right - THREAT_EDGE_PX, top - THREAT_CORNER_ARM_PX, THREAT_EDGE_PX, THREAT_CORNER_ARM_PX);
+        batch.setColor(com.badlogic.gdx.graphics.Color.WHITE);
+    }
+
+    /** B 后排短虚线括号（玩家最后一个有棋的排；左右两道竖向虚线——§1.1） */
+    private void drawBacklineBracket(SpriteBatch batch, TextureRegion white, int rowY,
+                                     com.badlogic.gdx.graphics.Color color, float fade) {
+        if (rowY < 0) {
+            return;
+        }
+        batch.setColor(color.r, color.g, color.b, THREAT_EDGE_ALPHA * fade);
+        int span = BoardGeometry.CELL - 2 * THREAT_INSET_PX;
+        drawDashedEdgeV(batch, white, BoardGeometry.BOARD_X + THREAT_INSET_PX,
+                threatCellBottomY(rowY) + THREAT_INSET_PX, span);
+        drawDashedEdgeV(batch, white,
+                BoardGeometry.BOARD_X + BoardGeometry.BOARD_W - THREAT_INSET_PX - THREAT_EDGE_PX,
+                threatCellBottomY(rowY) + THREAT_INSET_PX, span);
+        batch.setColor(com.badlogic.gdx.graphics.Color.WHITE);
+    }
+
+    /** 来源格上角边条（同色 6×2px + #15171C 1px 衬底——§1.3） */
+    private void drawThreatSourceMark(SpriteBatch batch, TextureRegion white, int px, int py,
+                                      com.badlogic.gdx.graphics.Color color, float fade) {
+        batch.setColor(THREAT_MARK_BACKING);
+        batch.draw(white, px + THREAT_INSET_PX - 1, py + BoardGeometry.CELL - THREAT_INSET_PX - 3,
+                THREAT_SOURCE_MARK_W + 2, THREAT_SOURCE_MARK_H + 2);
+        batch.setColor(color.r, color.g, color.b, THREAT_EDGE_ALPHA * fade);
+        batch.draw(white, px + THREAT_INSET_PX, py + BoardGeometry.CELL - THREAT_INSET_PX - 2,
+                THREAT_SOURCE_MARK_W, THREAT_SOURCE_MARK_H);
+        batch.setColor(com.badlogic.gdx.graphics.Color.WHITE);
     }
 
     /** ⑦ 出售区（render §九；棋盘域自绘，仅 SHOPPING 路径可达；fade = 转场淡出系数） */
@@ -269,7 +503,8 @@ public final class BattleRenderer {
                 UnitView caster = unitViews.get(event.getSourceId());
                 if (caster != null) {
                     caster.anim().onEvent(CombatEvent.Type.CAST);
-                    fxLayer.sparkCast(event.getSkillId(), caster.virtualX(renderClock), caster.virtualY(renderClock));
+                    fxLayer.sparkCast(event.getSkillId(), caster.virtualX(renderClock),
+                            caster.virtualY(renderClock), keyedEnemyCastTint(caster, event.getSkillId()));
                 }
                 break;
             case HIT:
@@ -292,6 +527,12 @@ public final class BattleRenderer {
             default:
                 break;
         }
+    }
+
+    /** 敌方关键技施法闪光色调（品质改造 §1.1：两题敌方 CAST 用敌方琥珀色；其余原色 null） */
+    private static com.badlogic.gdx.graphics.Color keyedEnemyCastTint(UnitView caster, String skillId) {
+        return caster.unit().getSide() == Side.ENEMY && ThreatPredictor.isKeyedEnemySkill(skillId)
+                ? THREAT_AMBER : null;
     }
 
     /** 受击方表现：白闪 + 飘字（FloatTextFormat）+ 落点闪光 */
