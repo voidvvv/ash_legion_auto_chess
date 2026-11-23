@@ -34,12 +34,18 @@ public final class ChestDialog extends Group {
     /** feedback07 装备选项效果行：折行列宽 (120-14-2)/12 = 8；行容量 3（名行 y+46 之下 y+32/20/8） */
     private static final int OPTION_MAX_COLUMNS = 8;
     private static final int OPTION_LINE_CAPACITY = 3;
+    /** 归因折行列宽（品质改造 §1.4：392px / 12px ≈ 32 列） */
+    static final int RESULT_MAX_COLUMNS = 32;
 
     private final CommandManager commandManager;
     private final Assets assets;
     private final GameData data;
     private final OptionButton[] buttons = new OptionButton[3];
     private ChestOffer offer;
+    /** 归因句两行（品质改造 §1.4：有箱时画在选项区上方新文本区；折两行限 392px） */
+    private List<String> attributionLines = Collections.emptyList();
+    private final com.badlogic.gdx.graphics.g2d.GlyphLayout measureLayout =
+            new com.badlogic.gdx.graphics.g2d.GlyphLayout();
 
     public ChestDialog(CommandManager commandManager, Assets assets, GameData data) {
         this.commandManager = commandManager;
@@ -51,9 +57,12 @@ public final class ChestDialog extends Group {
         }
     }
 
-    /** Screen 在 push 前刷新（offer 不可变，无逐帧刷新需求）；按选项数显隐 + 居中重排（胜 3 / 败 2） */
-    public void refresh(ChestOffer offer) {
+    /** Screen 在 push 前刷新（offer 不可变，无逐帧刷新需求）；按选项数显隐 + 居中重排（胜 3 / 败 2）。
+     *  品质改造 §1.4：归因句与箱子共用（两处只显其一——有箱时本弹窗显示） */
+    public void refresh(ChestOffer offer, String attribution) {
         this.offer = offer;
+        this.attributionLines = attribution == null ? Collections.<String>emptyList()
+                : UnitInfoText.clipLines(UnitInfoText.wrap(attribution, RESULT_MAX_COLUMNS), 2);
         int n = offer.getOptions().size(); // 2~3（ChestOffer 构造校验）
         float totalW = n * 120f + (n - 1) * 10f;
         float x = (BoardGeometry.VIRTUAL_W - totalW) / 2f;
@@ -147,12 +156,23 @@ public final class ChestDialog extends Group {
     public void draw(Batch batch, float parentAlpha) {
         Color old = batch.getColor();
         batch.setColor(0f, 0f, 0f, 0.8f * parentAlpha);
-        batch.draw(assets.region(PlaceholderKeys.WHITE), 110f, 100f, 420f, 140f);
+        batch.draw(assets.region(PlaceholderKeys.WHITE), 110f, 100f, 420f, 176f); // 底板向上拓至 y=276（§1.4）
         batch.setColor(old);
         assets.font().getData().setScale(1.5f);
-        assets.font().draw(batch, titleText(offer), 268f, 216f);
+        assets.font().draw(batch, titleText(offer), 268f, 258f); // 标题基线约 258（§1.4）
         assets.font().getData().setScale(1f);
+        float y = 240f; // 归因两行基线 240/226（§1.4）
+        for (int i = 0; i < attributionLines.size(); i++) {
+            assets.font().draw(batch, attributionLines.get(i), centeredX(attributionLines.get(i)), y);
+            y -= 14f;
+        }
         super.draw(batch, parentAlpha);
+    }
+
+    /** 归因行 392px 带内居中（§1.4「文本测量用现有字体」；带自底板 110px 起居中） */
+    private float centeredX(String line) {
+        measureLayout.setText(assets.font(), line);
+        return 124f + (392f - measureLayout.width) / 2f;
     }
 
     /** 标题三值：败箱「战败补给」（GDD §2.2）/ Boss 箱 / 普通箱（工作值待调） */

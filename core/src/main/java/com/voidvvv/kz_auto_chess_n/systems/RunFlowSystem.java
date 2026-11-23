@@ -86,6 +86,7 @@ public final class RunFlowSystem {
             if (ctx.getRunState().getPhase() != GamePhase.BATTLE || ctx.getBattleState() == null) {
                 return false;
             }
+            ctx.getBattleState().markSurrendered(); // §1.4：成功处理入口记录认输标记（归因最高优先级候选）
             ctx.getBattleState().finish(BattleOutcome.ENEMY_WIN); // 幂等（finish 首个结局生效）
             return true;
         });
