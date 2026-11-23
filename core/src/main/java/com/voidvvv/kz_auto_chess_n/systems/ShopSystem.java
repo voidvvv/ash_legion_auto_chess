@@ -39,6 +39,8 @@ public final class ShopSystem {
     /** 对拍付费序号（品质改造 §0.2，0-based：0 = ①）：新轮免费补货归零、成功付费 +1；
      *  正式分支不消费。随上下文生命周期重建（重开即新商店——同轮重试自然保留）。 */
     private int paidRefreshIndex;
+    /** 本帧升星星级（品质改造 §1.2：音频消费者；级联合成同帧只播一次、保留最高星级——drain 后清空） */
+    private final java.util.List<Integer> frameUpgrades = new java.util.ArrayList<Integer>();
 
     /** 注册经营命令 handler（input §6.1：handler 由所属 system 注册） */
     public void registerHandlers(CommandManager manager) {
@@ -226,9 +228,7 @@ public final class ShopSystem {
         EquipmentSystem.unequipAll(consumed, player);
         player.removeUnit(consumed);
         survivor.addSpend(consumed.getSpend() + bought.getSpend());
-        survivor.upgradeStar();
-        ctx.getRunState().addNotice(
-                survivor.getTemplate().getName() + " 升至 " + survivor.getStar() + " 星");
+        registerUpgrade(ctx, survivor); // 升星收口单点（§1.2）
         mergeCascade(ctx);
     }
 
@@ -254,9 +254,7 @@ public final class ShopSystem {
                         ctx.getPlayer().removeUnit(consumed);
                     }
                     survivor.addSpend(foldedSpend); // 首位保留位置与装备（实现口径 #5）
-                    survivor.upgradeStar();
-                    ctx.getRunState().addNotice(
-                            survivor.getTemplate().getName() + " 升至 " + survivor.getStar() + " 星");
+                    registerUpgrade(ctx, survivor); // 升星收口单点（§1.2）
                     mergedAny = true;
                     break; // 重扫（级联 + 名单已变）
                 }
@@ -279,6 +277,31 @@ public final class ShopSystem {
             }
         }
         return count;
+    }
+
+    /**
+     * 升星收口单点（品质改造 §1.2）：mergeIntoFullBench / mergeCascade 两路共用——写一次带单位
+     * 与新星级的文本通知 + 记录本帧升星（音频消费者与文本通知各有消费者）。级联合成同帧只播一次、
+     * 保留最高星级（音频侧按帧归并）。
+     */
+    private void registerUpgrade(RunContext ctx, Unit survivor) {
+        survivor.upgradeStar();
+        ctx.getRunState().addNotice(
+                survivor.getTemplate().getName() + " 升至 " + survivor.getStar() + " 星");
+        frameUpgrades.add(survivor.getStar());
+    }
+
+    /** 本帧升星星级（品质改造 §1.2；取最高——级联合成同帧只播一次；drain 后清空） */
+    public int drainFrameUpgradeStar() {
+        if (frameUpgrades.isEmpty()) {
+            return -1;
+        }
+        int highest = 0;
+        for (Integer star : frameUpgrades) {
+            highest = Math.max(highest, star);
+        }
+        frameUpgrades.clear();
+        return highest;
     }
 
     /** 同费池（非 Boss、cost 匹配；GameData 声明序——LinkedHashMap 确定性） */

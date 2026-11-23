@@ -1,6 +1,8 @@
 package com.voidvvv.kz_auto_chess_n.render;
 
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.audio.Music;
+import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.files.FileHandle;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.NinePatch;
@@ -27,6 +29,10 @@ import java.util.Set;
  * <p><b>FX 软路径</b>（2026-11-21 亡语 FX 缺口回归加固）：装饰性特效键走 {@link #regionFx}——
  * 缺键软告警（每键一次，与 JsonLoader 软告警同口径）+ 降级通用爆点/白片，<b>装饰性贴图永不崩游戏</b>；
  * 结构性键（单位帧/面板/白片）仍走 {@link #region} 硬失败——缺结构图属程序错误必须即死。
+ *
+ * <p><b>音效出口</b>（品质改造 §1.2）：{@link AudioScheduler.Cue} → {@code audio/*.ogg} 由本类
+ * 持有并 dispose（{@code Gdx.audio.newSound}，本类此前无 Sound 先例——新建出口）；缺文件该 cue
+ * 静音 + 一次日志，其余 cue 与渲染正常构建。BGM 走 Music 接口，开关默认关闭（§1.2）。
  */
 public final class Assets {
     /** 真素材层字体文件（Hiero 生成 .fnt + .png；缺文件回退内置默认） */
@@ -42,6 +48,14 @@ public final class Assets {
     private BitmapFont font;
     /** FX 软告警去重（每键一次） */
     private final Set<String> warnedFxKeys = new HashSet<String>();
+    /** 音效池（cue → Sound；本类持有并 dispose——品质改造 §1.2） */
+    private final Map<AudioScheduler.Cue, Sound> sounds =
+            new HashMap<AudioScheduler.Cue, Sound>();
+    /** 缺素材静音去重（每 cue 一次日志） */
+    private final Set<AudioScheduler.Cue> missingCues = new HashSet<AudioScheduler.Cue>();
+    /** BGM（Music 接口；开关默认关闭——§1.2） */
+    private Music bgm;
+    private boolean bgmStarted;
 
     public Assets(PlaceholderArt art) {
         this.art = Objects.requireNonNull(art, "art 不能为 null");
@@ -111,6 +125,70 @@ public final class Assets {
         return patch;
     }
 
+    // —— 音效（品质改造 §1.2） ——
+
+    /** cue → 素材文件（assets/audio/ 六件，Ogg Vorbis；§1.2 表） */
+    private static String audioFile(AudioScheduler.Cue cue) {
+        switch (cue) {
+            case VICTORY: return "audio/sfx_victory.ogg";
+            case DEFEAT: return "audio/sfx_defeat.ogg";
+            case CAST: return "audio/sfx_cast.ogg";
+            case KILL: return "audio/sfx_kill.ogg";
+            case UPGRADE: return "audio/sfx_upgrade.ogg";
+            default: return "audio/sfx_hit.ogg";
+        }
+    }
+
+    private Sound sound(AudioScheduler.Cue cue) {
+        Sound loaded = sounds.get(cue);
+        if (loaded != null) {
+            return loaded;
+        }
+        if (missingCues.contains(cue)) {
+            return null; // 缺素材静音（每 cue 一次日志）
+        }
+        FileHandle file = Gdx.files.internal(audioFile(cue));
+        if (!file.exists()) {
+            missingCues.add(cue);
+            System.err.println("[Assets][软告警] 音效缺文件（该 cue 静音）: " + audioFile(cue));
+            return null;
+        }
+        Sound sound = Gdx.audio.newSound(file);
+        sounds.put(cue, sound);
+        return sound;
+    }
+
+    /** 音效播放出口（品质改造 §1.2：Assets 持有 Sound 并 dispose，屏只管播放句柄） */
+    public final AudioScheduler.CuePlayer audioPlayer = new AudioScheduler.CuePlayer() {
+        @Override
+        public long play(AudioScheduler.Cue cue, float volume) {
+            Sound sound = sound(cue);
+            return sound == null ? -1L : sound.play(volume);
+        }
+
+        @Override
+        public void stop(long playId) {
+            // playId = -1（缺素材静音路径）不会进入调度（AudioScheduler 只对已播声道 stop）
+        }
+    };
+
+    /** BGM 接线（品质改造 §1.2：Music 接口 + 开关默认关闭——codex 下批定播放方式） */
+    public void playBgmIfEnabled() {
+        if (!com.voidvvv.kz_auto_chess_n.config.GameBalance.BGM_ENABLED || bgmStarted) {
+            return;
+        }
+        FileHandle file = Gdx.files.internal("audio/bgm_battle.ogg");
+        if (!file.exists()) {
+            System.err.println("[Assets][软告警] BGM 缺文件: audio/bgm_battle.ogg");
+            bgmStarted = true;
+            return;
+        }
+        bgm = Gdx.audio.newMusic(file);
+        bgm.setLooping(true);
+        bgm.play();
+        bgmStarted = true;
+    }
+
     /** Fusion Pixel 12px 位图字体（Q4=B；文件缺失回退内置默认——headless 测试不依赖素材存在） */
     public BitmapFont font() {
         if (font == null) {
@@ -120,11 +198,19 @@ public final class Assets {
         return font;
     }
 
-    /** Main.dispose 调：字体、真素材（单位/UI）与占位 Texture 全弃 */
+    /** Main.dispose 调：字体、音效/BGM、真素材（单位/UI）与占位 Texture 全弃 */
     public void dispose() {
         if (font != null) {
             font.dispose();
             font = null;
+        }
+        for (Sound sound : sounds.values()) {
+            sound.dispose();
+        }
+        sounds.clear();
+        if (bgm != null) {
+            bgm.dispose();
+            bgm = null;
         }
         realArt.dispose();
         uiArt.dispose();

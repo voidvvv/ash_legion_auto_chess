@@ -33,6 +33,7 @@ public class Main extends Game {
         metaService.loadProfile();
         PlaceholderArt art = new PlaceholderArt(data); // GL 线程一次性生成
         this.assets = new Assets(art);
+        assets.playBgmIfEnabled(); // §1.2 BGM 接线（GameBalance.BGM_ENABLED 默认关闭）
         // 启动参数解析结果一次性从启动层读出（品质改造 §0.1）：999 档首屏直达测试局，
         // 其余走正常入口（装载屏后的 Screen 分流见 LoadingScreen.nextScreen）
         RunMode launchMode = RunMode.fromLaunchOverride(GameBalance.testStartGoldOverride);

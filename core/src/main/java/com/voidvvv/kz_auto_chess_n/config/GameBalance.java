@@ -21,6 +21,9 @@ public final class GameBalance {
     /** 全局攻速系数（battle §5.1：敌我对称、只在消耗点乘算——BattleUnit.attackInterval() 一处；1 = 关闭） */
     public static final float ATTACK_SPEED_GLOBAL_FACTOR = 0.6f;
 
+    /** BGM 开关（品质改造 §1.2：Music 接口已接线，默认关闭——播放方式待 codex 下批裁定） */
+    public static boolean BGM_ENABLED = false;
+
     /** UI/世界整体渲染缩放（2026-11-21 主人反馈「所有 UI 偏大」：整体调小一档 = 0.8×；
      *  消费点两处——BattleTransitionController.zoom() 的 worldCamera 基准（<b>除以</b> s：libGDX zoom
      *  = 可见世界 ÷ 画布，缩小 s 倍 ⇔ zoom = 基准/s）与 BattleScreen 的 uiStage/dialogStage 根缩放

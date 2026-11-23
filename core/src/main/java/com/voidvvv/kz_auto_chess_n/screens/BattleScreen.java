@@ -16,6 +16,7 @@ import com.voidvvv.kz_auto_chess_n.command.RunContext;
 import com.voidvvv.kz_auto_chess_n.command.StartRunCommand;
 import com.voidvvv.kz_auto_chess_n.config.GameBalance;
 import com.voidvvv.kz_auto_chess_n.data.GameData;
+import com.voidvvv.kz_auto_chess_n.entities.BattleState;
 import com.voidvvv.kz_auto_chess_n.entities.ChestOrigin;
 import com.voidvvv.kz_auto_chess_n.entities.GamePhase;
 import com.voidvvv.kz_auto_chess_n.entities.RunMode;
@@ -25,6 +26,7 @@ import com.voidvvv.kz_auto_chess_n.input.DrawerOutsideTouchProcessor;
 import com.voidvvv.kz_auto_chess_n.input.GlobalKeyProcessor;
 import com.voidvvv.kz_auto_chess_n.input.HoverCandidate;
 import com.voidvvv.kz_auto_chess_n.render.Assets;
+import com.voidvvv.kz_auto_chess_n.render.AudioScheduler;
 import com.voidvvv.kz_auto_chess_n.render.board.BattleRenderer;
 import com.voidvvv.kz_auto_chess_n.render.board.BoardGeometry;
 import com.voidvvv.kz_auto_chess_n.render.ui.BattleHud;
@@ -50,6 +52,7 @@ import com.voidvvv.kz_auto_chess_n.save.ProfileService;
 import com.voidvvv.kz_auto_chess_n.save.RunSettlementText;
 import com.voidvvv.kz_auto_chess_n.save.RunSnapshot;
 import com.voidvvv.kz_auto_chess_n.save.SnapshotCodec;
+import com.voidvvv.kz_auto_chess_n.systems.BattleAttribution;
 import com.voidvvv.kz_auto_chess_n.systems.BattleSystem;
 import com.voidvvv.kz_auto_chess_n.systems.EquipmentSystem;
 import com.voidvvv.kz_auto_chess_n.systems.PaiTestScript;
@@ -138,6 +141,11 @@ public final class BattleScreen implements Screen {
     private boolean snapshotCurrent;
     /** 宝箱弹窗在栈标记（防重复 push；领取/离开 RESULT 后收起，CP29） */
     private boolean chestShown;
+    /** 赛后归因缓存（品质改造 §1.4：按 BattleState 引用缓存，结算横幅与箱子共用） */
+    private BattleState attributedBattle;
+    private String attributionSentence;
+    /** 分层音频调度（品质改造 §1.2：纯逻辑 + Assets 播放出口；屏只管帧序与清理） */
+    private final AudioScheduler audioScheduler;
 
     private float accumulator;
     private float renderClock;
@@ -187,6 +195,7 @@ public final class BattleScreen implements Screen {
                          RunMode mode, PaiTestScript.Topic sampleTopic) {
         this.game = game;
         this.assets = assets;
+        this.audioScheduler = new AudioScheduler(assets.audioPlayer); // §1.2：播放出口 = Assets（持有并 dispose）
         this.data = data;
         this.metaService = metaService;
         this.mode = java.util.Objects.requireNonNull(mode, "mode 不能为 null");
@@ -440,6 +449,14 @@ public final class BattleScreen implements Screen {
         } else {
             commandManager.executeAll(runContext); // 冻结的只是模拟推进（战斗步进/RESULT 计时/动画），命令照常结算——弹窗按钮链路（PickChest/AbandonRun/UnequipItem）否则死锁（feedback02 修复）
         }
+        // §1.2 分层音频：经步进后消费（含最后一逻辑帧）、弹出箱子前；时钟未乘倍速（frozen 停走）
+        audioScheduler.syncBattle(runContext.getBattleState());
+        audioScheduler.advance(renderClock);
+        audioScheduler.acceptFrame(renderClock);
+        int upgradeStar = shopSystem.drainFrameUpgradeStar(); // 升星收口（级联合成同帧只播一次、最高星级）
+        if (upgradeStar >= 0) {
+            audioScheduler.acceptUpgrade(renderClock, upgradeStar);
+        }
         float alpha = frozen ? 0f : accumulator / GameBalance.LOGIC_STEP;
         worldViewport.apply();
         batch.setProjectionMatrix(worldCamera.combined);
@@ -499,8 +516,10 @@ public final class BattleScreen implements Screen {
                         hoverPreview.hasVisibleCard() ? hoverPreview.visibleCardRect() : null));
         resultBanner.setVisible(phase == GamePhase.RESULT);
         if (phase == GamePhase.RESULT && runContext.getBattleState() != null) {
+            boolean chestPending = runContext.getRunState().getPendingChest() != null; // §1.4 两处只显其一
             resultBanner.refresh(runContext.getBattleState().getOutcome(),
-                    resultStatusLine(runContext.getRunState())); // 横幅读 outcome + 机会制状态行（GDD §2.2）
+                    resultStatusLine(runContext.getRunState()),
+                    chestPending ? null : attributionSentence()); // 横幅读 outcome + 状态行 + 归因（§1.4）
         }
         syncChestDialog(phase);
         runEndPanel.setVisible(phase == GamePhase.RUN_END);
@@ -509,6 +528,22 @@ public final class BattleScreen implements Screen {
         uiStage.draw();
         dialogManager.act(delta);
         dialogManager.draw();
+    }
+
+    /**
+     * 赛后归因句（品质改造 §1.4）：战斗结束时按 BattleState 引用缓存，一经算出供结算横幅与箱子
+     * 共用；引用切换即重算（§1.4「按实际 phase 和 BattleState 切换清除缓存与旧句」）。
+     */
+    private String attributionSentence() {
+        BattleState state = runContext.getBattleState();
+        if (state == null) {
+            return null;
+        }
+        if (attributedBattle != state) {
+            attributedBattle = state;
+            attributionSentence = BattleAttribution.attribute(state, data, state.isSurrendered());
+        }
+        return attributionSentence;
     }
 
     /**
@@ -532,7 +567,7 @@ public final class BattleScreen implements Screen {
     private void syncChestDialog(GamePhase phase) {
         boolean shouldShow = phase == GamePhase.RESULT && runContext.getRunState().getPendingChest() != null;
         if (shouldShow && !chestShown) {
-            chestDialog.refresh(runContext.getRunState().getPendingChest());
+            chestDialog.refresh(runContext.getRunState().getPendingChest(), attributionSentence());
             dialogManager.push(chestDialog);
             chestShown = true;
         } else if (!shouldShow && chestShown) {
@@ -580,6 +615,7 @@ public final class BattleScreen implements Screen {
     @Override
     public void pause() {
         paused = true; // 冻结 accumulator（Android 挂起）
+        audioScheduler.clear(); // §1.2：暂停清在播与排期（恢复时继续消费新事件，无积压回放）
         saveSnapshotIfShopping(); // 快照补写（仅备战期——存档点决策）
     }
 
@@ -591,6 +627,7 @@ public final class BattleScreen implements Screen {
     @Override
     public void hide() {
         Gdx.input.setInputProcessor(null); // 防僵尸监听（input §2.3）
+        audioScheduler.clear(); // §1.2：离屏清在播与排期
         saveSnapshotIfShopping();
     }
 
