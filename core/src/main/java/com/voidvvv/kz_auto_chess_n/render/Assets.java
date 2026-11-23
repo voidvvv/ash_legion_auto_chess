@@ -2,6 +2,7 @@ package com.voidvvv.kz_auto_chess_n.render;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.files.FileHandle;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 
@@ -23,6 +24,7 @@ public final class Assets {
     /** 真素材层（Q4=B：itch 小人；miss 自动回退占位） */
     private final RealArt realArt = new RealArt();
     private BitmapFont font;
+    private Texture mainMenuBackground;
 
     public Assets(PlaceholderArt art) {
         this.art = Objects.requireNonNull(art, "art 不能为 null");
@@ -50,11 +52,24 @@ public final class Assets {
         return font;
     }
 
-    /** Main.dispose 调：字体、真素材与占位 Texture 全弃 */
+    /** 主菜单重建时复用同一张纹理，由 Assets 统一释放。 */
+    public Texture mainMenuBackground() {
+        if (mainMenuBackground == null) {
+            mainMenuBackground = new Texture(Gdx.files.internal("art/ui/main_menu_background.png"));
+            mainMenuBackground.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        }
+        return mainMenuBackground;
+    }
+
+    /** Main.dispose 调：字体、主菜单背景、真素材与占位 Texture 全弃 */
     public void dispose() {
         if (font != null) {
             font.dispose();
             font = null;
+        }
+        if (mainMenuBackground != null) {
+            mainMenuBackground.dispose();
+            mainMenuBackground = null;
         }
         realArt.dispose();
         art.dispose();
