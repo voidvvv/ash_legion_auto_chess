@@ -12,6 +12,7 @@ import com.voidvvv.kz_auto_chess_n.command.RefreshShopCommand;
 import com.voidvvv.kz_auto_chess_n.command.RunContext;
 import com.voidvvv.kz_auto_chess_n.command.StartBattleCommand;
 import com.voidvvv.kz_auto_chess_n.command.StartRunCommand;
+import com.voidvvv.kz_auto_chess_n.command.ToggleShopLockCommand;
 import com.voidvvv.kz_auto_chess_n.config.GameBalance;
 import com.voidvvv.kz_auto_chess_n.data.GameData;
 import com.voidvvv.kz_auto_chess_n.data.UnitData;
@@ -52,6 +53,61 @@ class ExpeditionBalanceProbeTest {
         assertThat(recruitWins).containsOnly(15);
         assertThat(levelWins).allMatch(wins -> wins >= 7);
         assertThat(levelWins).filteredOn(wins -> wins == 15).hasSizeGreaterThanOrEqualTo(2);
+    }
+
+    @Test
+    void lockTradesFiveNewOffersForKnownStockAfterBattle() {
+        GameData data = PaiDuelDriver.realData();
+        for (boolean pairOnBoard : new boolean[]{true, false}) {
+            for (boolean lock : new boolean[]{true, false}) {
+                ShopSystem shop = new ShopSystem();
+                String hero = "hero_greg";
+                RunContext ctx = RunAssembler.assembleNormal(data, shop, 16L, "scene_forest", hero,
+                        ProfileService.runModifiers(data.getHero(hero), Profile.fresh(), data));
+                CommandManager commands = new CommandManager();
+                RunFlowSystem flow = new RunFlowSystem();
+                flow.registerHandlers(commands);
+                shop.registerHandlers(commands);
+                new RosterSystem().registerHandlers(commands);
+                execute(commands, ctx, new StartRunCommand(16L, "scene_forest", hero));
+                execute(commands, ctx, new BuyUnitCommand(0));
+                execute(commands, ctx, new BuyUnitCommand(1));
+                if (pairOnBoard) {
+                    for (int i = 0; i < 3; i++) execute(commands, ctx, BuyExpCommand.INSTANCE);
+                } else {
+                    execute(commands, ctx, new BuyUnitCommand(4)); // 先合猎头者，再买战士，仅余狼崽
+                    execute(commands, ctx, new BuyUnitCommand(2));
+                }
+                deploy(commands, ctx);
+                List<UnitData> left = new ArrayList<>(shop.getSlots());
+                if (lock) execute(commands, ctx, ToggleShopLockCommand.INSTANCE);
+                execute(commands, ctx, StartBattleCommand.INSTANCE);
+                new BattleSystem().runToEnd(ctx.getBattleState(), 4000);
+                assertThat(ctx.getBattleState().getOutcome()).isEqualTo(BattleOutcome.PLAYER_WIN);
+                flow.tickBattleEnd(ctx, GameBalance.VICTORY_RESULT_DELAY_SECONDS);
+                execute(commands, ctx, new PickChestCommand(2)); // 装备，金币仅来自基础补给
+                assertThat(ctx.getRunState().getRound()).isEqualTo(2);
+                assertThat(shop.isLocked()).isFalse();
+                if (lock) assertThat(shop.getSlots()).containsExactlyElementsOf(left);
+                else assertThat(shop.getSlots()).doesNotContainNull();
+                System.out.printf("LOCK16 pair=%b lock=%b gold=%d stock=%s%n", pairOnBoard, lock,
+                        ctx.getPlayer().getGold(), shop.getSlots().stream()
+                                .map(u -> u == null ? "-" : u.getId()).collect(Collectors.joining(",")));
+                if (pairOnBoard) {
+                    assertThat(ctx.getPlayer().getGold()).isEqualTo(3);
+                    if (lock) {
+                        execute(commands, ctx, new BuyUnitCommand(4));
+                        assertThat(ctx.getPlayer().getBench()).anyMatch(u -> u.getStar() == 2);
+                    } else {
+                        assertThat(shop.getSlots()).doesNotContain(data.getUnit("unit_spear_headhunter"));
+                    }
+                } else if (lock) {
+                    assertThat(shop.getSlots().stream().filter(u -> u != null).count()).isEqualTo(1);
+                } else {
+                    assertThat(shop.getSlots().stream().distinct().count()).isGreaterThan(1);
+                }
+            }
+        }
     }
 
     private static int play(GameData data, long seed, boolean levelFirst) {

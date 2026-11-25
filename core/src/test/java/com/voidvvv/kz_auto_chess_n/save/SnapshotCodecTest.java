@@ -259,15 +259,36 @@ class SnapshotCodecTest {
     }
 
     @Test
+    void lockRoundTripPreservesBoughtSlotsAndRng() {
+        GameData data = battleData();
+        RunContext ctx = richContext(data);
+        CommandManager commands = new CommandManager();
+        ctx.getShop().registerHandlers(commands);
+        commands.addCommand(com.voidvvv.kz_auto_chess_n.command.ToggleShopLockCommand.INSTANCE);
+        commands.executeAll(ctx);
+        String json = SnapshotCodec.write(SnapshotCodec.capture(ctx));
+        RunContext restored = SnapshotCodec.restore(SnapshotCodec.read(json), data, Profile.fresh(), new ShopSystem());
+        assertThat(restored.getShop().isLocked()).isTrue();
+        assertThat(restored.getShop().getSlots()).containsExactlyElementsOf(ctx.getShop().getSlots());
+        assertThat(restored.getRng().getConsumedCount()).isEqualTo(ctx.getRng().getConsumedCount());
+        commands = new CommandManager();
+        restored.getShop().registerHandlers(commands);
+        commands.addCommand(com.voidvvv.kz_auto_chess_n.command.ToggleShopLockCommand.INSTANCE);
+        commands.executeAll(restored);
+        assertThat(restored.getShop().isLocked()).isFalse();
+    }
+
+    @Test
     @DisplayName("续战等价：restore 后推进一轮，与未挂起的同 seed 上下文直接推进逐位相同")
     void resumeEquivalenceAfterOneRound() {
         GameData data = battleData();
         RunContext baseline = richContext(data); // 未挂起参照系
         String legacyJson = SnapshotCodec.write(SnapshotCodec.capture(richContext(data)));
-        assertThat(legacyJson).doesNotContain("roundIncomePaid");
+        assertThat(legacyJson).doesNotContain("roundIncomePaid", "shopLocked");
         RunContext restored = SnapshotCodec.restore(
                 SnapshotCodec.read(legacyJson), data, Profile.fresh(), new ShopSystem());
         assertThat(restored.getRunState().isRoundIncomePaid()).isFalse();
+        assertThat(restored.getShop().isLocked()).isFalse();
 
         RunFlowSystem flow = new RunFlowSystem();
         CommandManager manager = new CommandManager();

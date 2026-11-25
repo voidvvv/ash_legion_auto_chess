@@ -468,6 +468,10 @@ class RunFlowSystemTest {
         RunContext ctx = newContext(data);
         flow.startRun(ctx);
         deploy(ctx, "unit_trainee_01", 2, 5);
+        ctx.getShop().registerHandlers(manager);
+        manager.addCommand(com.voidvvv.kz_auto_chess_n.command.ToggleShopLockCommand.INSTANCE);
+        manager.executeAll(ctx);
+        assertThat(ctx.getShop().isLocked()).isTrue();
         List<WaveSpec> waveBefore = new ArrayList<WaveSpec>(ctx.getRunState().getEnemyWave());
         List<com.voidvvv.kz_auto_chess_n.data.UnitData> slotsBefore =
                 new ArrayList<com.voidvvv.kz_auto_chess_n.data.UnitData>(ctx.getShop().getSlots());
@@ -489,6 +493,7 @@ class RunFlowSystemTest {
         assertThat(ctx.getRunState().getPendingChest()).isNull();
         assertThat(ctx.getRunState().getEnemyWave()).containsExactlyElementsOf(waveBefore);
         assertThat(ctx.getShop().getSlots()).containsExactlyElementsOf(slotsBefore);
+        assertThat(ctx.getShop().isLocked()).isTrue();
         assertThat(ctx.getRng().getConsumedCount()).isEqualTo(consumedAtResult); // 零 RNG
         assertThat(ctx.getRunState().getDefeatCountPerRound()).isEqualTo(1); // 不再计
     }

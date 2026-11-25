@@ -524,6 +524,9 @@ public final class BattleScreen implements Screen {
                         : boardProcessor == null ? HoverCandidate.NONE : boardProcessor.getHoverCandidate(),
                 shopBar.getHoveredSlot(),
                 frozen, frozen ? 0f : delta); // R1+feedback04：候选/槽位/冻结位（§5.3-8；背包源随 ③ 退役——批3）
+        if (!frozen && dragFromBench && phase == GamePhase.SHOPPING) {
+            hoverPreview.showDropPreview(boardProcessor.getDragUnitId(), boardProcessor.getDropPreview());
+        }
         if (phase == GamePhase.BATTLE) {
             battleHud.refresh(runContext.getBattleState());
         }

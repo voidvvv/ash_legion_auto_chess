@@ -256,8 +256,13 @@ public final class RunFlowSystem {
         runState.setDefeatCountPerRound(0); // 新轮机会清零（§5.1 关键区分：重试不清、新轮清）
         runState.setPhase(GamePhase.SHOPPING);
         beginRound(ctx);
-        ctx.getShop().replenish(ctx, false); // 补货分派单点（§0.2）：对拍写新轮固定五槽 + 序号归零
-        runState.addNotice("第 " + runState.getRound() + " 轮开始（商店免费刷新）");
+        if (ctx.getShop().isLocked()) {
+            ctx.getShop().restoreLock(false);
+            runState.addNotice("第 " + runState.getRound() + " 轮：沿用上轮剩余棋子，锁店解除");
+        } else {
+            ctx.getShop().replenish(ctx, false);
+            runState.addNotice("第 " + runState.getRound() + " 轮开始（商店免费刷新）");
+        }
     }
 
     /** 在领箱返回备战时入账，每波一次。同轮重试的败箱、胜箱仍各自结算。 */

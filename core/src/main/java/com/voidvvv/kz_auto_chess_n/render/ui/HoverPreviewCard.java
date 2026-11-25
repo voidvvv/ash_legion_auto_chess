@@ -3,6 +3,8 @@ package com.voidvvv.kz_auto_chess_n.render.ui;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.Batch;
 import com.badlogic.gdx.scenes.scene2d.Actor;
+import com.voidvvv.kz_auto_chess_n.command.PlacementTarget;
+import com.voidvvv.kz_auto_chess_n.entities.Unit;
 import com.voidvvv.kz_auto_chess_n.command.RunContext;
 import com.voidvvv.kz_auto_chess_n.data.EquipmentData;
 import com.voidvvv.kz_auto_chess_n.data.GameData;
@@ -99,7 +101,8 @@ public final class HoverPreviewCard extends Actor {
      *  可见键必等于本帧候选键——update 在候选变化帧即时清可见） */
     private void recompute(RunContext ctx, HoverCandidate boardCandidate) {
         if (boardHover.visibleId() >= 0) {
-            lines = boardCardLines(boardCandidate.template(), boardCandidate.isEnemy(),
+            lines = boardCandidate.isEnemy() ? RosterPreviewText.enemy(ctx, boardCandidate.template())
+                    : boardCardLines(boardCandidate.template(), false,
                     ctx.getGameData());
             placeAdaptive(BoardGeometry.BOARD_HOVER_X, BoardGeometry.BOARD_HOVER_Y,
                     BoardGeometry.BOARD_HOVER_W, BoardGeometry.BOARD_HOVER_H);
@@ -108,7 +111,7 @@ public final class HoverPreviewCard extends Actor {
         UnitData shopTemplate = shopHover.visibleId() >= 0
                 ? ctx.getShop().slotAt(shopHover.visibleId()) : null;
         if (shopTemplate != null) {
-            lines = shopCardLines(shopTemplate, ctx.getGameData());
+            lines = RosterPreviewText.shop(ctx, shopHover.visibleId());
             placeAdaptive(BoardGeometry.SHOP_HOVER_X, BoardGeometry.SHOP_HOVER_Y,
                     BoardGeometry.SHOP_HOVER_W, BoardGeometry.SHOP_HOVER_H);
             return;
@@ -132,6 +135,16 @@ public final class HoverPreviewCard extends Actor {
     /** 商店卡行集（纯静态，headless 可测）：previewLines 折行——全量不截断（容量同上锁定） */
     static List<String> shopCardLines(UnitData template, GameData data) {
         return UnitInfoText.previewLines(template, data, SHOP_MAX_COLUMNS);
+    }
+
+    public void showDropPreview(int unitId, PlacementTarget target) {
+        if (!(target instanceof PlacementTarget.Cell)) return;
+        RunContext ctx = context.get();
+        Unit unit = ctx.getPlayer().getUnitById(unitId);
+        if (unit == null) return;
+        lines = RosterPreviewText.drop(ctx, unit, (PlacementTarget.Cell) target);
+        placeAdaptive(BoardGeometry.SHOP_HOVER_X, BoardGeometry.SHOP_HOVER_Y,
+                BoardGeometry.SHOP_HOVER_W, BoardGeometry.SHOP_HOVER_H);
     }
 
     private void place(int x, int y, int w, int h) {

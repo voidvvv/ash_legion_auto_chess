@@ -109,10 +109,9 @@ public final class BoardGeometry {
     public static final int BOARD_HOVER_Y = 44;
     public static final int BOARD_HOVER_W = 94;
     public static final int BOARD_HOVER_H = 252;
-    /** 商店卡悬停卡：锚 ⑤ 羁绊面板区；高度容纳最长组合 24 行（2026-11-21 整改，自适应加高、不截断）；
-     *  底缘 272 瞬态覆盖 ⑦ 出售区（y246 起）——拖拽期悬停抑制，无操作冲突 */
+    /** 商店与拖放预览共用右栏，底边避开商店按钮，高度容纳 24 行。 */
     public static final int SHOP_HOVER_X = 508;
-    public static final int SHOP_HOVER_Y = 48;
+    public static final int SHOP_HOVER_Y = 68;
     public static final int SHOP_HOVER_W = 112;
     public static final int SHOP_HOVER_H = 224;
 
@@ -176,7 +175,7 @@ public final class BoardGeometry {
     }
 
     /** 备战期引导文案（方位词由出售区常量派生，文字与几何不会漂移） */
-    public static final String SHOP_HINT_TEXT = "拖拽棋子布阵 · 拖至" + sellZoneDirectionText() + "出售区卖出 · 点开战";
+    public static final String SHOP_HINT_TEXT = "长按商店查看 · 拖至" + sellZoneDirectionText() + "出售区卖出 · 点开战";
 
     /**
      * 引导文案左缘的世界坐标（批4：抽屉展开时让位——否则首字压在抽屉右边框上）。

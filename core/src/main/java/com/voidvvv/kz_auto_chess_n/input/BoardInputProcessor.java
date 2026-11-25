@@ -76,6 +76,7 @@ public final class BoardInputProcessor implements InputProcessor {
     private int hoverScreenX;
     private int hoverScreenY;
     private boolean hoverTracked;
+    private int inspectPointer = -1;
     private final Map<Integer, DragContext> drags = new HashMap<Integer, DragContext>();
     private final Vector2 touch = new Vector2(); // 复用（unproject 输出，零分配）
 
@@ -111,12 +112,13 @@ public final class BoardInputProcessor implements InputProcessor {
         }
         RunContext ctx = context.get();
         if (ctx.getRunState().getPhase() != GamePhase.SHOPPING) {
+            if (ctx.getRunState().getPhase() == GamePhase.BATTLE) beginInspection(screenX, screenY, pointer);
             return true; // 门控表现层：仅备战期可拖（input §4.3）
         }
         unproject(screenX, screenY);
         Unit unit = unitAt(screenX, screenY, touch.x, touch.y, ctx);
         if (unit == null) {
-            return false; // 未命中单位：事件下传
+            return beginInspection(screenX, screenY, pointer); // 触屏长按敌方虚影可侦察
         }
         drags.put(pointer, new DragContext(unit.getId(), placementAt(screenX, screenY, touch.x, touch.y),
                 touch.x, touch.y));
@@ -126,6 +128,10 @@ public final class BoardInputProcessor implements InputProcessor {
 
     @Override
     public boolean touchDragged(int screenX, int screenY, int pointer) {
+        if (pointer == inspectPointer) {
+            mouseMoved(screenX, screenY);
+            return true;
+        }
         DragContext drag = drags.get(pointer);
         if (drag == null) {
             return false; // 其他 pointer 或非拖拽源
@@ -145,6 +151,7 @@ public final class BoardInputProcessor implements InputProcessor {
 
     @Override
     public boolean touchUp(int screenX, int screenY, int pointer, int button) {
+        if (endInspection(pointer)) return true;
         DragContext drag = drags.remove(pointer);
         if (drag == null) {
             return false;
@@ -169,7 +176,22 @@ public final class BoardInputProcessor implements InputProcessor {
 
     @Override
     public boolean touchCancelled(int screenX, int screenY, int pointer, int button) {
+        endInspection(pointer);
         drags.remove(pointer); // 系统取消（焦点丢失等）：丢弃拖拽不产命令
+        return true;
+    }
+
+    private boolean beginInspection(int screenX, int screenY, int pointer) {
+        mouseMoved(screenX, screenY);
+        if (getHoverCandidate().isNone()) return false;
+        inspectPointer = pointer;
+        return true;
+    }
+
+    private boolean endInspection(int pointer) {
+        if (pointer != inspectPointer) return false;
+        inspectPointer = -1;
+        hoverTracked = false;
         return true;
     }
 

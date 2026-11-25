@@ -202,6 +202,20 @@ class BattleAttributionTest {
     }
 
     @Test
+    void controlReportUsesActualHostileStatusRecipient() {
+        BattleState state = battle();
+        // 己方也能施放处决，不能触发题目敌人“施放后未扣血”的结论。
+        state.record(CombatEvent.cast(1, 3, 11, ThreatPredictor.SKILL_EXECUTE));
+        state.record(CombatEvent.hit(3, 3, 11, 30f, false, ThreatPredictor.SKILL_EXECUTE));
+        state.record(CombatEvent.cast(4, 1, 11, "skill_entangle"));
+        state.record(CombatEvent.statusApplied(5, 1, 10,
+                com.voidvvv.kz_auto_chess_n.data.StatusType.SLOW, 40f, 3f));
+        state.finish(BattleOutcome.PLAYER_WIN);
+        assertThat(attribute(state)).isEqualTo("己方" + state.getUnitById(1).getTemplate().getName()
+                + "对敌方冰霜巨人施加减速。");
+    }
+
+    @Test
     @DisplayName("⑨ 通用结果：负局全灭（真清扫后零存活）/ 其它负局 / 胜局沿用（§1.4 末行）")
     void genericResults() {
         // 全灭：玩家 HP 归零 → DeathSystem 真清扫（aliveCount==0 且无关键命中事件）
@@ -224,7 +238,7 @@ class BattleAttributionTest {
                 new com.voidvvv.kz_auto_chess_n.systems.StatusSystem(pipeline)).sweep(wiped);
         assertThat(wiped.aliveCount(Side.PLAYER)).isZero();
         wiped.finish(BattleOutcome.ENEMY_WIN);
-        assertThat(attribute(wiped)).isEqualTo("己方上阵3枚全数出局，下次让耐打的棋子先接敌。");
+        assertThat(attribute(wiped)).isEqualTo("己方" + wiped.getUnits().get(0).getTemplate().getName() + "最先阵亡。");
 
         BattleState survived = battle();
         survived.finish(BattleOutcome.ENEMY_WIN);

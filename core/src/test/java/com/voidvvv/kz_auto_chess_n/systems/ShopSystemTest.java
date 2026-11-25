@@ -107,6 +107,65 @@ class ShopSystemTest {
         return executed;
     }
 
+    @Test
+    void emptyTiersNeverCreateHolesAndAnEntirelyEmptyEligiblePoolKeepsTheLedger() {
+        ShopSystem shop = new ShopSystem();
+        GameData data = shopData();
+        for (String only : Arrays.asList("u_cost1", "not_in_data")) {
+            RunModifiers mods = new RunModifiers(0, 1, 0, 0, new LinkedHashMap<String, Float>(),
+                    null, new LinkedHashSet<String>(Arrays.asList(only)), true);
+            RandomGenerator rng = new RandomGenerator(42L);
+            for (int round : new int[]{10, 15, 21}) {
+                for (int i = 0; i < 1000; i++) {
+                    shop.reroll(round, data, rng, mods);
+                    if ("not_in_data".equals(only)) assertThat(shop.getSlots()).containsOnly((UnitData) null);
+                    else assertThat(shop.getSlots()).containsOnly(data.getUnit(only));
+                }
+            }
+            assertThat(rng.getConsumedCount()).isEqualTo(30000);
+        }
+    }
+
+    @Test
+    void rareBonusDoesNotChangeLegalOneAndTwoCostOddsWhenNoRareCardIsUnlocked() {
+        GameData data = shopData();
+        Set<String> allowed = new LinkedHashSet<String>(Arrays.asList("u_cost1", "u_cost2"));
+        RunModifiers plain = new RunModifiers(0, 0, 0, 0, new LinkedHashMap<String, Float>(), null, allowed, true);
+        RunModifiers boosted = new RunModifiers(0, 0, 5, 0, new LinkedHashMap<String, Float>(), null, allowed, true);
+        ShopSystem a = new ShopSystem();
+        ShopSystem b = new ShopSystem();
+        RandomGenerator ra = new RandomGenerator(53L);
+        RandomGenerator rb = new RandomGenerator(53L);
+        int one = 0;
+        for (int i = 0; i < 1000; i++) {
+            a.reroll(10, data, ra, plain);
+            b.reroll(10, data, rb, boosted);
+            assertThat(a.getSlots()).containsExactlyElementsOf(b.getSlots()).doesNotContainNull();
+            for (UnitData u : a.getSlots()) if (u.getCost() == 1) one++;
+        }
+        assertThat(one / 5000.0).isBetween(0.53, 0.58); // 50:40，真实权重比 5/9
+    }
+
+    @Test
+    void failedPaidRefreshKeepsLockAndSuccessfulRefreshClearsIt() {
+        GameData data = shopData();
+        RunContext ctx = context(data, 1);
+        ShopSystem shop = ctx.getShop();
+        shop.reroll(1, data, ctx.getRng());
+        CommandManager commands = armed(shop);
+        commands.addCommand(com.voidvvv.kz_auto_chess_n.command.ToggleShopLockCommand.INSTANCE);
+        commands.addCommand(RefreshShopCommand.INSTANCE);
+        commands.executeAll(ctx);
+        assertThat(shop.isLocked()).isTrue();
+        assertThat(ctx.getRng().getConsumedCount()).isEqualTo(10);
+        ctx.getPlayer().addGold(1);
+        commands.addCommand(RefreshShopCommand.INSTANCE);
+        commands.executeAll(ctx);
+        assertThat(shop.isLocked()).isFalse();
+        assertThat(ctx.getPlayer().getGold()).isZero();
+        assertThat(ctx.getRng().getConsumedCount()).isEqualTo(20);
+    }
+
     // —— reroll ——
 
     @Test
@@ -453,7 +512,7 @@ class ShopSystemTest {
 
     // —— Phase 6：局外修正接入（CP9：概率加成 / 池门控 / 折扣 / 槽位复原）——
 
-    /** 一费双模板 + 三费单模板（无二费——费阶 roll 命中 tier2 时槽位 null，样本只计非空槽） */
+    /** 一费双模板 + 三费单模板；按有效费阶重归一。 */
     private static GameData tierStatsData() {
         Map<String, UnitData> units = new LinkedHashMap<String, UnitData>();
         units.put("u_c1a", unit("u_c1a", 1, false));
@@ -492,7 +551,7 @@ class ShopSystemTest {
     void rareBonusAppliedOnlyWhenBasePositive() {
         RunModifiers bonus = new RunModifiers(0, 0, 5, 0,
                 new LinkedHashMap<String, Float>(), null, new LinkedHashSet<String>(), false);
-        // 条件占比（无二费模板，命中 tier2 的槽为 null 不计）：基础 1/6≈0.167，加成 15/60=0.25
+        // 重归一后的占比（无二费模板）：基础 1/6≈0.167，加成 15/60=0.25
         assertThat(tierThreeRatio(10, RunModifiers.EMPTY)).isBetween(0.14, 0.19);
         assertThat(tierThreeRatio(10, bonus)).isBetween(0.22, 0.28);
         // 1~3 轮（p3=0）：权重与无修正逐位相同（同 seed 全等）
@@ -535,9 +594,9 @@ class ShopSystemTest {
             ShopSystem shop = new ShopSystem();
             shop.reroll(25, data, new RandomGenerator(seed), gated); // r25：三档全开
             for (UnitData slot : shop.getSlots()) {
-                // 池外费阶（2/3 费全被门控）→ 空槽合法（spec WARNING-3 口径）；非空槽必须 ∈ 允许集
+                // 2/3 费均被门控；全部五格重归一到一费合法池。
                 assertThat(slot == null ? null : slot.getId())
-                        .as("seed=%s", seed).isIn("u_cost1", "u_cost1b", null);
+                        .as("seed=%s", seed).isIn("u_cost1", "u_cost1b");
             }
         }
     }
