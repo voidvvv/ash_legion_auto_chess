@@ -19,8 +19,8 @@
 | 正文 BODY | 霞鹜文楷 Regular | v1.530 | SIL OFL 1.1 | 377,280 B | **8.5px**（原 9） | 17px | 10px |
 | UI | 思源宋体 CN Regular | 2.003R | SIL OFL 1.1 | 343,740 B | **10px**（原 12） | 20px | 14.5px |
 
-- 三套合计 **1,043,020 B ≈ 1.02MB**；上一版单套 Fusion Pixel 全量 TTF 为 7,316,996 B，
-  新方案约为其 14%，同时把老 TTF 移出 `assets/`，包体净减约 6.27MB。
+- 三套合计 **983,020 B ≈ 0.94MiB**；上一版单套 Fusion Pixel 全量 TTF 为 7,316,996 B，
+  新方案约为其 13.4%，同时把老 TTF 移出 `assets/`，包体净减约 6.33MB。
 - 每角色 1024² 单页 → 运行期 3 张页纹理（约 12MB VRAM），`FontCoverageTest` 锁定 ≤1 页。
 - 字符集 865 字（ASCII + data 全部非 ASCII + 主源码字符串字面量 + 回归字 崽/饷/薇），
   三套 TTF cmap 0 缺失；FreeType 逐字生成 0 缺失。
@@ -177,7 +177,7 @@ nameID 1/2/3/4/6/16/17/18，删除 21/22/25（WWS/变体名），确保不携带
 
 ## 7. 体积与运行期资源
 
-- 打包字体：262,000 + 377,280 + 343,740 = **1,043,020 B**；旧单套 7,316,996 B。
+- 打包字体：262,000 + 377,280 + 343,740 = **983,020 B**；旧单套 7,316,996 B。
   `assets/font/fusion-pixel-12px-proportional-zh_hans.ttf` 已移到
   `assets_src/sourcing/fonts/`（不参与 assets 打包），老 `.fnt/.png` 与历史 OFL 保留为对账基线。
 - 运行期字体页：3 × 1024² RGBA = 12MB VRAM；`FontCoverageTest` 断言每角色 ≤1 页。
