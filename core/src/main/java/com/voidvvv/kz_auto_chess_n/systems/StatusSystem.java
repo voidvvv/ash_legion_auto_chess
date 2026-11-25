@@ -69,11 +69,12 @@ public final class StatusSystem {
                 type, power, duration));
     }
 
-    /** 阶段①：DOT/REGEN 1s 心跳 · 时长递减 · 到期移除（id 序逐单位推进） */
+    /** 阶段①：DOT/REGEN 1s 心跳 · 时长递减 · 到期移除（id 序逐单位推进；
+     *  倒地整体跳过 = 状态时钟冻结，C7 ③——防倒地中被毒死） */
     public void tickStatuses(BattleState state, float dt) {
         for (BattleUnit unit : state.getUnits()) {
-            if (unit.isCleaned()) {
-                continue;
+            if (!unit.isActable()) {
+                continue; // 清扫/倒地
             }
             List<ActiveStatus> snapshot = new ArrayList<ActiveStatus>(unit.getStatuses());
             for (ActiveStatus status : snapshot) {
@@ -90,6 +91,7 @@ public final class StatusSystem {
 
     private void tickHeartbeats(BattleState state, BattleUnit owner, ActiveStatus status, float dt) {
         if (status.getType() != StatusType.BLEED && status.getType() != StatusType.POISON
+                && status.getType() != StatusType.BURN
                 && status.getType() != StatusType.REGEN) {
             return; // 非 DOT/HOT 类无心跳
         }
@@ -114,5 +116,10 @@ public final class StatusSystem {
             }
         }
         return null;
+    }
+
+    /** DOT 类判定（BLEED/POISON/BURN——SkillExecutor/DamagePipeline 共用，CP25 提升） */
+    static boolean isDotType(StatusType status) {
+        return status == StatusType.BLEED || status == StatusType.POISON || status == StatusType.BURN;
     }
 }

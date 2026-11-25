@@ -11,7 +11,8 @@ import com.voidvvv.kz_auto_chess_n.entities.BattleUnit;
  * <p>优先级：specialPriority != null ? specialPriority : defaultPriority（UnitData 词表）。
  * 排序键：NEAREST=min 曼哈顿距离 | BACKLINE=max |y−3|（口径 #23，两侧对称）|
  * LOWEST_HP=min hpRatio | HIGHEST_ATK=max 有效 attack。
- * 平局链统一为：主键相等 → 到自身距离 → id 升序。候选 = 存活敌方（含濒死未清扫）。
+ * 平局链统一为：主键相等 → 到自身距离 → id 升序（开局发号序 = startBattle 部署扫描序 y↑x↑）。
+ * 候选 = 存活敌方（含濒死未清扫）。
  */
 public final class TargetingSystem {
 
@@ -25,8 +26,8 @@ public final class TargetingSystem {
         float bestKey = 0f;
         int bestDistance = 0;
         for (BattleUnit candidate : state.getUnits()) {
-            if (candidate.getSide() == self.getSide() || candidate.isCleaned()) {
-                continue;
+            if (candidate.getSide() == self.getSide() || !candidate.isActable()) {
+                continue; // 过滤点三（C7 ③）：倒地者不被索敌
             }
             float key = sortKey(priority, self, candidate);
             int distance = manhattan(self, candidate);
@@ -43,11 +44,15 @@ public final class TargetingSystem {
         return best;
     }
 
-    /** 每 120 tick（RETARGET_INTERVAL）全局强制重评估（id 序，含清空无候选者的目标） */
+    /** 每 120 tick（RETARGET_INTERVAL）全局强制重评估（id 序，含清空无候选者的目标；
+     *  嘲讽 override 期豁免——K7，旗手指向不被冲掉） */
     public void retargetAll(BattleState state) {
         for (BattleUnit unit : state.getUnits()) {
             if (unit.isCleaned()) {
                 continue;
+            }
+            if (unit.isTaunted(state.getTick())) {
+                continue; // 嘲讽期不参与全局重评估（CP23 K7）
             }
             BattleUnit target = findTarget(state, unit);
             unit.setTargetId(target == null ? -1 : target.getId());
@@ -68,15 +73,32 @@ public final class TargetingSystem {
     private static float sortKey(TargetPriority priority, BattleUnit self, BattleUnit candidate) {
         switch (priority) {
             case NEAREST:
-                return manhattan(self, candidate);
             case BACKLINE:
-                return Math.abs(candidate.getGridY() - 3);
+                return coordinateSortKey(priority, self.getGridX(), self.getGridY(),
+                        candidate.getGridX(), candidate.getGridY()); // 坐标类主键单源（§1.1 预判复用）
             case LOWEST_HP:
                 return candidate.hpRatio();
             case HIGHEST_ATK:
                 return candidate.getEffective(StatKey.ATTACK);
             default:
                 throw new IllegalArgumentException("未知 TargetPriority: " + priority);
+        }
+    }
+
+    /**
+     * 坐标排序键（品质改造 §1.1 战前预判复用；与 {@link #findTarget} 主键同式单源）：
+     * NEAREST = 曼哈顿距离（min 胜）| BACKLINE = |y−3| 中线偏离（max 胜，口径 #23 两侧对称）。
+     * 仅坐标类优先级——LOWEST_HP / HIGHEST_ATK 依赖战斗属性，不在战前预判范围（越界即抛）。
+     */
+    public static float coordinateSortKey(TargetPriority priority, int selfGridX, int selfGridY,
+                                          int candidateGridX, int candidateGridY) {
+        switch (priority) {
+            case NEAREST:
+                return Math.abs(selfGridX - candidateGridX) + Math.abs(selfGridY - candidateGridY);
+            case BACKLINE:
+                return Math.abs(candidateGridY - 3);
+            default:
+                throw new IllegalArgumentException("预判仅支持坐标类优先级: " + priority);
         }
     }
 

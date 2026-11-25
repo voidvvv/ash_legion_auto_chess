@@ -83,7 +83,7 @@ class ChestDialogTest {
     }
 
     @Test
-    @DisplayName("传说装备选项金棕着色（与 InventoryPanel 传说底色同源）")
+    @DisplayName("传说装备选项金棕着色（沿原背包格传说底色口径；InventoryPanel 已退役）")
     void legendaryEquipmentGetsGoldTint() {
         GameData data = dataWith(eq("eq_blade", EquipmentRarity.LEGENDARY));
 

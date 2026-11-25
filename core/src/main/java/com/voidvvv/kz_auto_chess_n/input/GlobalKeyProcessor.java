@@ -4,8 +4,8 @@ import com.badlogic.gdx.Input;
 import com.badlogic.gdx.InputProcessor;
 
 /**
- * 全局按键处理器（input §2.2 第 4 层）。Escape / Android BACK 永不被模态吞
- * （§3 例外条款）：有弹窗 → 关顶层；无弹窗 → 开暂停菜单（回调制，装配点决定）。
+ * 全局按键处理器（input §2.2 五层 multiplexer 的第 5 层）。Escape / Android BACK 永不被模态吞
+ * （§3 例外条款）：有弹窗 → 关顶层；无弹窗、抽屉开着 → 收抽屉；都没有 → 开暂停菜单（回调制，装配点决定）。
  * L 键 → 通知面板大小窗切换（render §5.5）。回调返回值透传（false = 未消费交下层）。
  */
 public final class GlobalKeyProcessor implements InputProcessor {

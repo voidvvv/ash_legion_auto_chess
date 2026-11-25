@@ -29,7 +29,7 @@ class BattleStateTest {
 
     private static UnitData tpl(String id) {
         return new UnitData(id, "夹具" + id, "兽人", "战士", 1,
-                new BaseStats(100, 10, 5, 1f, 1, 1f, 0, 100, 0), 1.8f,
+                new BaseStats(100, 10, 5, 1f, 1, 1f, 0, 100, 0, 20, 150), 1.8f,
                 TargetPriority.NEAREST, null, "sk", false);
     }
 
@@ -40,7 +40,7 @@ class BattleStateTest {
 
     private static BattleUnit unit(int id, Side side) {
         return new BattleUnit(id, tpl("u" + id), 1, side, skill(),
-                new BattleStats(100f, 10f, 5f, 1f, 1f, 1f, 0f, 100f, 0f));
+                new BattleStats(100f, 10f, 5f, 1f, 1f, 1f, 0f, 100f, 0f, 20f, 150f));
     }
 
     private static BattleState state(BattleUnit... units) {

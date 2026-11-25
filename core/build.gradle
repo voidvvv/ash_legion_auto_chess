@@ -4,9 +4,14 @@ eclipse.project.name = appName + '-core'
 dependencies {
   api "com.badlogicgames.gdx:gdx-ai:$aiVersion"
   api "com.badlogicgames.gdx:gdx:$gdxVersion"
+  // 运行期 TTF 栅格化（FreeType）；native 由各平台模块补齐
+  api "com.badlogicgames.gdx:gdx-freetype:$gdxVersion"
 
   testImplementation "org.junit.jupiter:junit-jupiter:5.11.4"
   testImplementation "org.assertj:assertj-core:3.27.3"
+  // 字体覆盖测试直接驱动 FreeType（无需 GL）；测试运行时补桌面 native
+  testImplementation "com.badlogicgames.gdx:gdx-freetype-platform:$gdxVersion:natives-desktop"
+  testImplementation "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-desktop"
   // Gradle 9 要求测试运行时显式提供 JUnit Platform launcher（否则 Test Executor 启动失败）
   testRuntimeOnly "org.junit.platform:junit-platform-launcher:1.11.4"
 

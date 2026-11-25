@@ -1,82 +1,102 @@
 [
-  { "id": "syn_orc", "name": "兽人", "desc": "焰痕部族的雇佣兵，越战越硬的正面铁壁",
+  { "id": "syn_orc", "name": "兽人", "desc": "焰痕部族的雇佣兵——每一道疤都是一次结清的账",
     "source": "RACE", "key": "兽人",
     "thresholds": [
-      { "count": 2, "effects": [ { "stat": "hp", "op": "ADD", "value": 150 } ] },
-      { "count": 4, "effects": [ { "stat": "hp", "op": "ADD", "value": 400 },
-                                  { "stat": "attack", "op": "PCT", "value": 20 } ] },
-      { "count": 6, "effects": [ { "effect": "SHIELD", "value": 0.3 },
-                                  { "stat": "lifesteal", "op": "ADD", "value": 20 } ] }
-    ] },
-  { "id": "syn_warrior", "name": "战士", "desc": "执旗卫队的老兵，以纪律与护甲结阵而战",
-    "source": "CLASS", "key": "战士",
-    "thresholds": [
-      { "count": 2, "effects": [ { "stat": "armor", "op": "ADD", "value": 20 } ] },
-      { "count": 4, "effects": [ { "stat": "armor", "op": "ADD", "value": 50 },
-                                  { "stat": "attack", "op": "PCT", "value": 15 } ] },
-      { "count": 6, "effects": [ { "stat": "armor", "op": "ADD", "value": 100 },
-                                  { "stat": "attack", "op": "PCT", "value": 30 },
-                                  { "stat": "lifesteal", "op": "ADD", "value": 20 } ] }
-    ] },
-  { "id": "syn_mage", "name": "法师", "desc": "研究星辉残响的学者，以危险的知识为武器",
-    "source": "CLASS", "key": "法师",
-    "thresholds": [
-      { "count": 2, "effects": [ { "stat": "skillPower", "op": "ADD", "value": 15 } ] },
-      { "count": 4, "effects": [ { "stat": "skillPower", "op": "ADD", "value": 30 },
-                                  { "stat": "energyGainRate", "op": "ADD", "value": 15 } ] },
-      { "count": 6, "effects": [ { "stat": "skillPower", "op": "ADD", "value": 50 },
-                                  { "stat": "energyGainRate", "op": "ADD", "value": 30 } ] }
-    ] },
-  { "id": "syn_assassin", "name": "刺客", "desc": "拾星者行会的暗巷传说，一击得手即刻撤离",
-    "source": "CLASS", "key": "刺客",
-    "thresholds": [
-      { "count": 2, "effects": [ { "stat": "attack", "op": "PCT", "value": 20 } ] },
-      { "count": 4, "effects": [ { "stat": "attack", "op": "PCT", "value": 35 },
-                                  { "stat": "moveSpeed", "op": "ADD", "value": 1.0 } ] },
-      { "count": 6, "effects": [ { "stat": "attack", "op": "PCT", "value": 50 },
-                                  { "stat": "attackSpeed", "op": "PCT", "value": 30 },
-                                  { "stat": "moveSpeed", "op": "ADD", "value": 2.0 } ] }
-    ] },
-  { "id": "syn_beast", "name": "野兽", "desc": "翡翠林地中觉醒的狂血之兽，凭速度与利爪撕开战线",
+      { "count": 2, "effects": [ { "stat": "lifesteal", "op": "ADD", "value": 12 } ] },
+      { "count": 4, "effects": [ { "stat": "lifesteal", "op": "ADD", "value": 15 },
+          { "mechanic": "BASIC_ATTACK_STATUS", "status": "BURN", "value": 30, "duration": 3,
+            "target": "TRAITS", "trait": "兽人" } ] },
+      { "count": 6, "effects": [ { "stat": "lifesteal", "op": "ADD", "value": 18 },
+          { "mechanic": "BASIC_ATTACK_STATUS", "status": "BURN", "value": 35, "duration": 3,
+            "target": "TRAITS", "trait": "兽人" },
+          { "mechanic": "SCAR", "value": 3, "value2": 6, "target": "TRAITS", "trait": "兽人" } ] } ] },
+
+  { "id": "syn_beast", "name": "野兽", "desc": "觉醒兽的猎群——猎物跑不掉",
     "source": "RACE", "key": "野兽",
     "thresholds": [
-      { "count": 2, "effects": [ { "stat": "attackSpeed", "op": "PCT", "value": 15 } ] },
-      { "count": 4, "effects": [ { "stat": "attackSpeed", "op": "PCT", "value": 25 },
-                                  { "stat": "moveSpeed", "op": "ADD", "value": 1.0 } ] },
-      { "count": 6, "effects": [ { "stat": "attackSpeed", "op": "PCT", "value": 40 },
-                                  { "stat": "moveSpeed", "op": "ADD", "value": 2.0 },
-                                  { "stat": "attack", "op": "PCT", "value": 15 } ] }
-    ] },
-  { "id": "syn_ranger", "name": "游侠", "desc": "失去森林的精灵射手，箭术即乡愁",
+      { "count": 2, "effects": [ { "stat": "attackSpeed", "op": "PCT", "value": 15 },
+          { "stat": "moveSpeed", "op": "ADD", "value": 0.4 } ] },
+      { "count": 4, "effects": [ { "stat": "attackSpeed", "op": "PCT", "value": 20 },
+          { "stat": "moveSpeed", "op": "ADD", "value": 0.6 },
+          { "mechanic": "BASIC_ATTACK_STATUS", "status": "SLOW", "value": 30, "duration": 2,
+            "target": "TRAITS", "trait": "野兽" } ] },
+      { "count": 6, "effects": [ { "stat": "attackSpeed", "op": "PCT", "value": 25 },
+          { "stat": "moveSpeed", "op": "ADD", "value": 0.8 },
+          { "mechanic": "BASIC_ATTACK_STATUS", "status": "SLOW", "value": 35, "duration": 2.5,
+            "target": "TRAITS", "trait": "野兽" },
+          { "mechanic": "ENEMY_DEATH_SURGE", "value": 25, "duration": 4,
+            "target": "TRAITS", "trait": "野兽" } ] } ] },
+
+  { "id": "syn_undead", "name": "亡灵", "desc": "铁冠旧部不接受死亡——也不接受赖账",
+    "source": "RACE", "key": "亡灵",
+    "thresholds": [
+      { "count": 2, "effects": [ { "mechanic": "DEATH_TAX", "value": 4, "value2": 20,
+          "target": "TRAITS", "trait": "亡灵" } ] },
+      { "count": 4, "effects": [ { "mechanic": "DEATH_TAX", "value": 5, "value2": 25,
+          "target": "TRAITS", "trait": "亡灵" },
+          { "mechanic": "DOUBLE_DEATHRATTLE", "target": "TRAITS", "trait": "亡灵" } ] },
+      { "count": 6, "effects": [ { "mechanic": "DEATH_TAX", "value": 6, "value2": 30,
+          "target": "TRAITS", "trait": "亡灵" },
+          { "mechanic": "DOUBLE_DEATHRATTLE", "target": "TRAITS", "trait": "亡灵" },
+          { "mechanic": "DEATH_AUDIT", "value": 25 } ] } ] },
+
+  { "id": "syn_giant", "name": "巨人", "desc": "霜峰古族——城墙会还手",
+    "source": "RACE", "key": "巨人",
+    "thresholds": [
+      { "count": 2, "effects": [ { "stat": "hp", "op": "ADD", "value": 180 },
+          { "stat": "armor", "op": "ADD", "value": 15 } ] },
+      { "count": 4, "effects": [ { "stat": "hp", "op": "ADD", "value": 330 },
+          { "stat": "armor", "op": "ADD", "value": 25 },
+          { "mechanic": "REFLECT", "value": 18, "target": "TRAITS", "trait": "巨人" } ] },
+      { "count": 6, "effects": [ { "stat": "hp", "op": "ADD", "value": 360 },
+          { "stat": "armor", "op": "ADD", "value": 30 },
+          { "mechanic": "REFLECT", "value": 20, "target": "TRAITS", "trait": "巨人" },
+          { "mechanic": "DAMAGE_REDUCTION", "value": 15, "target": "TRAITS", "trait": "巨人" },
+          { "mechanic": "KNOCKBACK_IMMUNE", "target": "TRAITS", "trait": "巨人" },
+          { "effect": "SHIELD", "value": 0.2 } ] } ] },
+
+  { "id": "syn_warrior", "name": "战士", "desc": "执旗卫队——旗在，阵在",
+    "source": "CLASS", "key": "战士",
+    "thresholds": [
+      { "count": 2, "effects": [ { "stat": "armor", "op": "ADD", "value": 18 } ] },
+      { "count": 4, "effects": [ { "stat": "armor", "op": "ADD", "value": 38 },
+          { "mechanic": "WARCRY_TAUNT", "value": 6, "value2": 3, "target": "TRAITS", "trait": "战士" } ] },
+      { "count": 6, "effects": [ { "stat": "armor", "op": "ADD", "value": 60 },
+          { "mechanic": "WARCRY_TAUNT", "value": 6, "value2": 3, "target": "TRAITS", "trait": "战士" },
+          { "mechanic": "SHIELD_WALL", "target": "TRAITS", "trait": "战士" } ] } ] },
+
+  { "id": "syn_mage", "name": "法师", "desc": "研究星辉残响的学者——我们先动手",
+    "source": "CLASS", "key": "法师",
+    "thresholds": [
+      { "count": 2, "effects": [ { "stat": "skillPower", "op": "ADD", "value": 20 } ] },
+      { "count": 4, "effects": [ { "stat": "skillPower", "op": "ADD", "value": 30 },
+          { "mechanic": "SPELL_PEN", "value": 50, "target": "TRAITS", "trait": "法师" } ] },
+      { "count": 6, "effects": [ { "stat": "skillPower", "op": "ADD", "value": 45 },
+          { "mechanic": "SPELL_PEN", "value": 50, "target": "TRAITS", "trait": "法师" },
+          { "mechanic": "OPENING_ENERGY", "value": 50, "target": "TRAITS", "trait": "法师" },
+          { "mechanic": "AFTER_CAST_ENERGY", "value": 20, "target": "TRAITS", "trait": "法师" } ] } ] },
+
+  { "id": "syn_assassin", "name": "刺客", "desc": "拾星者行会——账要当场结清",
+    "source": "CLASS", "key": "刺客",
+    "thresholds": [
+      { "count": 2, "effects": [ { "stat": "attack", "op": "PCT", "value": 18 } ] },
+      { "count": 4, "effects": [ { "stat": "attack", "op": "PCT", "value": 28 },
+          { "mechanic": "EXECUTE", "value": 40, "value2": 35, "target": "TRAITS", "trait": "刺客" } ] },
+      { "count": 6, "effects": [ { "stat": "attack", "op": "PCT", "value": 38 },
+          { "mechanic": "EXECUTE", "value": 40, "value2": 35, "target": "TRAITS", "trait": "刺客" },
+          { "mechanic": "KILL_ENERGY_REFUND", "target": "TRAITS", "trait": "刺客" } ] } ] },
+
+  { "id": "syn_ranger", "name": "游侠", "desc": "失去森林的射手——箭术即乡愁",
     "source": "CLASS", "key": "游侠",
     "thresholds": [
       { "count": 2, "effects": [ { "stat": "range", "op": "ADD", "value": 1 } ] },
-      { "count": 4, "effects": [ { "stat": "range", "op": "ADD", "value": 2 },
-                                  { "stat": "attack", "op": "PCT", "value": 20 } ] },
-      { "count": 6, "effects": [ { "stat": "range", "op": "ADD", "value": 2 },
-                                  { "stat": "attack", "op": "PCT", "value": 35 },
-                                  { "stat": "attackSpeed", "op": "PCT", "value": 15 } ] }
-    ] },
-
-  { "id": "syn_undead", "name": "亡灵", "desc": "不接受死亡、也不接受停战的行尸军团",
-    "source": "RACE", "key": "亡灵",
-    "thresholds": [
-      { "count": 2, "effects": [ { "stat": "lifesteal", "op": "ADD", "value": 10 } ] },
-      { "count": 4, "effects": [ { "stat": "hp", "op": "ADD", "value": 300 },
-                                  { "stat": "lifesteal", "op": "ADD", "value": 20 } ] },
-      { "count": 6, "effects": [ { "stat": "hp", "op": "ADD", "value": 500 },
-                                  { "stat": "attack", "op": "PCT", "value": 25 },
-                                  { "stat": "lifesteal", "op": "ADD", "value": 30 } ] }
-    ] },
-
-  { "id": "syn_giant", "name": "巨人", "desc": "寒峰古族的血与岩，越厚重越难撼动",
-    "source": "RACE", "key": "巨人",
-    "thresholds": [
-      { "count": 2, "effects": [ { "stat": "hp", "op": "ADD", "value": 200 } ] },
-      { "count": 4, "effects": [ { "stat": "hp", "op": "ADD", "value": 450 },
-                                  { "stat": "armor", "op": "ADD", "value": 30 } ] },
-      { "count": 6, "effects": [ { "stat": "hp", "op": "ADD", "value": 800 },
-                                  { "stat": "armor", "op": "ADD", "value": 60 },
-                                  { "stat": "attack", "op": "PCT", "value": 20 } ] }
-    ] }
+      { "count": 4, "effects": [ { "stat": "range", "op": "ADD", "value": 1 },
+          { "stat": "attack", "op": "PCT", "value": 15 },
+          { "stat": "critChance", "op": "ADD", "value": 15 },
+          { "stat": "attackSpeed", "op": "PCT", "value": 10 } ] },
+      { "count": 6, "effects": [ { "stat": "range", "op": "ADD", "value": 1 },
+          { "stat": "attack", "op": "PCT", "value": 25 },
+          { "stat": "critChance", "op": "ADD", "value": 20 },
+          { "stat": "attackSpeed", "op": "PCT", "value": 15 },
+          { "mechanic": "CRIT_RHYTHM", "value": 3, "value2": 50, "target": "TRAITS", "trait": "游侠" } ] } ] }
 ]

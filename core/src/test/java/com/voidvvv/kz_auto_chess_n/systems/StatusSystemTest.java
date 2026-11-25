@@ -141,6 +141,35 @@ class StatusSystemTest {
         assertThat(target.getCurrentHp()).isCloseTo(70f, within(1e-4f)); // 50 + 2×10
     }
 
+    // —— v5 批0：BURN 心跳接线（CP8；沿 DOT 真伤惯例）——
+
+    @Test
+    @DisplayName("BURN 每跳真伤：power 10 / duration 3s → 3 跳 ×10，可致死、不回能")
+    void burnTicksTrueDamageEverySecond() {
+        BattleUnit target = target();
+        BattleState state = withTarget(target);
+        SYSTEM.apply(state, target, StatusType.BURN, 10f, 3f, 1);
+        int ticks = Math.round(3f / GameBalance.LOGIC_STEP);
+        for (int i = 0; i < ticks; i++) {
+            SYSTEM.tickStatuses(state, GameBalance.LOGIC_STEP);
+        }
+        assertThat(target.getCurrentHp()).isCloseTo(70f, within(1e-4f)); // 100 − 3×10
+        assertThat(target.getEnergy()).isEqualTo(0f);                   // 无回能（口径 #10）
+        assertThat(target.getStatuses()).isEmpty();                     // 到期移除
+    }
+
+    @Test
+    @DisplayName("BURN 同 type 刷新取大：10/3s 后 25/2s → power 25、剩余时长 3s")
+    void burnRefreshTakesLargerPower() {
+        BattleUnit target = target();
+        BattleState state = withTarget(target);
+        SYSTEM.apply(state, target, StatusType.BURN, 10f, 3f, 1);
+        SYSTEM.apply(state, target, StatusType.BURN, 25f, 2f, 1);
+        assertThat(target.getStatuses()).hasSize(1);
+        assertThat(target.getStatuses().get(0).getPower()).isEqualTo(25f);
+        assertThat(target.getStatuses().get(0).getRemainingTime()).isEqualTo(3f);
+    }
+
     @Test
     @DisplayName("自定义心跳间隔 REGEN（装备 passiveStatus，龙心口径）：interval=5 时 4.9s 零跳、5.1s 恰一跳回 2% maxHp")
     void regenWithCustomTickInterval() {

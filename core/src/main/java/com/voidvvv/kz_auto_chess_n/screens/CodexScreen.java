@@ -17,7 +17,6 @@ import com.voidvvv.kz_auto_chess_n.data.HeroData;
 import com.voidvvv.kz_auto_chess_n.data.SceneData;
 import com.voidvvv.kz_auto_chess_n.data.UnitData;
 import com.voidvvv.kz_auto_chess_n.render.Assets;
-import com.voidvvv.kz_auto_chess_n.render.PlaceholderKeys;
 import com.voidvvv.kz_auto_chess_n.render.board.BoardGeometry;
 import com.voidvvv.kz_auto_chess_n.save.HeroProgress;
 import com.voidvvv.kz_auto_chess_n.save.MetaService;
@@ -63,13 +62,12 @@ public final class CodexScreen implements Screen {
     public void render(float delta) {
         ScreenUtils.clear(0.05f, 0.04f, 0.08f, 1f);
         stage.getBatch().begin();
-        assets.font().getData().setScale(2f);
-        assets.font().draw(stage.getBatch(), "图鉴", 298f, 340f);
-        assets.font().getData().setScale(1f);
-        float y = BoardGeometry.VIRTUAL_H - 24f;
+        assets.titleFont().draw(stage.getBatch(), "图鉴", 0f, 342f,
+                BoardGeometry.VIRTUAL_W, com.badlogic.gdx.utils.Align.center, false);
+        float y = BoardGeometry.VIRTUAL_H - 26f;
         for (int i = 0; i < lines.size() && y > 44f; i++) {
-            assets.font().draw(stage.getBatch(), lines.get(i), 16f, y);
-            y -= 18f;
+            assets.bodyFont().draw(stage.getBatch(), lines.get(i), 16f, y);
+            y -= 14f;
         }
         stage.getBatch().end();
         stage.act(delta);
@@ -99,23 +97,25 @@ public final class CodexScreen implements Screen {
     }
 
     private final class BackButton extends Actor {
+        private final ClickListener listener;
+
         BackButton() {
             setSize(96f, 28f);
-            addListener(new ClickListener() {
+            this.listener = new ClickListener() {
                 @Override
                 public void clicked(InputEvent event, float x, float y) {
                     game.setScreen(new MainMenuScreen(game, assets, data, metaService));
                 }
-            });
+            };
+            addListener(listener);
         }
 
         @Override
         public void draw(Batch batch, float parentAlpha) {
-            Color old = batch.getColor();
-            batch.setColor(0.75f, 0.35f, 0.25f, parentAlpha);
-            batch.draw(assets.region(PlaceholderKeys.PANEL_9SLICE), getX(), getY(), getWidth(), getHeight());
-            batch.setColor(old);
-            assets.font().draw(batch, "返回", getX() + 36f, getY() + 19f);
+            com.voidvvv.kz_auto_chess_n.render.ButtonArt.drawShell(batch, assets, listener,
+                    getX(), getY(), getWidth(), getHeight(), parentAlpha, false);
+            assets.uiFont().draw(batch, "返回", getX(), getY() + 19f, getWidth(),
+                    com.badlogic.gdx.utils.Align.center, false);
         }
     }
 

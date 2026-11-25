@@ -40,4 +40,33 @@ class TopBarTextTest {
         assertThat(TopBar.statusText(4, 9, 2, 3))
                 .isEqualTo(TopBar.statusText(4, 9, 2, 3));
     }
+
+    // —— 品质改造 §0.1/§0.2：局标题前缀与轮次上限（载体 = RunContext，装配期口径单点） ——
+
+    @Test
+    @DisplayName("测试档标题：前缀「测试档 999」，其余字段与正式口径同构（品质改造 §0.1）")
+    void testPeriodTitle() {
+        assertThat(TopBar.statusText(1, 25, 999, 1, 0, "测试档 999"))
+                .isEqualTo("测试档 999  轮次 1/25  金币 999  等级 1（0/4）");
+        assertThat(TopBar.statusText(25, 25, 999, 7, 0, "测试档 999"))
+                .isEqualTo("测试档 999  轮次 25/25  金币 999  等级 7（满级）");
+    }
+
+    @Test
+    @DisplayName("对拍标题：前缀「对拍 A · 42」且轮次上限 3（品质改造 §0.2）")
+    void sampleDuelTitle() {
+        assertThat(TopBar.statusText(2, 3, 7, 1, 0, "对拍 A · 42"))
+                .isEqualTo("对拍 A · 42  轮次 2/3  金币 7  等级 1（0/4）");
+        assertThat(TopBar.statusText(3, 3, 0, 2, 4, "对拍 B · 44"))
+                .isEqualTo("对拍 B · 44  轮次 3/3  金币 0  等级 2（4/8）");
+    }
+
+    @Test
+    @DisplayName("正式局：无标题前缀且轮次上限 25（与既有 4 参口径逐字一致，存量调用零漂移）")
+    void normalModeMatchesLegacySignature() {
+        assertThat(TopBar.statusText(7, 25, 33, 7, 0, null))
+                .isEqualTo(TopBar.statusText(7, 33, 7, 0))
+                .isEqualTo("轮次 7/25  金币 33  等级 7（满级）");
+        assertThat(TopBar.statusText(1, 25, 999, 1, 0, null)).doesNotContain("测试档");
+    }
 }

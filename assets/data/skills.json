@@ -44,5 +44,65 @@
 
   { "id": "skill_thorn_sea", "name": "荆棘海", "desc": "荆棘自四面八方涌起，吞没全场（最终Boss）",
     "shape": "ALL_ENEMIES", "delivery": "MELEE_INSTANT",
-    "effects": [ { "effect": "DAMAGE", "value": 1.5 } ] }
+    "effects": [ { "effect": "DAMAGE", "value": 1.5 } ] },
+
+  { "id": "skill_ignite", "name": "点燃", "desc": "火苗咬进伤口，烧个不停",
+    "shape": "SINGLE_TARGET", "delivery": "HOMING",
+    "effects": [ { "effect": "DAMAGE", "value": 1.5 },
+                 { "effect": "APPLY_STATUS", "status": "BURN", "value": 0.3, "duration": 4 } ] },
+
+  { "id": "skill_headhunt", "name": "猎头", "desc": "掷出取命的短矛",
+    "shape": "SINGLE_TARGET", "delivery": "HOMING",
+    "effects": [ { "effect": "DAMAGE", "value": 2.0 } ] },
+
+  { "id": "skill_ambush_pounce", "name": "伏击", "desc": "自暗处扑出，一击定身",
+    "shape": "SINGLE_TARGET", "delivery": "HOMING",
+    "effects": [ { "effect": "DAMAGE", "value": 1.8 },
+                 { "effect": "APPLY_STATUS", "status": "STUN", "duration": 1 } ] },
+
+  { "id": "skill_entangle", "name": "缠绕箭", "desc": "藤箭缠足，越追越远",
+    "shape": "SINGLE_TARGET", "delivery": "HOMING",
+    "effects": [ { "effect": "DAMAGE", "value": 1.6 },
+                 { "effect": "APPLY_STATUS", "status": "SLOW", "value": 40, "duration": 3 } ] },
+
+  { "id": "skill_ambush_snow", "name": "雪伏", "desc": "雪坡上的伏击，冷且重",
+    "shape": "SINGLE_TARGET", "delivery": "HOMING",
+    "effects": [ { "effect": "DAMAGE", "value": 2.3 },
+                 { "effect": "APPLY_STATUS", "status": "SLOW", "value": 50, "duration": 2.5 } ] },
+
+  { "id": "skill_rock_toss", "name": "抛石", "desc": "巨人的远程=扔石头",
+    "shape": "AOE_1", "delivery": "HOMING",
+    "effects": [ { "effect": "DAMAGE", "value": 1.3 } ] },
+
+  { "id": "skill_break_stomp", "name": "破阵踏", "desc": "一脚踩散阵型",
+    "shape": "AOE_1", "delivery": "MELEE_INSTANT",
+    "effects": [ { "effect": "DAMAGE", "value": 1.2 },
+                 { "effect": "KNOCKBACK", "value": 1 } ] },
+
+  { "id": "skill_last_watch", "name": "末班岗", "desc": "最后一班岗，站到盾碎",
+    "shape": "SELF", "delivery": "MELEE_INSTANT",
+    "effects": [ { "effect": "SHIELD", "value": 0.3 } ] },
+
+  { "id": "skill_lamplight", "name": "守夜", "desc": "灯还亮着，夜就不算深",
+    "shape": "ALL_ALLIES", "delivery": "MELEE_INSTANT",
+    "effects": [ { "effect": "SHIELD", "value": 0.12 } ] },
+
+  { "id": "skill_audit_stamp", "name": "验讫", "desc": "盖在敌军军官身上的收讫章",
+    "shape": "SINGLE_TARGET", "delivery": "HOMING",
+    "effects": [ { "effect": "DAMAGE", "value": 2.2 } ] },
+
+  { "id": "skill_banner_charge", "name": "执旗冲锋", "desc": "旗还没倒，他也不会倒",
+    "shape": "SELF", "delivery": "MELEE_INSTANT",
+    "effects": [ { "effect": "APPLY_STATUS", "status": "ATK_UP", "value": 35, "duration": 8 },
+                 { "effect": "SHIELD", "value": 0.2 } ] },
+
+  { "id": "skill_repossess", "name": "依账除名", "desc": "账本最后一页，划掉一个名字",
+    "shape": "SINGLE_TARGET", "delivery": "MELEE_INSTANT",
+    "effects": [ { "effect": "BANISH" } ],
+    "condition": { "type": "TARGET_HP_BELOW", "value": 0.2 } },
+
+  { "id": "skill_payday", "name": "发饷", "desc": "受雇于部族的旧王国账房",
+    "shape": "ALL_ALLIES", "delivery": "MELEE_INSTANT",
+    "effects": [ { "effect": "APPLY_STATUS", "status": "ATK_UP", "value": 15, "duration": 5 },
+                 { "effect": "GAIN_ENERGY", "value": 20 } ] }
 ]

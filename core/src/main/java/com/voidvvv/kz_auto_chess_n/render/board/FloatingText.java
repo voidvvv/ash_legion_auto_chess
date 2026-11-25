@@ -58,7 +58,7 @@ public final class FloatingText {
         }
         float t = elapsed / LIFETIME;
         float alpha = t < 0.7f ? 1f : 1f - (t - 0.7f) / 0.3f; // 后 30% 淡出
-        com.badlogic.gdx.graphics.g2d.BitmapFont font = assets.font();
+        com.badlogic.gdx.graphics.g2d.BitmapFont font = assets.uiFont();
         float oldScale = font.getScaleX();
         savedColor.set(font.getColor());
         font.getData().setScale(oldScale * scale);

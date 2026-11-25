@@ -1,0 +1,8 @@
+file,use,duration_s,codec,sample_rate,channels,peak_dbfs,rms_dbfs,lufs,source,license,sha256
+sfx_hit.ogg,普通/关键命中,0.12,vorbis,44100,1,-1.47,-12.60,short-n/a,Kenney Impact Sounds (impactSoft_medium_000 + impactPunch_medium_000),CC0-1.0,F3786F4136671265D8948719BB1E7DC2B0B594C6C6CD3478C576058C54DD578A
+sfx_cast.ogg,关键施法,0.33,vorbis,44100,1,-2.72,-13.48,short-n/a,自制合成 (cast.wav),CC0-1.0,83402C19E103E748D2E1884B452DCA9A3731B14E5F60F023907FE5FDAEFAC6DB
+sfx_kill.ogg,击倒确认,0.30,vorbis,44100,1,-1.56,-14.33,short-n/a,Kenney Impact Sounds (impactPunch_heavy_000 + impactMetal_light_000),CC0-1.0,3EB5C85C9EC9035B1D7103EC0FDD17F739E6B4C1D402632F43B1EF6DA4792AE4
+sfx_victory.ogg,战斗胜利,1.50,vorbis,44100,1,-4.10,-16.13,-15.6,自制合成 (victory.wav),CC0-1.0,4631BF97984761B5605EB0285E4718E0D0030C7E04088A8922E5A37E6A2B93FF
+sfx_defeat.ogg,战斗失败,1.50,vorbis,44100,1,-2.66,-14.52,-15.3,自制合成 (defeat.wav),CC0-1.0,7D6AA466C6BCAA3069FB3069EC7C98E431C7B6850B04B201041881BD4FB6AD73
+sfx_upgrade.ogg,升星/合成,0.58,vorbis,44100,1,-2.16,-15.14,-13.8,自制合成 (upgrade.wav) + Kenney RPG Audio (handleCoins2),CC0-1.0,CB6A6DA2B50EB99FBFDF9BB681B04B515372426156625778F9A4E8A1317D13E0
+bgm_battle.ogg,战斗BGM循环,120.00,vorbis,44100,2,-3.68,-19.55,-22.0,Paul Wortmann - Dark Cavern Ambient 002 (OpenGameArt),CC0-1.0,62AE030E1E9B3DF9E56B0DF7731DA09E8D020FB07DA674272986057AC4D1BE0C

@@ -29,6 +29,8 @@ public final class BattleState {
     private float introRemaining;         // 开战转场「清场入阵」剩余秒数（battle §二；0 = 主循环已起）
     private boolean over;
     private BattleOutcome outcome;
+    private boolean surrendered;          // 品质改造 §1.4：主动认输标记（SurrenderCommand 成功处理入口写入）
+    private final List<TimedTrigger> pendingTimedTriggers = new ArrayList<TimedTrigger>(); // CP23 K7 定时触发器队列
 
     public BattleState(List<BattleUnit> units, RandomGenerator rng,
                        SynergySnapshot playerSynergies, SynergySnapshot enemySynergies) {
@@ -94,6 +96,12 @@ public final class BattleState {
     /** 开战转场剩余秒数（转场驱动器归一化进度的只读源——render §5.6） */
     public float getIntroRemaining() { return introRemaining; }
     public boolean isOver() { return over; }
+
+    /** 是否主动认输（品质改造 §1.4：归因候选最高优先级的事实来源） */
+    public boolean isSurrendered() { return surrendered; }
+
+    /** 记录认输标记（§1.4：仅成功的 SurrenderCommand 处理入口调用，一次性语义） */
+    public void markSurrendered() { this.surrendered = true; }
     public BattleOutcome getOutcome() { return outcome; }
     public RandomGenerator getRng() { return rng; }
     public SynergySnapshot getPlayerSynergies() { return playerSynergies; }
@@ -151,6 +159,22 @@ public final class BattleState {
     /** framework-internal：追加事件 */
     public void record(CombatEvent event) {
         events.add(Objects.requireNonNull(event, "event 不能为 null"));
+    }
+
+    /** framework-internal：定时触发器入队（TimedTriggerSystem.scheduleFrom 调；追加序 = 调度序，CP23 K7） */
+    public void addTimedTrigger(TimedTrigger trigger) {
+        pendingTimedTriggers.add(Objects.requireNonNull(trigger, "trigger 不能为 null"));
+    }
+
+    /** framework-internal：取走全部到期触发器（atTick ≤ now；消费即移除，保持队列序——CP23 K7） */
+    public void drainDueTimedTriggers(int now, List<TimedTrigger> out) {
+        for (java.util.Iterator<TimedTrigger> it = pendingTimedTriggers.iterator(); it.hasNext(); ) {
+            TimedTrigger trigger = it.next();
+            if (trigger.getAtTick() <= now) {
+                out.add(trigger);
+                it.remove();
+            }
+        }
     }
 
     /** framework-internal：终局（幂等防御：首个结局生效） */

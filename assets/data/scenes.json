@@ -2,9 +2,12 @@
   {
     "id": "scene_forest", "name": "翡翠林地", "unlockAfter": null,
     "enemyPool": [
-      { "unitId": "unit_warrior_01",  "weight": 3, "minRound": 1 },
-      { "unitId": "unit_ranger_01",   "weight": 2, "minRound": 2 },
-      { "unitId": "unit_assassin_01", "weight": 2, "minRound": 5 }
+      { "unitId": "unit_wolf_pup",          "weight": 3, "minRound": 1 },
+      { "unitId": "unit_beast_archer",      "weight": 2, "minRound": 2 },
+      { "unitId": "unit_ambush_panther",    "weight": 2, "minRound": 5 },
+      { "unitId": "unit_warrior_01",        "weight": 1, "minRound": 6 },
+      { "unitId": "unit_ranger_01",         "weight": 1, "minRound": 8 },
+      { "unitId": "unit_spear_headhunter",  "weight": 1, "minRound": 10 }
     ],
     "bosses": { "7": "boss_thorn_mother", "15": "boss_one_eye", "25": "boss_thorn_true" },
     "shopUnlocks": []
@@ -12,21 +15,27 @@
   {
     "id": "scene_crypt", "name": "亡者墓穴", "unlockAfter": "scene_forest",
     "enemyPool": [
-      { "unitId": "unit_skeleton_soldier", "weight": 3, "minRound": 1 },
-      { "unitId": "unit_wraith",           "weight": 2, "minRound": 4 },
-      { "unitId": "unit_death_knight",     "weight": 1, "minRound": 10 }
+      { "unitId": "unit_skeleton_soldier",  "weight": 3, "minRound": 1 },
+      { "unitId": "unit_wraith",            "weight": 2, "minRound": 4 },
+      { "unitId": "unit_debt_collector",    "weight": 2, "minRound": 6 },
+      { "unitId": "unit_bowstring_archer",  "weight": 1, "minRound": 8 },
+      { "unitId": "unit_death_knight",      "weight": 1, "minRound": 10 }
     ],
     "bosses": { "7": "boss_tomb_colossus", "15": "boss_twin_lich", "25": "boss_bone_duke" },
-    "shopUnlocks": ["unit_skeleton_soldier", "unit_wraith", "unit_death_knight"]
+    "shopUnlocks": ["unit_skeleton_soldier", "unit_wraith", "unit_debt_collector",
+                    "unit_bowstring_archer", "unit_lamplighter", "unit_death_knight"]
   },
   {
     "id": "scene_snow", "name": "寒峰雪山", "unlockAfter": "scene_crypt",
     "enemyPool": [
-      { "unitId": "unit_frost_imp",      "weight": 3, "minRound": 1 },
-      { "unitId": "unit_frost_giant",    "weight": 2, "minRound": 6 },
-      { "unitId": "unit_glacial_giant",  "weight": 1, "minRound": 12 }
+      { "unitId": "unit_frost_imp",         "weight": 3, "minRound": 1 },
+      { "unitId": "unit_rubble_slinger",    "weight": 2, "minRound": 3 },
+      { "unitId": "unit_frost_giant",       "weight": 1, "minRound": 6 },
+      { "unitId": "unit_assassin_01",       "weight": 2, "minRound": 8 },
+      { "unitId": "unit_glacial_giant",     "weight": 1, "minRound": 12 }
     ],
     "bosses": { "7": "boss_frost_howler", "15": "boss_star_breaker", "25": "boss_star_warden" },
-    "shopUnlocks": ["unit_frost_imp", "unit_frost_giant", "unit_glacial_giant"]
+    "shopUnlocks": ["unit_frost_imp", "unit_rubble_slinger", "unit_frost_giant",
+                    "unit_assassin_01", "unit_glacial_giant"]
   }
 ]

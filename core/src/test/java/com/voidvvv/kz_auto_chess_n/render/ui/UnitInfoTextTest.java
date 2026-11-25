@@ -13,6 +13,7 @@ import com.voidvvv.kz_auto_chess_n.data.SkillShape;
 import com.voidvvv.kz_auto_chess_n.data.StatKey;
 import com.voidvvv.kz_auto_chess_n.data.StatusType;
 import com.voidvvv.kz_auto_chess_n.data.SynergyData;
+import com.voidvvv.kz_auto_chess_n.data.SynergyMechanic;
 import com.voidvvv.kz_auto_chess_n.data.SynergySource;
 import com.voidvvv.kz_auto_chess_n.data.TargetPriority;
 import com.voidvvv.kz_auto_chess_n.data.UnitData;
@@ -32,7 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 棋子文案格式化纯函数测试（Phase 5.1 CP1）：词表 / 档位数值行 / 羁绊查表 /
  * 悬停预览与详情行集 / 折行与卡高截断——零 Gdx 依赖，headless 直测。
  *
- * <p>夹具沿 {@link UnitDetailDialogTest} 手搓 GameData 先例；羁绊用带 desc 的 6 参构造
+ * <p>夹具沿手搓 GameData 先例（原 UnitDetailDialogTest，已退役）；羁绊用带 desc 的 6 参构造
  * （裁决 2：synergy 级 desc 手写 + 档位行由 thresholds/effects 生成，混合口径）。
  */
 class UnitInfoTextTest {
@@ -40,11 +41,11 @@ class UnitInfoTextTest {
     private static final String ORC_DESC = "焰痕部族的雇佣兵，越战越硬的正面铁壁";
     private static final String WARRIOR_DESC = "执旗卫队的老兵，以纪律与护甲结阵而战";
 
-    // —— 夹具（口径对齐 UnitDetailDialogTest） ——
+    // —— 夹具（手搓 GameData 口径） ——
 
     private static UnitData tpl(String id, String race, String unitClass) {
         return new UnitData(id, "夹具" + id, race, unitClass, 1,
-                new BaseStats(100, 10, 5, 1f, 1, 1f, 0, 100, 0), 1.8f,
+                new BaseStats(100, 10, 5, 1f, 1, 1f, 0, 100, 0, 20, 150), 1.8f,
                 TargetPriority.NEAREST, null, "sk_" + id, false);
     }
 
@@ -102,11 +103,18 @@ class UnitInfoTextTest {
         return new EffectData(null, StatusType.SHIELD, null, value, EffectTarget.ALLIES);
     }
 
-    // —— 词表（§2.1 属性短名，9 键全断言） ——
+    /** 机制通道词条（10 参全参构造器；数值按词可缺） */
+    private static EffectData mechanic(SynergyMechanic kind, Float value, Float value2,
+                                       StatusType status, Float duration) {
+        return new EffectData(null, null, kind, null, value, value2, status, duration,
+                EffectTarget.ALLIES, null);
+    }
+
+    // —— 词表（§2.1 属性短名，11 键全断言；v5 §五.5 暴击两键） ——
 
     @Test
-    @DisplayName("属性短名词表：9 键与 GDD 术语一一对应")
-    void statLabelAllNineKeys() {
+    @DisplayName("属性短名词表：11 键与 GDD 术语一一对应（暴击/暴伤入表，游侠档不再误显「技能强度」）")
+    void statLabelAllElevenKeys() {
         assertThat(UnitInfoText.statLabel(StatKey.HP)).isEqualTo("生命");
         assertThat(UnitInfoText.statLabel(StatKey.ATTACK)).isEqualTo("攻击");
         assertThat(UnitInfoText.statLabel(StatKey.ARMOR)).isEqualTo("护甲");
@@ -115,19 +123,72 @@ class UnitInfoTextTest {
         assertThat(UnitInfoText.statLabel(StatKey.RANGE)).isEqualTo("射程");
         assertThat(UnitInfoText.statLabel(StatKey.LIFESTEAL)).isEqualTo("吸血");
         assertThat(UnitInfoText.statLabel(StatKey.ENERGY_GAIN_RATE)).isEqualTo("回能");
+        assertThat(UnitInfoText.statLabel(StatKey.CRIT_CHANCE)).isEqualTo("暴击");
+        assertThat(UnitInfoText.statLabel(StatKey.CRIT_DAMAGE)).isEqualTo("暴伤");
         assertThat(UnitInfoText.statLabel(StatKey.SKILL_POWER)).isEqualTo("技能强度");
     }
 
     // —— 档位效果数值文案 ——
 
     @Test
-    @DisplayName("单条效果文案：ADD 整数 / PCT / 百分比刻度 ADD 附 % / 浮点去尾 / SHIELD")
+    @DisplayName("单条效果文案：ADD 整数 / PCT / 百分比刻度 ADD 附 % / 浮点去尾 / SHIELD / 暴击 stat 键")
     void effectTextCoversChannels() {
         assertThat(UnitInfoText.effectText(effect(StatKey.HP, EffectOp.ADD, 150f))).isEqualTo("生命+150");
         assertThat(UnitInfoText.effectText(effect(StatKey.ATTACK, EffectOp.PCT, 20f))).isEqualTo("攻击+20%");
         assertThat(UnitInfoText.effectText(effect(StatKey.LIFESTEAL, EffectOp.ADD, 20f))).isEqualTo("吸血+20%");
         assertThat(UnitInfoText.effectText(effect(StatKey.MOVE_SPEED, EffectOp.ADD, 1.0f))).isEqualTo("移速+1");
         assertThat(UnitInfoText.effectText(shield(0.3f))).isEqualTo("护盾30%");
+        assertThat(UnitInfoText.effectText(effect(StatKey.CRIT_CHANCE, EffectOp.ADD, 15f))).isEqualTo("暴击+15%");
+    }
+
+    // —— 机制通道文案（v5 K1 第三通道；HoverPreview NPE 修复回归） ——
+
+    @Test
+    @DisplayName("机制通道词条：玩家可读中文短文案（数值嵌入，非枚举名；2026-11-21 整改再收紧）")
+    void mechanicTextPlayerReadable() {
+        assertThat(UnitInfoText.effectText(
+                mechanic(SynergyMechanic.DEATH_TAX, 4f, 20f, null, null)))
+                .isEqualTo("名册：继承攻+4·生命+20");
+        assertThat(UnitInfoText.effectText(
+                mechanic(SynergyMechanic.BASIC_ATTACK_STATUS, 30f, null, StatusType.BURN, 3f)))
+                .isEqualTo("普攻灼烧30%·3秒");
+        assertThat(UnitInfoText.effectText(
+                mechanic(SynergyMechanic.KNOCKBACK_IMMUNE, null, null, null, null)))
+                .isEqualTo("免疫击退");
+        assertThat(UnitInfoText.effectText(
+                mechanic(SynergyMechanic.CRIT_RHYTHM, 3f, 50f, null, null)))
+                .isEqualTo("第3刀必暴·暴伤+50%");
+        assertThat(UnitInfoText.effectText(
+                mechanic(SynergyMechanic.EXECUTE, 40f, 35f, null, null)))
+                .isEqualTo("收割：血<35%敌增伤40%");
+        assertThat(UnitInfoText.effectText(
+                mechanic(SynergyMechanic.SPELL_PEN, 50f, null, null, null)))
+                .isEqualTo("法穿50%");
+        assertThat(UnitInfoText.effectText(
+                mechanic(SynergyMechanic.AFTER_CAST_ENERGY, 20f, null, null, null)))
+                .isEqualTo("施法回能+20");
+    }
+
+    @Test
+    @DisplayName("机制词 17 词全量：条条产出非空中文文案（含 CJK、非枚举名），不抛异常")
+    void allMechanicWordsProduceChineseText() {
+        for (SynergyMechanic kind : SynergyMechanic.values()) {
+            String text = UnitInfoText.effectText(mechanic(kind, 10f, 10f, StatusType.BURN, 3f));
+            assertThat(text).as("机制词 %s 文案非空", kind).isNotEmpty();
+            assertThat(text).as("机制词 %s 文案含中文", kind).matches(".*[一-鿿].*");
+            assertThat(text).as("机制词 %s 文案非枚举名", kind).isNotEqualTo(kind.jsonName());
+        }
+    }
+
+    @Test
+    @DisplayName("null 防御兜底：三通道全空 → 占位文案；effect 通道非 SHIELD 回退词表名（绝不 NPE）")
+    void effectTextNullDefenseNeverCrashes() {
+        EffectData allNull = new EffectData(null, null, null, null, null, null, null, null,
+                EffectTarget.ALLIES, null);
+        assertThat(UnitInfoText.effectText(allNull)).isEqualTo("未知效果");
+
+        EffectData nonShieldEffect = new EffectData(null, StatusType.REGEN, null, 0.1f, EffectTarget.ALLIES);
+        assertThat(UnitInfoText.effectText(nonShieldEffect)).isEqualTo("REGEN");
     }
 
     @Test

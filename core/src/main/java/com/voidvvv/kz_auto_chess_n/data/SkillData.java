@@ -16,15 +16,23 @@ public final class SkillData {
     private final SkillShape shape;
     private final Delivery delivery;
     private final List<SkillEffect> effects;
+    /** 施放条件（可选，v5「依账除名」持能等待）；null = 无条件 */
+    private final CastCondition condition;
 
     public SkillData(String id, String name, String desc, SkillShape shape,
                      Delivery delivery, List<SkillEffect> effects) {
+        this(id, name, desc, shape, delivery, effects, null);
+    }
+
+    public SkillData(String id, String name, String desc, SkillShape shape,
+                     Delivery delivery, List<SkillEffect> effects, CastCondition condition) {
         this.id = id;
         this.name = name;
         this.desc = desc;
         this.shape = shape;
         this.delivery = delivery;
         this.effects = Collections.unmodifiableList(effects);
+        this.condition = condition;
     }
 
     /** 技能 id，兼作图标/特效 key（fx_{skillId}，render §5.4） */
@@ -37,4 +45,6 @@ public final class SkillData {
     public Delivery getDelivery() { return delivery; }
     /** 1~3 条，多条依次应用（如暴走 = 双状态） */
     public List<SkillEffect> getEffects() { return effects; }
+    /** 施放条件；null = 无条件（不满足时延后施放，口径 #18） */
+    public CastCondition getCondition() { return condition; }
 }

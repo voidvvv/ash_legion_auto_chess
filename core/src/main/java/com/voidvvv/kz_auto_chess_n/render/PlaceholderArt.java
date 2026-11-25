@@ -3,6 +3,7 @@ package com.voidvvv.kz_auto_chess_n.render;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.voidvvv.kz_auto_chess_n.data.DeathrattleSpec;
 import com.voidvvv.kz_auto_chess_n.data.GameData;
 import com.voidvvv.kz_auto_chess_n.data.StatusType;
 import com.voidvvv.kz_auto_chess_n.data.UnitData;
@@ -16,8 +17,12 @@ import java.util.Map;
  * 运行时占位图集（render §7.5；GL 线程一次性生成，不 headless 测——验收走 lwjgl3:run）。
  *
  * <p>零素材文件全功能：Pixmap 逐 key 绘制 → Texture（全部 Nearest，render §八.1）→ TextureRegion。
- * 单位块 = 种族底色（PalettePick）+ 职业顶条 + 帧差异（idle 亮度 / walk y±1px / attack 前移2px /
- * cast 亮度脉冲 / death 透明度递减）；生成范围与 {@link PlaceholderKeys#enumerateFor} 对账（防漏）。
+ * 单位图形（v5 渲染 CP10 已铺开）：图形族白体 + 黑描边 + 深色职业变体标记
+ * （{@link UnitShapeKit}，运行期由 UnitView 以星级色 tint——CP11）。
+ * 帧差异保留（idle 亮度 / walk y±1px / attack 前移2px / cast 亮度脉冲 / death 透明度递减）；
+ * 生成范围与 {@link PlaceholderKeys#enumerateFor} 对账（防漏）。
+ * UI 框架件（{@link UiKeys}，UI 抽屉化批0）逐键生成平色占位（画法见 {@link UiPlaceholderPainter}）——
+ * 真素材走 {@link Assets#uiRegion}/{@link Assets#uiPatch} 优先命中，缺件落此兜底。
  */
 public final class PlaceholderArt {
     private static final int UNIT_SIZE = 32;
@@ -41,6 +46,15 @@ public final class PlaceholderArt {
             put(PlaceholderKeys.skillFx(skillId), paintSkillFx(skillId));
             put(PlaceholderKeys.skillFxBurst(skillId), paintSkillBurst(skillId));
         }
+        // 亡语合成 skillId 落点键（2026-11-21 回归：直伤 causeId + 亡语弹命中；颜色走确定性 PalettePick）
+        for (UnitData tpl : data.getUnits().values()) {
+            if (tpl.getDeathrattle() != null) {
+                put(PlaceholderKeys.skillFxBurst(DeathrattleSpec.causeSkillId(tpl.getId())),
+                        paintSkillBurst(DeathrattleSpec.causeSkillId(tpl.getId())));
+            }
+        }
+        put(PlaceholderKeys.skillFxBurst(DeathrattleSpec.VOLLEY_SKILL_ID),
+                paintSkillBurst(DeathrattleSpec.VOLLEY_SKILL_ID));
         for (StatusType type : StatusType.values()) {
             put(PlaceholderKeys.statusFx(type), paintStatusFx(type));
         }
@@ -51,6 +65,11 @@ public final class PlaceholderArt {
         put(PlaceholderKeys.HIT_DEFAULT, paintHitDefault());
         put(PlaceholderKeys.PANEL_9SLICE, paintPanel());
         put(PlaceholderKeys.WHITE, paintWhite());
+        // UI 框架件（UI 抽屉化批0）：逐 UiKeys 条目生成平色占位——真素材未到位/加分件缺交付时的兜底
+        // （真素材经 Assets.uiRegion/uiPatch 优先；画法见 UiPlaceholderPainter）
+        for (UiKeys.Entry entry : UiKeys.ALL) {
+            put(entry.id(), UiPlaceholderPainter.paint(entry));
+        }
         verifyCoverage(data);
     }
 
@@ -86,22 +105,55 @@ public final class PlaceholderArt {
         pixmap.dispose();
     }
 
-    // —— 单位块：种族底色 + 职业顶条 + 帧差异 ——
+    // —— 单位图形：形状族白体 + 职业变体标记 + 帧差异（v5 CP10 已全量铺开） ——
 
     private Pixmap paintUnit(UnitData tpl, String anim, int frame) {
-        com.badlogic.gdx.graphics.Color race = PalettePick.pick(tpl.getRace());
-        com.badlogic.gdx.graphics.Color clazz = PalettePick.pick(tpl.getUnitClass());
         float alpha = PlaceholderKeys.ANIM_DEATH.equals(anim) ? deathAlpha(frame) : 1f;
         int dx = PlaceholderKeys.ANIM_ATTACK.equals(anim) ? 2 : 0;  // 出手前移（朝向翻转归 UnitView）
         int dy = PlaceholderKeys.ANIM_WALK.equals(anim) ? (frame == 0 ? -1 : 1) : 0;
         float bright = frameBrightness(anim, frame);
 
+        UnitShapeKit.ShapeFamily family = UnitShapeKit.familyOf(tpl.getRace());
+        UnitShapeKit.ClassVariant variant = UnitShapeKit.variantOf(tpl.getUnitClass());
+        int[] halfWidths = UnitShapeKit.halfWidths(family);
+        int top = 6 + dy;                       // 本体顶部（32px 画布内 22px 高）
+        int centerX = 16 + dx;
+
         Pixmap pm = new Pixmap(UNIT_SIZE, UNIT_SIZE, Pixmap.Format.RGBA8888);
-        // 身体（种族底色）+ 描边 + 职业顶条
-        fillRect(pm, 4 + dx, 6 + dy, 24, 22, race.r * bright, race.g * bright, race.b * bright, alpha);
-        fillRect(pm, 4 + dx, 6 + dy, 24, 5, clazz.r * bright, clazz.g * bright, clazz.b * bright, alpha);
-        pm.setColor(0f, 0f, 0f, alpha * 0.5f);
-        pm.drawRectangle(4 + dx, 6 + dy, 24, 22);
+        // 形状本体：白体系（0.92 基准亮度 × 帧亮度）——运行期由 UnitView 以星级色 tint（CP11）
+        float body = 0.92f * bright;
+        for (int row = 0; row < halfWidths.length; row++) {
+            int half = halfWidths[row];
+            boolean hollow = variant == UnitShapeKit.ClassVariant.RANGER
+                    && row >= 2 && row < halfWidths.length - 2; // 游侠=空心（仅描边行区内缩 2px）
+            if (!hollow) {
+                fillRect(pm, centerX - half, top + row * 22 / halfWidths.length,
+                        half * 2, 22 / halfWidths.length + 1, body, body, body, alpha);
+            }
+        }
+        // 职业变体标记（深色，tint 后仍暗）
+        int[] mark = UnitShapeKit.variantMarkRows(variant);
+        if (mark[1] > 0) {
+            for (int row = mark[0]; row < mark[0] + mark[1] && row < halfWidths.length; row++) {
+                int half = halfWidths[row];
+                if (variant == UnitShapeKit.ClassVariant.ASSASSIN) {
+                    fillRect(pm, centerX - half, top + row * 22 / halfWidths.length, // 斜切：左侧楔形缺口
+                            Math.max(1, half / 2), 1, 0.12f, 0.12f, 0.14f, alpha);
+                } else {
+                    fillRect(pm, centerX - half, top + row * 22 / halfWidths.length,
+                            half * 2, 1, 0.12f, 0.12f, 0.14f, alpha);
+                }
+            }
+        }
+        // 外描边：逐行首尾像素（像素风 1px 描边）
+        pm.setColor(0f, 0f, 0f, alpha * 0.6f);
+        for (int row = 0; row < halfWidths.length; row++) {
+            int half = halfWidths[row];
+            pm.fillRectangle(centerX - half, top + row * 22 / halfWidths.length, 1,
+                    22 / halfWidths.length + 1);
+            pm.fillRectangle(centerX + half - 1, top + row * 22 / halfWidths.length, 1,
+                    22 / halfWidths.length + 1);
+        }
         return pm;
     }
 

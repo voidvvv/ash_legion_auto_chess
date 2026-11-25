@@ -174,3 +174,6 @@ Thumbs.db
 ## Runtime save files (lwjgl3 workingDir = assets/; not tracked):
 /assets/save/
 .evolver/
+
+## UI art 1.25x fallback set (not used: Q8 ruled the drawer unscaled, 1:1 only; see assets_src/ui_redesign/ASSET_DELIVERY.md):
+/assets/art/ui/1_25x/

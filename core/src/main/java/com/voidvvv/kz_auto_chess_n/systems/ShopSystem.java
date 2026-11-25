@@ -36,6 +36,11 @@ import java.util.Objects;
 public final class ShopSystem {
 
     private final UnitData[] slots = new UnitData[GameBalance.SHOP_SLOTS];
+    /** 对拍付费序号（品质改造 §0.2，0-based：0 = ①）：新轮免费补货归零、成功付费 +1；
+     *  正式分支不消费。随上下文生命周期重建（重开即新商店——同轮重试自然保留）。 */
+    private int paidRefreshIndex;
+    /** 本帧升星星级（品质改造 §1.2：音频消费者；级联合成同帧只播一次、保留最高星级——drain 后清空） */
+    private final java.util.List<Integer> frameUpgrades = new java.util.ArrayList<Integer>();
 
     /** 注册经营命令 handler（input §6.1：handler 由所属 system 注册） */
     public void registerHandlers(CommandManager manager) {
@@ -52,8 +57,7 @@ public final class ShopSystem {
                 return false;
             }
             ctx.getPlayer().addGold(-cost);
-            reroll(ctx.getRunState().getRound(), ctx.getGameData(), ctx.getRng(),
-                    ctx.getRunState().getModifiers());
+            replenish(ctx, true); // 仅成功支付才推进对拍付费序号（§0.2）
             return true;
         });
         manager.registerHandler(BuyExpCommand.class, (cmd, ctx) -> {
@@ -67,6 +71,37 @@ public final class ShopSystem {
             player.addExp(GameBalance.BUY_EXP_GAIN);
             return true;
         });
+    }
+
+    /**
+     * 补货分派单点（品质改造 §0.2）：备战期商店补货的唯一入口，免费（新轮进入）与付费
+     * （RefreshShop）共用——正式分支仍调原 {@link #reroll}（费阶概率 + 池门控，每槽 2 RNG）；
+     * 对拍分支走 {@link PaiTestScript} 固定名单复用 {@link #restoreSlots}（0 RNG）：
+     * 免费写新轮固定五槽并把付费序号归零，付费按共用序 ①②③ 循环（第四次回 ①）。
+     *
+     * <p>序号纪律（§0.2）：付费序号仅在扣款成功后推进（handler 守卫在前）；同轮重试不调用本方法，
+     * 已买空槽与序号原样保留。
+     *
+     * @param paidRefresh false = 新轮免费补货；true = 付费刷新（已扣款）
+     */
+    public void replenish(RunContext ctx, boolean paidRefresh) {
+        if (!ctx.getMode().isSampleDuel()) {
+            reroll(ctx.getRunState().getRound(), ctx.getGameData(), ctx.getRng(),
+                    ctx.getRunState().getModifiers()); // 正式口径不变（含启动参数起始金外的随机页）
+            return;
+        }
+        if (paidRefresh) {
+            restoreSlots(PaiTestScript.paidSlots(paidRefreshIndex, ctx.getGameData())); // 第 1 次付费 = ①
+            paidRefreshIndex = (paidRefreshIndex + 1) % PaiTestScript.PAID_CYCLE_LENGTH; // ④ 回 ①（§0.2）
+            return;
+        }
+        paidRefreshIndex = 0; // 每次进入新轮：先写免费五槽，并把付费序号归零（§0.2）
+        restoreSlots(PaiTestScript.freeSlots(ctx.getRunState().getRound(), ctx.getGameData()));
+    }
+
+    /** 对拍付费序号（0-based，0 = ①；品质改造 §0.2 验收件直读） */
+    public int getPaidRefreshIndex() {
+        return paidRefreshIndex;
     }
 
     /** 槽位模板；空槽/越界返回 null */
@@ -193,9 +228,7 @@ public final class ShopSystem {
         EquipmentSystem.unequipAll(consumed, player);
         player.removeUnit(consumed);
         survivor.addSpend(consumed.getSpend() + bought.getSpend());
-        survivor.upgradeStar();
-        ctx.getRunState().addNotice(
-                survivor.getTemplate().getName() + " 升至 " + survivor.getStar() + " 星");
+        registerUpgrade(ctx, survivor); // 升星收口单点（§1.2）
         mergeCascade(ctx);
     }
 
@@ -221,9 +254,7 @@ public final class ShopSystem {
                         ctx.getPlayer().removeUnit(consumed);
                     }
                     survivor.addSpend(foldedSpend); // 首位保留位置与装备（实现口径 #5）
-                    survivor.upgradeStar();
-                    ctx.getRunState().addNotice(
-                            survivor.getTemplate().getName() + " 升至 " + survivor.getStar() + " 星");
+                    registerUpgrade(ctx, survivor); // 升星收口单点（§1.2）
                     mergedAny = true;
                     break; // 重扫（级联 + 名单已变）
                 }
@@ -246,6 +277,31 @@ public final class ShopSystem {
             }
         }
         return count;
+    }
+
+    /**
+     * 升星收口单点（品质改造 §1.2）：mergeIntoFullBench / mergeCascade 两路共用——写一次带单位
+     * 与新星级的文本通知 + 记录本帧升星（音频消费者与文本通知各有消费者）。级联合成同帧只播一次、
+     * 保留最高星级（音频侧按帧归并）。
+     */
+    private void registerUpgrade(RunContext ctx, Unit survivor) {
+        survivor.upgradeStar();
+        ctx.getRunState().addNotice(
+                survivor.getTemplate().getName() + " 升至 " + survivor.getStar() + " 星");
+        frameUpgrades.add(survivor.getStar());
+    }
+
+    /** 本帧升星星级（品质改造 §1.2；取最高——级联合成同帧只播一次；drain 后清空） */
+    public int drainFrameUpgradeStar() {
+        if (frameUpgrades.isEmpty()) {
+            return -1;
+        }
+        int highest = 0;
+        for (Integer star : frameUpgrades) {
+            highest = Math.max(highest, star);
+        }
+        frameUpgrades.clear();
+        return highest;
     }
 
     /** 同费池（非 Boss、cost 匹配；GameData 声明序——LinkedHashMap 确定性） */

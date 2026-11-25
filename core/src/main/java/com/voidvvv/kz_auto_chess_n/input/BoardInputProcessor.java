@@ -25,13 +25,16 @@ import java.util.function.IntConsumer;
 import java.util.function.Supplier;
 
 /**
- * 棋盘域输入（input §2.3/§2.4/§3）：统辖棋盘 6×7 玩家区与备战席 3×3。
+ * 棋盘域输入（input §2.3/§2.4/§3）：统辖棋盘 6×7 玩家区与备战席——备战席现由左侧抽屉头像条承载，命中经 {@link DrawerHitTest} 注入（屏幕坐标，见下）。
  *
  * <p>unproject 用棋盘 viewport（含其 camera）——坐标陷阱防御（input §3 第四行）；
  * 每 pointer 独立 DragContext（第一陷阱：多点互不串扰，同时拖拽 ≤1 有意义）；
  * 拖拽死区 DRAG_DEAD_ZONE_PX（unproject 后虚拟坐标，§3 第三陷阱：位移未出死区不算拖拽）；
  * 模态阻断位首行吞事件（BattleScreen 已接 UIDialogManager::isShowing）。松手才入队（表现层只在合法落点产生命令，
  * input §4.3 双层校验的输入侧；handler 侧门控归 RunFlowSystem）。
+ *
+ * <p><b>备战席命中源</b>（UI 抽屉化批2）：② 备战席世界域矩形退役，改由 {@link DrawerHitTest}（抽屉头像条实现）
+ * 按屏幕坐标给出槽号——槽号即 bench 下标，其后拖拽 / 出售 / 死区点击代码零改动；滚轮落在头像条上亦经此路由。
  */
 public final class BoardInputProcessor implements InputProcessor {
     /** 单 pointer 拖拽上下文（可变，GL 线程单消费者） */
@@ -42,6 +45,9 @@ public final class BoardInputProcessor implements InputProcessor {
         final float startY;
         float currentX;
         float currentY;
+        /** 当前指针的屏幕坐标（UI 抽屉化批2：抽屉命中走屏幕坐标，R2 跨域口径） */
+        float currentScreenX;
+        float currentScreenY;
         boolean dragging; // 已出死区
 
         DragContext(int unitId, PlacementTarget source, float x, float y) {
@@ -60,27 +66,40 @@ public final class BoardInputProcessor implements InputProcessor {
     private final BooleanSupplier modalBlocked;
     /** 死区内松手 = 点击棋子的回调（Phase 5：详情面板 / 装备待定态落点；null = 无监听） */
     private final IntConsumer unitClickListener;
+    /** 备战席命中源（UI 抽屉化批2：头像条替代 ② 世界域矩形；null = 无备战席命中，只剩棋盘） */
+    private final DrawerHitTest drawerHitTest;
     /** 悬停指针轨迹（feedback04：mouseMoved 记虚拟坐标，查询时按当前局面重命中——
      *  BATTLE 期单位移动/清扫/名单变化即时反映；候选抑制见 getHoverCandidate） */
     private float hoverX;
     private float hoverY;
+    /** 悬停指针的屏幕坐标（抽屉命中 / 滚轮路由用） */
+    private int hoverScreenX;
+    private int hoverScreenY;
     private boolean hoverTracked;
     private final Map<Integer, DragContext> drags = new HashMap<Integer, DragContext>();
     private final Vector2 touch = new Vector2(); // 复用（unproject 输出，零分配）
 
     public BoardInputProcessor(Viewport boardViewport, CommandManager commandManager,
                                Supplier<RunContext> context, BooleanSupplier modalBlocked) {
-        this(boardViewport, commandManager, context, modalBlocked, null);
+        this(boardViewport, commandManager, context, modalBlocked, null, null);
     }
 
     public BoardInputProcessor(Viewport boardViewport, CommandManager commandManager,
                                Supplier<RunContext> context, BooleanSupplier modalBlocked,
                                IntConsumer unitClickListener) {
+        this(boardViewport, commandManager, context, modalBlocked, unitClickListener, null);
+    }
+
+    /** @param drawerHitTest 备战席命中源（抽屉头像条；null = 备战席不可命中——② 矩形已退役） */
+    public BoardInputProcessor(Viewport boardViewport, CommandManager commandManager,
+                               Supplier<RunContext> context, BooleanSupplier modalBlocked,
+                               IntConsumer unitClickListener, DrawerHitTest drawerHitTest) {
         this.boardViewport = boardViewport;
         this.commandManager = commandManager;
         this.context = context;
         this.modalBlocked = modalBlocked;
         this.unitClickListener = unitClickListener;
+        this.drawerHitTest = drawerHitTest;
     }
 
     // —— InputProcessor ——
@@ -95,11 +114,12 @@ public final class BoardInputProcessor implements InputProcessor {
             return true; // 门控表现层：仅备战期可拖（input §4.3）
         }
         unproject(screenX, screenY);
-        Unit unit = unitAt(touch.x, touch.y, ctx);
+        Unit unit = unitAt(screenX, screenY, touch.x, touch.y, ctx);
         if (unit == null) {
             return false; // 未命中单位：事件下传
         }
-        drags.put(pointer, new DragContext(unit.getId(), placementAt(touch.x, touch.y), touch.x, touch.y));
+        drags.put(pointer, new DragContext(unit.getId(), placementAt(screenX, screenY, touch.x, touch.y),
+                touch.x, touch.y));
         hoverTracked = false; // 按下即清悬停（起手瞬间不出残卡；拖拽抑制由候选查询施加）
         return true;
     }
@@ -113,6 +133,8 @@ public final class BoardInputProcessor implements InputProcessor {
         unproject(screenX, screenY);
         drag.currentX = touch.x;
         drag.currentY = touch.y;
+        drag.currentScreenX = screenX;
+        drag.currentScreenY = screenY;
         if (!drag.dragging) {
             float dx = drag.currentX - drag.startX;
             float dy = drag.currentY - drag.startY;
@@ -137,7 +159,8 @@ public final class BoardInputProcessor implements InputProcessor {
             commandManager.addCommand(new SellUnitCommand(drag.unitId)); // ⑦ 出售区（GDD §3.6）
             return true;
         }
-        PlacementTarget target = dropTargetAt(drag.currentX, drag.currentY);
+        PlacementTarget target = dropTargetAt((int) drag.currentScreenX, (int) drag.currentScreenY,
+                drag.currentX, drag.currentY);
         if (target != null) {
             commandManager.addCommand(new MoveUnitCommand(drag.unitId, target));
         } // 非法落点：不产生命令，回弹由 ghost 消失自然实现
@@ -179,6 +202,8 @@ public final class BoardInputProcessor implements InputProcessor {
         unproject(screenX, screenY);
         hoverX = touch.x;
         hoverY = touch.y;
+        hoverScreenX = screenX;
+        hoverScreenY = screenY;
         hoverTracked = true;
         return false; // 悬停不消费事件（uiStage/后续处理器照常收）
     }
@@ -196,7 +221,7 @@ public final class BoardInputProcessor implements InputProcessor {
         RunContext ctx = context.get();
         GamePhase phase = ctx.getRunState().getPhase();
         if (phase == GamePhase.SHOPPING) {
-            return shoppingCandidateAt(hoverX, hoverY, ctx);
+            return shoppingCandidateAt(hoverX, hoverY, hoverScreenX, hoverScreenY, ctx);
         }
         if (phase == GamePhase.BATTLE) {
             return battleCandidateAt(hoverX, hoverY, ctx);
@@ -204,9 +229,9 @@ public final class BoardInputProcessor implements InputProcessor {
         return HoverCandidate.NONE;
     }
 
-    /** SHOPPING 候选：玩家棋子优先（区域互斥——虚影仅敌区行 0~2，玩家区行 4~6 + 备战席） */
-    private HoverCandidate shoppingCandidateAt(float vx, float vy, RunContext ctx) {
-        Unit player = unitAt(vx, vy, ctx);
+    /** SHOPPING 候选：玩家棋子优先（区域互斥——虚影仅敌区行 0~2，玩家区行 4~6 + 抽屉头像条） */
+    private HoverCandidate shoppingCandidateAt(float vx, float vy, int screenX, int screenY, RunContext ctx) {
+        Unit player = unitAt(screenX, screenY, vx, vy, ctx);
         if (player != null) {
             return HoverCandidate.ofPlayerUnit(player);
         }
@@ -242,9 +267,20 @@ public final class BoardInputProcessor implements InputProcessor {
         return HoverCandidate.NONE;
     }
 
+    /**
+     * 滚轮路由（UI 抽屉化批2/批3）：指针（最近一次 mouseMoved 的屏幕坐标）落在抽屉头像条 / 装备网格上 →
+     * 交给抽屉滚动并消费；其余位置不消费（描述滚动框的滚轮由 scene2d ScrollPane 在 uiStage 层自行消费）。
+     * <b>方向</b>：libGDX 约定 {@code amountY > 0} = 向下滚 = 看后面的槽 / 行（LWJGL3 后端 {@code scrolled(−x, −y)}
+     * 取负 GLFW 偏移；与 ScrollPane 的 {@code setScrollY(amountY + 50×Δ)} 同向——批2 初版写反，批3 修正）。
+     */
     @Override
     public boolean scrolled(float amountX, float amountY) {
-        return false;
+        if (drawerHitTest == null || !hoverTracked || modalBlocked.getAsBoolean()) {
+            return false;
+        }
+        int steps = amountY > 0f ? Math.max(1, Math.round(amountY)) : amountY < 0f ? -Math.max(1, Math.round(-amountY)) : 0;
+        return steps != 0 && (drawerHitTest.scrollStrip(hoverScreenX, hoverScreenY, steps)
+                || drawerHitTest.scrollEquip(hoverScreenX, hoverScreenY, steps));
     }
 
     // —— 渲染只读暴露（ghost 绘制与高亮，input §4.1） ——
@@ -274,7 +310,16 @@ public final class BoardInputProcessor implements InputProcessor {
         if (drag == null) {
             return null;
         }
-        return dropTargetAt(drag.currentX, drag.currentY);
+        return dropTargetAt((int) drag.currentScreenX, (int) drag.currentScreenY, drag.currentX, drag.currentY);
+    }
+
+    /**
+     * 当前拖拽是否从备战席起手（UI 抽屉化批2·Q2「从抽屉往外拖棋子时面板自动让位」的触发位）：
+     * 未拖拽 / 从棋盘起手 = false。
+     */
+    public boolean isDragFromBench() {
+        DragContext drag = dropContext();
+        return drag != null && drag.source instanceof PlacementTarget.Bench;
     }
 
     /** 拖拽悬停是否在 ⑦ 出售区（渲染金红高亮用） */
@@ -300,9 +345,12 @@ public final class BoardInputProcessor implements InputProcessor {
         boardViewport.unproject(touch);
     }
 
-    /** 命中单位：备战席槽位索引即 bench 索引；棋盘玩家区格 → deployedAt */
-    private Unit unitAt(float vx, float vy, RunContext ctx) {
-        int slot = BoardGeometry.pixelToBenchSlot((int) vx, (int) vy);
+    /**
+     * 命中单位：抽屉头像条槽号（屏幕坐标 → {@link DrawerHitTest}，槽号即 bench 下标）；棋盘玩家区格 → deployedAt。
+     * 备战席命中只认屏幕坐标（R2）：② 的世界域矩形已退役，未注入抽屉时备战席不可命中。
+     */
+    private Unit unitAt(int screenX, int screenY, float vx, float vy, RunContext ctx) {
+        int slot = drawerHitTest != null ? drawerHitTest.stripSlotAt(screenX, screenY) : -1;
         if (slot >= 0) {
             java.util.List<Unit> bench = ctx.getPlayer().getBench();
             return slot < bench.size() ? bench.get(slot) : null;
@@ -314,22 +362,22 @@ public final class BoardInputProcessor implements InputProcessor {
         return null;
     }
 
-    /** 指定虚拟坐标的落点（玩家区格 / 备战槽）；非法区返回 null */
-    private PlacementTarget dropTargetAt(float vx, float vy) {
+    /** 指定位置的落点（玩家区格 / 抽屉头像格）；非法区返回 null */
+    private PlacementTarget dropTargetAt(int screenX, int screenY, float vx, float vy) {
         int[] cell = BoardGeometry.pixelToCell((int) vx, (int) vy);
         if (cell != null && cell[1] >= 4) {
             return new PlacementTarget.Cell(cell[0], cell[1]);
         }
-        int slot = BoardGeometry.pixelToBenchSlot((int) vx, (int) vy);
+        int slot = drawerHitTest != null ? drawerHitTest.stripSlotAt(screenX, screenY) : -1;
         if (slot >= 0) {
-            return new PlacementTarget.Bench(slot);
+            return new PlacementTarget.Bench(slot); // 空槽下标超出席长由名单层钳制追加
         }
         return null;
     }
 
     /** 起手落点描述（源：Bench 槽或 Cell；界外防御给 Cell(0,4) 占位——拖拽源必在域内） */
-    private PlacementTarget placementAt(float vx, float vy) {
-        PlacementTarget target = dropTargetAt(vx, vy);
+    private PlacementTarget placementAt(int screenX, int screenY, float vx, float vy) {
+        PlacementTarget target = dropTargetAt(screenX, screenY, vx, vy);
         return target != null ? target : new PlacementTarget.Cell(0, 4);
     }
 }

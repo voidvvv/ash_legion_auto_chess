@@ -37,7 +37,7 @@ class SynergySystemTest {
 
     private static UnitData unit(String id, String race, String unitClass) {
         return new UnitData(id, "夹具" + id, race, unitClass, 1,
-                new BaseStats(100, 10, 5, 1f, 1, 1f, 0, 100, 0), 1.8f,
+                new BaseStats(100, 10, 5, 1f, 1, 1f, 0, 100, 0, 20, 150), 1.8f,
                 TargetPriority.NEAREST, null, "skill_warcry", false);
     }
 
@@ -247,5 +247,85 @@ class SynergySystemTest {
 
         assertThat(SYSTEM.resolve(new ArrayList<UnitData>(), data(), amp))
                 .isSameAs(SynergySnapshot.EMPTY);
+    }
+
+    // —— v5 批0：D10 敌方档位截断（countCap） + 机制第三通道路由 ——
+
+    private static GameData mechanicData() {
+        Map<String, SynergyData> synergies = new LinkedHashMap<String, SynergyData>();
+        synergies.put("syn_mech", new SynergyData("syn_mech", "兽人", SynergySource.RACE, "兽人",
+                Arrays.asList(
+                        threshold(2, mechanic(com.voidvvv.kz_auto_chess_n.data.SynergyMechanic.DEATH_TAX, 4f, 20f)),
+                        threshold(6, mechanic(com.voidvvv.kz_auto_chess_n.data.SynergyMechanic.OPENING_ENERGY, 50f, null),
+                                mechanic(com.voidvvv.kz_auto_chess_n.data.SynergyMechanic.AFTER_CAST_ENERGY, 20f, null),
+                                stat(StatKey.HP, EffectOp.ADD, 100f)))));
+        return new GameData(new LinkedHashMap<String, UnitData>(), new LinkedHashMap<String, com.voidvvv.kz_auto_chess_n.data.SkillData>(),
+                synergies, new LinkedHashMap<String, com.voidvvv.kz_auto_chess_n.data.SceneData>(),
+                new ArrayList<String>());
+    }
+
+    private static EffectData mechanic(com.voidvvv.kz_auto_chess_n.data.SynergyMechanic kind,
+                                       Float value, Float value2) {
+        return new EffectData(null, null, kind, null, value, value2, null, null,
+                EffectTarget.ALLIES, null);
+    }
+
+    @Test
+    @DisplayName("D10 截断：count 7 + cap 2 → (2) 档；cap 0 → EMPTY；cap 6 → (6) 档")
+    void countCapTruncatesTier() {
+        List<UnitData> seven = new ArrayList<UnitData>();
+        for (int i = 0; i < 7; i++) {
+            seven.add(unit("c" + i, "兽人", "游侠"));
+        }
+        // 夹具 data()：兽人 (2)=hp+150、(6)=SHIELD+ls20 → cap 2 生效 (2) 档
+        SynergySnapshot cappedTwo = SYSTEM.resolve(seven, data(),
+                new java.util.LinkedHashMap<String, Float>(), 2);
+        assertThat(cappedTwo.getActives()).hasSize(1);
+        assertThat(cappedTwo.getActives().get(0).getThresholdCount()).isEqualTo(2);
+        assertThat(cappedTwo.modifiers().addOf(StatKey.HP)).isEqualTo(150f);
+        assertThat(cappedTwo.getOpeningEffects()).isEmpty(); // (6) 档开局盾被截断
+
+        SynergySnapshot cappedZero = SYSTEM.resolve(seven, data(),
+                new java.util.LinkedHashMap<String, Float>(), 0);
+        assertThat(cappedZero).isSameAs(SynergySnapshot.EMPTY); // r1~5 敌方无羁绊效果
+
+        SynergySnapshot cappedSix = SYSTEM.resolve(seven, data(),
+                new java.util.LinkedHashMap<String, Float>(), 6);
+        assertThat(cappedSix.getActives().get(0).getThresholdCount()).isEqualTo(6); // 等效不截断
+    }
+
+    @Test
+    @DisplayName("机制通道路由（CP22）：OPENING_ENERGY 并入 openingEffects、AFTER_CAST_ENERGY 留 mechanics；stat 不进")
+    void mechanicChannelRoutesToMechanics() {
+        List<UnitData> six = new ArrayList<UnitData>();
+        for (int i = 0; i < 6; i++) {
+            six.add(unit("m" + i, "兽人", "游侠"));
+        }
+        SynergySnapshot snapshot = SYSTEM.resolve(six, mechanicData());
+        assertThat(snapshot.getMechanics()).hasSize(1);
+        assertThat(snapshot.getMechanics().get(0).getMechanic())
+                .isEqualTo(com.voidvvv.kz_auto_chess_n.data.SynergyMechanic.AFTER_CAST_ENERGY);
+        assertThat(snapshot.getMechanics().get(0).getValue()).isEqualTo(20f);
+        assertThat(snapshot.getOpeningEffects()).hasSize(1); // OPENING_ENERGY 并入开局通道（CP22）
+        assertThat(snapshot.getOpeningEffects().get(0).getMechanic())
+                .isEqualTo(com.voidvvv.kz_auto_chess_n.data.SynergyMechanic.OPENING_ENERGY);
+        assertThat(snapshot.getOpeningEffects().get(0).getValue()).isEqualTo(50f);
+        assertThat(snapshot.modifiers().addOf(StatKey.HP)).isEqualTo(100f); // stat 通道照常
+        assertThat(SynergySnapshot.EMPTY.getMechanics()).isEmpty(); // EMPTY 空机制
+    }
+
+    @Test
+    @DisplayName("synergyAmp 不放大机制词数值（R6：stat/effect 照常放大）")
+    void ampDoesNotScaleMechanics() {
+        java.util.Map<String, Float> amp = new java.util.LinkedHashMap<String, Float>();
+        amp.put("syn_mech", 0.25f);
+        List<UnitData> two = new ArrayList<UnitData>();
+        for (int i = 0; i < 2; i++) {
+            two.add(unit("a" + i, "兽人", "游侠"));
+        }
+        SynergySnapshot snapshot = SYSTEM.resolve(two, mechanicData(), amp);
+        assertThat(snapshot.getMechanics()).hasSize(1);
+        assertThat(snapshot.getMechanics().get(0).getValue()).isEqualTo(4f);   // DEATH_TAX value 原值
+        assertThat(snapshot.getMechanics().get(0).getValue2()).isEqualTo(20f); // value2 原值
     }
 }

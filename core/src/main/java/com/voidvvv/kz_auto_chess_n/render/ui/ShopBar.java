@@ -2,6 +2,7 @@ package com.voidvvv.kz_auto_chess_n.render.ui;
 
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.Batch;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.Group;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
@@ -17,6 +18,7 @@ import com.voidvvv.kz_auto_chess_n.data.UnitData;
 import com.voidvvv.kz_auto_chess_n.entities.Unit;
 import com.voidvvv.kz_auto_chess_n.render.Assets;
 import com.voidvvv.kz_auto_chess_n.render.PlaceholderKeys;
+import com.voidvvv.kz_auto_chess_n.render.StarColors;
 
 import java.util.Objects;
 import java.util.function.Supplier;
@@ -158,27 +160,38 @@ public final class ShopBar extends Group {
             Color old = batch.getColor();
             batch.setColor(can ? 0.3f : 0.18f, can ? 0.32f : 0.18f, can ? 0.38f : 0.2f, parentAlpha);
             batch.draw(assets.region(PlaceholderKeys.PANEL_9SLICE), getX(), getY(), getWidth(), getHeight());
+            // 原创头像优先（32×32；缺素材回退单位帧 + 1★ 骨白 tint 旧口径）
+            TextureRegion face = assets.regionOrNull("portrait_" + template.getId());
+            if (face != null) {
+                batch.setColor(1f, 1f, 1f, parentAlpha);
+                batch.draw(face, getX() + 4f, getY() + 18f, 32f, 32f);
+            } else {
+                Color star = StarColors.of(1); // 商店预览恒 1★（骨白，CP11）
+                batch.setColor(star.r, star.g, star.b, parentAlpha);
+                batch.draw(assets.region(PlaceholderKeys.unitFrame(template.getId(), PlaceholderKeys.ANIM_IDLE, 0)),
+                        getX() + 4f, getY() + 18f, 32f, 32f);
+            }
             batch.setColor(old);
-            batch.draw(assets.region(PlaceholderKeys.unitFrame(template.getId(), PlaceholderKeys.ANIM_IDLE, 0)),
-                    getX() + 4f, getY() + 18f, 32f, 32f);
-            assets.font().draw(batch, template.getCost() + "金", getX() + 44f, getY() + 44f);
-            assets.font().draw(batch, template.getName(), getX() + 6f, getY() + 12f);
+            assets.uiFont().draw(batch, template.getCost() + "金", getX() + 44f, getY() + 44f);
+            assets.uiFont().draw(batch, template.getName(), getX() + 6f, getY() + 13f);
         }
     }
 
-    /** 矩形动作按钮（刷新/买经验共用壳） */
+    /** 矩形动作按钮（刷新/买经验共用壳；原创四态按钮壳） */
     private abstract class ActionButton extends Actor {
         private String text;
+        private final ClickListener listener;
 
         ActionButton(String text) {
             this.text = text;
             setSize(80f, 36f);
-            addListener(new ClickListener() {
+            this.listener = new ClickListener() {
                 @Override
                 public void clicked(InputEvent event, float x, float y) {
                     onClicked();
                 }
-            });
+            };
+            addListener(listener);
         }
 
         protected abstract void onClicked();
@@ -190,11 +203,10 @@ public final class ShopBar extends Group {
 
         @Override
         public void draw(Batch batch, float parentAlpha) {
-            Color old = batch.getColor();
-            batch.setColor(0.32f, 0.36f, 0.3f, parentAlpha);
-            batch.draw(assets.region(PlaceholderKeys.PANEL_9SLICE), getX(), getY(), getWidth(), getHeight());
-            batch.setColor(old);
-            assets.font().draw(batch, text, getX() + 16f, getY() + 22f); // 中文化后文案变窄：8 → 16 视觉居中（§5.3-7）
+            com.voidvvv.kz_auto_chess_n.render.ButtonArt.drawShell(batch, assets, listener,
+                    getX(), getY(), getWidth(), getHeight(), parentAlpha, false);
+            assets.uiFont().draw(batch, text, getX(), getY() + 22f, getWidth(),
+                    com.badlogic.gdx.utils.Align.center, false); // 居中（§5.3-7）
         }
     }
 }

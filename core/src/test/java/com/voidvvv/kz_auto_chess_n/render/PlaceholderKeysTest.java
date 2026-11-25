@@ -18,6 +18,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class PlaceholderKeysTest {
 
+    private static SkillData meleeSkill() {
+        return BattleTestFixtures.skill("sk_melee", SkillShape.SINGLE_TARGET,
+                Delivery.MELEE_INSTANT, BattleTestFixtures.effect(SkillEffectType.DAMAGE, 2f, null, null));
+    }
+
     @Test
     @DisplayName("单位帧命名：{unitId}_{anim}_{frame}")
     void unitFrameNaming() {
@@ -49,14 +54,13 @@ class PlaceholderKeysTest {
     }
 
     @Test
-    @DisplayName("enumerateFor 覆盖全部 unitId×5 动画×帧数 + skillId×2 + StatusType×1 + 通用件")
+    @DisplayName("enumerateFor 覆盖全部 unitId×5 动画×帧数 + skillId×2 + StatusType×1 + 通用件 + UI 框架件")
     void enumerateForCoversEverything() {
-        SkillData skill = BattleTestFixtures.skill("sk_melee", SkillShape.SINGLE_TARGET,
-                Delivery.MELEE_INSTANT, BattleTestFixtures.effect(SkillEffectType.DAMAGE, 2f, null, null));
-        GameData data = BattleTestFixtures.microData(skill);
+        GameData data = BattleTestFixtures.microData(meleeSkill());
         List<String> keys = PlaceholderKeys.enumerateFor(data);
-        // 单位帧：microData 无单位 → 0；技能 2（起手+落点）；状态 9；数字 10；通用件 4
+        // 单位帧：microData 无单位 → 0；技能 2（起手+落点）；亡语弹通用 1；状态 10；数字 10；通用件 4；UI 框架件 26（含按钮态 6）
         assertThat(keys).contains("fx_sk_melee", "fx_sk_melee_burst");
+        assertThat(keys).contains("fx_deathrattle_projectile_burst"); // 亡语合成 id（2026-11-21 回归补）
         assertThat(keys).contains("fx_status_shield", "fx_status_stun");
         assertThat(keys).contains("fx_digit_0", "fx_digit_9");
         assertThat(keys).contains("fx_cast_default", "fx_hit_default", "ui_panel_9slice", "fx_white");
@@ -74,15 +78,28 @@ class PlaceholderKeysTest {
                 "unit_x_attack_0", "unit_x_attack_1", "unit_x_attack_2",
                 "unit_x_cast_0", "unit_x_cast_1",
                 "unit_x_death_0", "unit_x_death_1", "unit_x_death_2");
-        assertThat(full).hasSize(12 + 2 + 9 + 10 + 4);
+        // 状态 fx 10（v5 增 BURN）+ 亡语弹通用 1（回归补）+ UI 框架件 26（必需 12 + 加分 8 + 按钮态 6——第二阶段）
+        assertThat(full).hasSize(12 + 2 + 1 + 10 + 10 + 4 + 26);
     }
 
     @Test
-    @DisplayName("enumerateFor 无重复 key")
+    @DisplayName("enumerateFor 覆盖全部 UI 框架键（UI 抽屉化批0）：必需 12 + 加分 8 逐键在列——占位必存在、与旧通用件键不碰撞")
+    void enumerateForCoversAllUiKeys() {
+        List<String> keys = PlaceholderKeys.enumerateFor(BattleTestFixtures.microData(meleeSkill()));
+        for (UiKeys.Entry entry : UiKeys.ALL) {
+            assertThat(keys)
+                    .as("UI 键 %s 必须在枚举内（PlaceholderArt.verifyCoverage 逐键强制生成占位）", entry.id())
+                    .contains(entry.id());
+        }
+        assertThat(UiKeys.find(PlaceholderKeys.PANEL_9SLICE))
+                .as("旧通用件 ui_panel_9slice 仍是独立键（既有面板在用），不属于新 UI 素材键集").isNull();
+        assertThat(keys).contains(PlaceholderKeys.PANEL_9SLICE); // 旧通用件 4 键照旧在列
+    }
+
+    @Test
+    @DisplayName("enumerateFor 无重复 key（含 UI 框架件：与单位帧/技能/通用件命名空间互不碰撞）")
     void enumerateForNoDuplicates() {
-        SkillData skill = BattleTestFixtures.skill("sk_melee", SkillShape.SINGLE_TARGET,
-                Delivery.MELEE_INSTANT, BattleTestFixtures.effect(SkillEffectType.DAMAGE, 2f, null, null));
-        List<String> keys = PlaceholderKeys.enumerateFor(BattleTestFixtures.microData(skill));
+        List<String> keys = PlaceholderKeys.enumerateFor(BattleTestFixtures.microData(meleeSkill()));
         assertThat(keys).hasSize((int) keys.stream().distinct().count());
     }
 }

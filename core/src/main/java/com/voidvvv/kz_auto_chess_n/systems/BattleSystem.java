@@ -2,10 +2,12 @@ package com.voidvvv.kz_auto_chess_n.systems;
 
 import com.voidvvv.kz_auto_chess_n.config.GameBalance;
 import com.voidvvv.kz_auto_chess_n.data.EffectData;
+import com.voidvvv.kz_auto_chess_n.data.EffectTarget;
 import com.voidvvv.kz_auto_chess_n.data.EquipmentPassive;
 import com.voidvvv.kz_auto_chess_n.data.GameData;
 import com.voidvvv.kz_auto_chess_n.data.StatKey;
 import com.voidvvv.kz_auto_chess_n.data.StatusType;
+import com.voidvvv.kz_auto_chess_n.data.SynergyMechanic;
 import com.voidvvv.kz_auto_chess_n.data.UnitData;
 import com.voidvvv.kz_auto_chess_n.entities.BattleOutcome;
 import com.voidvvv.kz_auto_chess_n.entities.BattleState;
@@ -45,14 +47,18 @@ public final class BattleSystem {
     private final StatusSystem statusSystem;
     private final SkillExecutor skillExecutor;
     private final ProjectileSystem projectileSystem;
+    private final DeathSystem deathSystem;
+    private final TimedTriggerSystem timedTriggerSystem = new TimedTriggerSystem();
     /** 就地施放嵌套深度（口径 #19，单线程逻辑步内安全） */
     private int castDepth;
 
     public BattleSystem() {
         this.damagePipeline = new DamagePipeline(this::tryCastInline);
         this.statusSystem = new StatusSystem(damagePipeline);
+        damagePipeline.bindStatusSystem(statusSystem); // CP25：普攻附带状态经 StatusSystem（组装期一次性绑定）
         this.skillExecutor = new SkillExecutor(damagePipeline, statusSystem);
         this.projectileSystem = new ProjectileSystem(damagePipeline, skillExecutor);
+        this.deathSystem = new DeathSystem(targeting, damagePipeline, statusSystem);
     }
 
     /**
@@ -68,11 +74,22 @@ public final class BattleSystem {
     /**
      * 开战（带局外修正，Phase 6）：玩家侧羁绊结算吃增幅（「荆语」——CP10）；玩家侧派生
      * 修正源列表追加 RunModifiers（「战歌」全队回能 ADD 百分点，走 DamagePipeline 现成
-     * 管线——裁决 D13）；敌方侧恒不注入。
+     * 管线——裁决 D13）；敌方侧恒不注入。旧重载委托 round=TOTAL_ROUNDS（cap=6，对
+     * count≤6 阵容等效不截断——R7）。
      */
     public BattleState startBattle(Player player, List<WaveSpec> enemyWave,
                                    GameData data, RandomGenerator rng, IdIssuer idIssuer,
                                    RunModifiers modifiers) {
+        return startBattle(player, enemyWave, data, rng, idIssuer, modifiers, GameBalance.TOTAL_ROUNDS);
+    }
+
+    /**
+     * 开战（全参，v5 D10）：敌方羁绊档位按轮次截断（r1~5 无 / r6~12 ≤2 / r13~19 ≤4 / r20+ ≤6，
+     * {@link GameBalance#enemySynergyCountCap}）；玩家侧不截断。
+     */
+    public BattleState startBattle(Player player, List<WaveSpec> enemyWave,
+                                   GameData data, RandomGenerator rng, IdIssuer idIssuer,
+                                   RunModifiers modifiers, int round) {
         Objects.requireNonNull(player, "player 不能为 null");
         Objects.requireNonNull(enemyWave, "enemyWave 不能为 null");
         Objects.requireNonNull(data, "data 不能为 null");
@@ -87,7 +104,9 @@ public final class BattleSystem {
         for (WaveSpec spec : enemyWave) {
             enemyTemplates.add(spec.getTemplate());
         }
-        SynergySnapshot enemySynergies = synergySystem.resolve(enemyTemplates, data);
+        SynergySnapshot enemySynergies = synergySystem.resolve(enemyTemplates, data,
+                java.util.Collections.<String, Float>emptyMap(),
+                GameBalance.enemySynergyCountCap(round));
 
         List<BattleUnit> units = new ArrayList<BattleUnit>();
         List<Unit> rosterDeployed = player.getDeployedUnits(); // 与下方扫描同序（y↑x↑，口径 #16）
@@ -118,6 +137,8 @@ public final class BattleSystem {
         applyEquipmentPassives(state, rosterDeployed); // 装备被动（龙心类）：索引对齐玩家侧前 N 个 BattleUnit
         applyOpeningEffects(state, playerSynergies, Side.PLAYER);
         applyOpeningEffects(state, enemySynergies, Side.ENEMY);
+        timedTriggerSystem.scheduleFrom(state, playerSynergies, Side.PLAYER); // 定时触发器调度（CP23 K7）
+        timedTriggerSystem.scheduleFrom(state, enemySynergies, Side.ENEMY);
         targeting.retargetAll(state); // 按 id 序初始索敌
         state.beginIntroCountdown(GameBalance.BATTLE_INTRO_TRANSITION_SECONDS); // 开战转场 0.6s（battle §二清场入阵）
         return state;
@@ -138,6 +159,7 @@ public final class BattleSystem {
         if (state.getTick() % ticksOf(GameBalance.RETARGET_INTERVAL) == 0) {
             targeting.retargetAll(state); // 每 2s（120 tick）全局强制重评估
         }
+        timedTriggerSystem.advance(state); // 定时触发器到期执行（CP23 K7：确定性时间点）
 
         // ① 状态推进（DOT/REGEN 心跳 · 时长递减 · 到期移除）
         statusSystem.tickStatuses(state, GameBalance.LOGIC_STEP);
@@ -149,6 +171,8 @@ public final class BattleSystem {
         for (BattleUnit unit : state.getUnits()) {
             if (!unit.isCleaned()) {
                 unit.advanceTimers(GameBalance.LOGIC_STEP); // 恒累计（口径 #4）
+                unit.advanceDownedTimer(GameBalance.LOGIC_STEP); // C7 ⑤：倒地计时（非倒地空操作）
+                UndyingRule.tryRevive(state, unit);
             }
         }
         for (BattleUnit unit : state.getUnits()) {
@@ -157,19 +181,8 @@ public final class BattleSystem {
             }
         }
 
-        // ④ 死亡清扫（H 语义：本 tick 内 HP≤0 者统一于此清除）
-        List<Integer> deadIds = new ArrayList<Integer>();
-        for (BattleUnit unit : state.getUnits()) {
-            if (!unit.isCleaned() && unit.getCurrentHp() <= 0f) {
-                unit.markCleaned();
-                state.removeFromGrid(unit);
-                state.record(CombatEvent.unitDied(state.getTick(), unit.getId()));
-                deadIds.add(unit.getId());
-            }
-        }
-        for (int deadId : deadIds) {
-            targeting.retargetOnDeath(state, deadId); // 清扫后立即重选（battle §三）
-        }
+        // ④ 死亡清扫（两遍式级联，C2/C9——battle §二 H 语义不变，收敛后才进 ⑤）
+        deathSystem.sweep(state);
 
         // ⑤ 胜负判定（口径 #15：玩家全灭从严 → 敌方全灭 → 超时）
         if (state.aliveCount(Side.PLAYER) == 0) {
@@ -199,6 +212,13 @@ public final class BattleSystem {
         if (unit.hasControl()) {
             return; // 被控制 → 跳过
         }
+        unit.clearExpiredTaunt(state.getTick()); // 嘲讽到期自动出豁免（K7）
+        if (unit.isTaunted(state.getTick())) {
+            BattleUnit banner = state.getUnitById(unit.getTauntTargetId());
+            if (banner == null || !banner.isActable()) {
+                unit.clearTaunt(); // 旗手失效（清扫/倒地）→ 解除嘲讽走常规重选（K7）
+            }
+        }
         BattleUnit target = currentTarget(state, unit);
         if (target == null) {
             target = targeting.findTarget(state, unit); // 目标失效 → 重选
@@ -216,15 +236,25 @@ public final class BattleSystem {
             if (!unit.canActOnAttackTimer()) {
                 return; // 射程内 → 出手（冷却未到则等待）
             }
-            boolean crit = state.getRng().nextFloat() < GameBalance.CRIT_CHANCE;
+            boolean rolled = state.getRng().nextFloat()
+                    < unit.getEffective(StatKey.CRIT_CHANCE) / 100f; // roll 照常消耗（RNG 序不变，K10）
+            unit.getCombatCounters().addBasicAttack(); // 三连装填计数（近战/发射同点，CP27）
+            float critBonusPp = 0f;
+            boolean crit = rolled;
+            EffectData rhythm = unit.getMechanic(SynergyMechanic.CRIT_RHYTHM);
+            if (rhythm != null && rhythm.getValue() > 0f
+                    && unit.getCombatCounters().getBasicAttackCount() % (int) rhythm.getValue() == 0) {
+                crit = true; // 必暴：覆写结果、不增消耗（K10）
+                critBonusPp = rhythm.getValue2() == null ? 0f : rhythm.getValue2(); // 暴伤 +value2 pp（仅必暴刀）
+            }
             state.record(CombatEvent.attackLaunched(state.getTick(), unit.getId(), target.getId()));
             if (unit.getEffective(StatKey.RANGE) >= 2f) {
                 state.spawnProjectile(new Projectile(unit.getId(), target.getId(),
                         unit.getGridX() + 0.5f, unit.getGridY() + 0.5f,
-                        unit.getEffective(StatKey.ATTACK), crit, null, 1f)); // 口径 #12：远程普攻 = HOMING 锁定弹
+                        unit.getEffective(StatKey.ATTACK), crit, critBonusPp, null, 1f, false)); // 口径 #12
             } else {
                 damagePipeline.applyDirectHit(state, unit, target,
-                        unit.getEffective(StatKey.ATTACK), 1f, crit, true, null); // 近战即时结算
+                        unit.getEffective(StatKey.ATTACK), 1f, crit, critBonusPp, true, null, 0f); // 近战即时结算
             }
             unit.consumeAttackTimer();
             return;
@@ -252,8 +282,8 @@ public final class BattleSystem {
             return null;
         }
         BattleUnit target = state.getUnitById(unit.getTargetId());
-        if (target == null || target.isCleaned() || target.getSide() == unit.getSide()) {
-            return null;
+        if (target == null || !target.isActable() || target.getSide() == unit.getSide()) {
+            return null; // isActable = 未清扫且非倒地（C7 ③过滤点一）
         }
         return target;
     }
@@ -271,7 +301,24 @@ public final class BattleSystem {
         BattleUnit unit = new BattleUnit(id, template, star, side,
                 data.getSkill(template.getSkillId()), baseStats); // 加载校验保证技能存在
         unit.setPosition(x, y);
+        List<EffectData> granted = new ArrayList<EffectData>();
+        for (EffectData effect : synergies.getMechanics()) {
+            if (effectAppliesTo(effect, unit)) {
+                granted.add(effect);
+            }
+        }
+        unit.setMechanics(granted); // framework-internal 写一次（ALLIES 全量 / TRAITS+trait 匹配 race 或 class）
         return unit;
+    }
+
+    /** target 谓词（K1）：ALLIES=该侧全体；TRAITS=race 或 class 命中 trait */
+    private static boolean effectAppliesTo(EffectData effect, BattleUnit unit) {
+        if (effect.getTarget() != EffectTarget.TRAITS) {
+            return true;
+        }
+        String trait = effect.getTrait();
+        return trait != null && (trait.equals(unit.getTemplate().getRace())
+                || trait.equals(unit.getTemplate().getUnitClass()));
     }
 
     /** 装备被动落地（data_schema §八：装备入口进 StatusSystem 的第二种形态）。
@@ -290,19 +337,23 @@ public final class BattleSystem {
         }
     }
 
-    /** 开局效果（口径 #17）：effect 通道对"该侧"全部单位落地；本期仅支持 SHIELD */
+    /** 开局效果（口径 #17 扩，CP22）：SHIELD（现状）+ OPENING_ENERGY（走回能加权）；
+     *  target 谓词 ALLIES = 该侧全体 / TRAITS+trait = race 或 class 命中者 */
     private void applyOpeningEffects(BattleState state, SynergySnapshot snapshot, Side side) {
         for (EffectData effect : snapshot.getOpeningEffects()) {
-            if (effect.getEffect() != StatusType.SHIELD) {
-                throw new IllegalStateException("本期 effect 通道仅支持 SHIELD，遇到: " + effect.getEffect());
-            }
             for (BattleUnit unit : state.getUnits()) {
-                if (unit.getSide() != side) {
+                if (unit.getSide() != side || !effectAppliesTo(effect, unit)) {
                     continue;
                 }
-                statusSystem.apply(state, unit, StatusType.SHIELD,
-                        unit.getEffective(StatKey.HP) * effect.getValue(),
-                        Float.POSITIVE_INFINITY, -1);
+                if (effect.getEffect() == StatusType.SHIELD) {
+                    statusSystem.apply(state, unit, StatusType.SHIELD,
+                            unit.getEffective(StatKey.HP) * effect.getValue(),
+                            Float.POSITIVE_INFINITY, -1);
+                } else if (effect.getMechanic() == SynergyMechanic.OPENING_ENERGY) {
+                    damagePipeline.gainEnergy(state, unit, effect.getValue()); // 群星响应开局能量
+                } else {
+                    throw new IllegalStateException("开局通道不支持的效果: " + effect);
+                }
             }
         }
     }

@@ -28,6 +28,8 @@ public final class FxLayer {
         float y;
         float elapsed;
         boolean active;
+        /** 绘制色调（null = 原色——品质改造 §1.1：两题敌方 CAST 用敌方琥珀） */
+        com.badlogic.gdx.graphics.Color tint;
     }
 
     private final Assets assets;
@@ -43,28 +45,37 @@ public final class FxLayer {
         this.assets = assets;
     }
 
-    /** 起手闪光：单位锚点 fx_{skillId}（无技能图则 cast 兜底） */
+    /** 起手闪光：单位锚点 fx_{skillId}（无技能图则 cast 兜底）；FX 软路径——缺键降级不崩局 */
     public void sparkCast(String skillId, float x, float y) {
-        TextureRegion region = assets.region(skillId != null
-                ? PlaceholderKeys.skillFx(skillId) : PlaceholderKeys.CAST_DEFAULT);
-        spark(region, x, y);
+        sparkCast(skillId, x, y, null);
     }
 
-    /** 落点闪光：区域锚点 fx_{skillId}_burst（普攻/治疗无技能图用 hit 兜底） */
+    /** 起手闪光（带色调，品质改造 §1.1：两题关键敌方 CAST 用敌方琥珀色；tint null = 原色） */
+    public void sparkCast(String skillId, float x, float y, com.badlogic.gdx.graphics.Color tint) {
+        TextureRegion region = assets.regionFx(skillId != null
+                ? PlaceholderKeys.skillFx(skillId) : PlaceholderKeys.CAST_DEFAULT);
+        Spark s = spark(region, x, y);
+        s.tint = tint;
+    }
+
+    /** 落点闪光：区域锚点 fx_{skillId}_burst（普攻/治疗无技能图用 hit 兜底；含亡语合成 id——
+     *  键集由 FxKeyCoverageTest 锁定，漏网走 regionFx 软降级）；FX 软路径不崩局 */
     public void sparkBurst(String skillId, float x, float y) {
-        TextureRegion region = assets.region(skillId != null
+        TextureRegion region = assets.regionFx(skillId != null
                 ? PlaceholderKeys.skillFxBurst(skillId) : PlaceholderKeys.HIT_DEFAULT);
         spark(region, x, y);
     }
 
-    private void spark(TextureRegion region, float x, float y) {
+    private Spark spark(TextureRegion region, float x, float y) {
         Spark s = pool.obtain();
         s.region = region;
         s.x = x;
         s.y = y;
         s.elapsed = 0f;
         s.active = true;
+        s.tint = null;
         active.add(s);
+        return s;
     }
 
     /** 推进并绘制：一次性闪光淡出 + 每单位状态色点 */
@@ -82,7 +93,11 @@ public final class FxLayer {
             Spark s = active.get(i);
             float t = s.elapsed / SPARK_LIFETIME;
             float scale = 0.8f + 0.5f * t; // 轻微扩张（无旋转）
-            batch.setColor(1f, 1f, 1f, 1f - t);
+            if (s.tint != null) {
+                batch.setColor(s.tint.r, s.tint.g, s.tint.b, 1f - t);
+            } else {
+                batch.setColor(1f, 1f, 1f, 1f - t);
+            }
             batch.draw(s.region, s.x - s.region.getRegionWidth() * scale / 2f,
                     s.y - s.region.getRegionHeight() * scale / 2f,
                     s.region.getRegionWidth() * scale, s.region.getRegionHeight() * scale);
@@ -105,7 +120,7 @@ public final class FxLayer {
             int cy = BoardGeometry.cellCenterY(unit.getGridY());
             int count = Math.min(MAX_STATUS_DOTS, statuses.size());
             for (int i = 0; i < count; i++) {
-                TextureRegion dot = assets.region(PlaceholderKeys.statusFx(statuses.get(i).getType()));
+                TextureRegion dot = assets.regionFx(PlaceholderKeys.statusFx(statuses.get(i).getType()));
                 batch.draw(dot, cx - count * 5f + i * 10f, cy + 22f);
             }
         }

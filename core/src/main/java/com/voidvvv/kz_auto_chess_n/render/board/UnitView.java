@@ -9,19 +9,29 @@ import com.voidvvv.kz_auto_chess_n.entities.Side;
 import com.voidvvv.kz_auto_chess_n.config.GameBalance;
 import com.voidvvv.kz_auto_chess_n.render.Assets;
 import com.voidvvv.kz_auto_chess_n.render.PlaceholderKeys;
+import com.voidvvv.kz_auto_chess_n.render.StarColors;
 
 /**
  * 单位视图（render §六铁律 3：生命周期 = BattleState——rebuild 整体重建、clear 整体销毁）。
  *
  * <p>持 BattleUnit 只读引用（铁律 1：只调读方法）；跳格插值走 LerpMotion（render §4.2）、
- * 动画 FSM 走 UnitAnimState（§5.1）。血条/能量条 = 1×1 白 region tint（口径 #19）；
- * 星级 = 脚下 1~3 个 2px 色点；死亡 = 缩放淡出 0.5s（口径 #13，像素规则例外）。
+ * 动画 FSM 走 UnitAnimState（§5.1）。品质改造 §1.3：棋体 38px 正方（横向居中、底边 cy−16 锚点，
+ * 外接框较 32px 格约大 19%）、脚下 18×4 影子、全格色框换底角标（SideColors.drawCornerMark）、
+ * 血条 24×3 / 能量与充能 1px 条按 §1.3 基线；死亡缩放比例不变、自锚点向上收缩。
  */
 public final class UnitView {
-    private static final Color BAR_RED = new Color(0.75f, 0.15f, 0.15f, 1f);
-    private static final Color BAR_GREEN = new Color(0.2f, 0.8f, 0.25f, 1f);
-    private static final Color BAR_YELLOW = new Color(0.95f, 0.85f, 0.2f, 1f);
-    private static final Color BAR_DARK = new Color(0.12f, 0.12f, 0.15f, 1f); // 蓄力条底槽（render §5.6，待调）
+    /** 血条底（#121820） */
+    private static final Color BAR_TRACK = new Color(0.071f, 0.094f, 0.125f, 1f);
+    /** 血量（#8DDA9A） */
+    private static final Color BAR_HP_FILL = new Color(0.553f, 0.855f, 0.604f, 1f);
+    /** 能量条（#7CAEDC α0.75） */
+    private static final Color BAR_ENERGY = new Color(0.486f, 0.682f, 0.863f, 0.75f);
+    /** 充能条（白 α0.42——§1.3 未单列色，沿白系） */
+    private static final Color BAR_CHARGE = new Color(1f, 1f, 1f, 0.42f);
+    /** 脚下影子（#080E12）——包级共享（BattleRenderer 备战棋体同源，§1.3） */
+    static final Color UNIT_SHADOW = new Color(0.031f, 0.055f, 0.071f, 1f);
+    /** 影子透明度（§1.3：己方 1.00；战斗期两侧同值，备战敌影 0.78 在 BattleRenderer） */
+    private static final float SHADOW_ALPHA = 1f;
     private static final Color STAR_GOLD = new Color(1f, 0.85f, 0.3f, 1f);
     private static final Color WHITE = new Color(Color.WHITE);
 
@@ -89,15 +99,25 @@ public final class UnitView {
         int cx = virtualX(renderClock);
         int cy = virtualY(renderClock);
         float alpha = 1f - fade;
-        float size = BoardGeometry.CELL * (1f - 0.4f * fade); // 死亡缩放（例外允许）
+        if (unit.isDowned()) {
+            alpha *= 0.55f; // 倒地半透明（C7 表现层：未清扫但不可行动，CP19）
+        }
+        float size = BoardGeometry.UNIT_DRAW_PX * (1f - 0.4f * fade); // 死亡缩放（比例不变，自底锚上收）
 
-        TextureRegion region = assets.region(PlaceholderKeys.unitFrame(
-                unit.getTemplate().getId(), animName(), anim.frameIndex()));
+        drawShadow(batch, cx, cy, alpha); // 脚下影子（棋体之下——§1.3）
+        String frameKey = PlaceholderKeys.unitFrame(
+                unit.getTemplate().getId(), animName(), anim.frameIndex());
+        TextureRegion region = assets.region(frameKey);
         boolean wasFlip = region.isFlipX();
         if (enemy != wasFlip) {
             region.flip(true, false);
         }
-        batch.setColor(1f, 1f, 1f, alpha);
+        if (assets.isGeneratedArt(frameKey)) {
+            batch.setColor(1f, 1f, 1f, alpha); // 原创真彩帧：不做星级 tint（星级由脚下星级点表达）
+        } else {
+            Color star = StarColors.of(unit.getStar());
+            batch.setColor(star.r, star.g, star.b, alpha);
+        }
         drawBody(batch, region, cx, cy, size);
         if (anim.hitFlashRatio() > 0f) { // 受击白闪叠加层（与本体共用同一变换）
             batch.setColor(1f, 1f, 1f, anim.hitFlashRatio() * 0.8f * alpha);
@@ -109,21 +129,31 @@ public final class UnitView {
         }
         if (fade == 0f) {
             drawBars(batch, cx, cy);
-            SideColors.drawBorder(batch, assets.region(PlaceholderKeys.WHITE), cx, cy,
-                    enemy ? SideColors.ENEMY : SideColors.PLAYER); // 敌我色框（P1b，与备战期同语义）
+            SideColors.drawCornerMark(batch, assets.region(PlaceholderKeys.WHITE), cx, cy,
+                    enemy ? SideColors.ENEMY_MARK : SideColors.PLAYER_MARK); // 底角标（§1.3 换全格色框）
         }
     }
 
+    /** 脚下影子（品质改造 §1.3：18×4 #080E12，格内底缘铺开，棋体之下） */
+    private void drawShadow(SpriteBatch batch, int cx, int cy, float alpha) {
+        batch.setColor(UNIT_SHADOW.r, UNIT_SHADOW.g, UNIT_SHADOW.b, SHADOW_ALPHA * alpha);
+        batch.draw(assets.region(PlaceholderKeys.WHITE),
+                cx - BoardGeometry.UNIT_SHADOW_W / 2f,
+                BoardGeometry.unitDrawBottom(cy),
+                BoardGeometry.UNIT_SHADOW_W, BoardGeometry.UNIT_SHADOW_H);
+        batch.setColor(WHITE);
+    }
+
     /**
-     * 本体精灵绘制：先叠加受击抖动水平偏移（整数像素），再叠加攻击摆动
-     * （ROTATE：底部中心为轴小幅旋转——像素规则第三例外，render §八#3；
+     * 本体精灵绘制（品质改造 §1.3：38px 正方、横向居中、底边 cy−16 锚点）：先叠加受击抖动水平偏移
+     * （整数像素），再叠加攻击摆动（ROTATE：底部中心为轴小幅旋转——像素规则第三例外，render §八#3；
      * TRANSLATE：沿朝向整数像素平移探身）。白闪层复用同一变换（attack_feedback FP1/FP2）。
      * 摆动以单位自身朝向为正：y 向上坐标系正角 = 逆时针，玩家单位（朝右）前倾 = 负角，
      * 敌方经 flipX 镜像后取反（左右观感对称，不取攻击目标方位）。
      */
     private void drawBody(SpriteBatch batch, TextureRegion region, int cx, int cy, float size) {
         float x = cx + anim.hitShakeDx() - size / 2f;
-        float y = cy - size / 2f;
+        float y = BoardGeometry.unitDrawBottom(cy);
         if (UnitAnimState.ATTACK_SWING_MODE == UnitAnimState.AttackSwingMode.TRANSLATE) {
             int swingDx = anim.attackSwingDx() * (enemy ? -1 : 1); // 沿朝向前倾（敌方前进 = −x）
             batch.draw(region, x + swingDx, y, size, size);
@@ -137,25 +167,28 @@ public final class UnitView {
         batch.draw(region, x, y, size / 2f, 0f, size, size, 1f, 1f, degrees); // 底部中心轴
     }
 
-    // —— 血条（红绿 2px）/ 能量条（黄 1px）/ 攻击蓄力条（白 1px，render §5.6）/ 星级色点（口径 #19） ——
+    // —— 血条（24×3，基线 cy+21）/ 能量条（1px，cy+25）/ 充能条（1px，cy+27）/ 星级色点（§1.3） ——
 
     private void drawBars(SpriteBatch batch, int cx, int cy) {
         TextureRegion white = assets.region(PlaceholderKeys.WHITE);
-        batch.setColor(BAR_RED);
-        batch.draw(white, cx - 12f, cy + 17f, 24f, 2f);
+        float barX = cx - BoardGeometry.BAR_HP_W / 2f;
+        batch.setColor(BAR_TRACK);
+        batch.draw(white, barX, cy + BoardGeometry.BAR_HP_BASELINE,
+                BoardGeometry.BAR_HP_W, BoardGeometry.BAR_HP_H);
         float hp = Math.max(0f, Math.min(1f, unit.hpRatio()));
-        batch.setColor(BAR_GREEN);
-        batch.draw(white, cx - 12f, cy + 17f, 24f * hp, 2f);
-        batch.setColor(BAR_YELLOW);
-        batch.draw(white, cx - 12f, cy + 19f, 24f * unit.getEnergy() / GameBalance.ENERGY_MAX, 1f);
+        batch.setColor(BAR_HP_FILL);
+        batch.draw(white, barX, cy + BoardGeometry.BAR_HP_BASELINE,
+                BoardGeometry.BAR_HP_W * hp, BoardGeometry.BAR_HP_H);
+        batch.setColor(BAR_ENERGY);
+        batch.draw(white, barX, cy + BoardGeometry.BAR_ENERGY_BASELINE,
+                BoardGeometry.BAR_HP_W * unit.getEnergy() / GameBalance.ENERGY_MAX, 1f);
         // 攻击蓄力条（render §5.6 第四条微条）：轮询 attackTimer/attackInterval、钳制满格（眩晕时满格悬停）；纯表现零事件
         float charge = Math.min(1f, unit.getAttackTimer() / unit.attackInterval());
-        batch.setColor(BAR_DARK);
-        batch.draw(white, cx - 12f, cy + 21f, 24f, 1f);
-        batch.setColor(WHITE);
-        batch.draw(white, cx - 12f, cy + 21f, 24f * charge, 1f);
+        batch.setColor(BAR_CHARGE);
+        batch.draw(white, barX, cy + BoardGeometry.BAR_CHARGE_BASELINE,
+                BoardGeometry.BAR_HP_W * charge, 1f);
         batch.setColor(STAR_GOLD);
-        for (int i = 0; i < unit.getStar(); i++) { // 脚下星级点
+        for (int i = 0; i < unit.getStar(); i++) { // 脚下星级点（§1.3：保留底部点位与原星级色）
             batch.draw(white, cx - (unit.getStar() * 4f - 2f) / 2f + i * 4f, cy - 19f, 2f, 2f);
         }
         batch.setColor(WHITE);

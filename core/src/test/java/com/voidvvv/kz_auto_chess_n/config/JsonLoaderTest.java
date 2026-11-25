@@ -35,10 +35,10 @@ class JsonLoaderTest {
     }
 
     @Test
-    @DisplayName("种子规模：27 棋子（18 可购 + 9 Boss）/ 11 技能 / 8 羁绊 / 3 场景 / 3 英雄（Phase 6 铺量）")
+    @DisplayName("种子规模：33 棋子（24 可购 + 9 Boss）/ 24 技能 / 8 羁绊 / 3 场景 / 3 英雄（v5 §2 全量）")
     void seedCounts() {
-        assertThat(data.getUnits()).hasSize(27);
-        assertThat(data.getSkills()).hasSize(11);
+        assertThat(data.getUnits()).hasSize(33);
+        assertThat(data.getSkills()).hasSize(24);
         assertThat(data.getSynergies()).hasSize(8);
         assertThat(data.getScenes()).hasSize(3);
         assertThat(data.getHeroes()).hasSize(3);
@@ -69,19 +69,23 @@ class JsonLoaderTest {
     }
 
     @Test
-    @DisplayName("可选字段缺省：priority 缺省 NEAREST、百分比三键缺省 0/100/0")
+    @DisplayName("可选字段缺省：priority 缺省 NEAREST、百分比五键缺省 0/100/0/20/150（§五.5 暴击两键）")
     void optionalFieldDefaults() {
-        // 丛林游侠：未写 defaultPriority/specialPriority/upgradeMultiplier 与百分比三键
-        UnitData ranger = data.getUnit("unit_ranger_01");
-        assertThat(ranger.getDefaultPriority().jsonName()).isEqualTo("NEAREST");
-        assertThat(ranger.getSpecialPriority()).isNull();
-        assertThat(ranger.getUpgradeMultiplier()).isEqualTo(1.8f);
-        assertThat(ranger.getBaseStats().getLifesteal()).isEqualTo(0);
-        assertThat(ranger.getBaseStats().getEnergyGainRate()).isEqualTo(100);
-        assertThat(ranger.getBaseStats().getSkillPower()).isEqualTo(0);
+        // 兽猎手：未写 defaultPriority/specialPriority/upgradeMultiplier 与百分比五键
+        UnitData archer = data.getUnit("unit_beast_archer");
+        assertThat(archer.getDefaultPriority().jsonName()).isEqualTo("NEAREST");
+        assertThat(archer.getSpecialPriority()).isNull();
+        assertThat(archer.getUpgradeMultiplier()).isEqualTo(1.8f);
+        assertThat(archer.getBaseStats().getLifesteal()).isEqualTo(0);
+        assertThat(archer.getBaseStats().getEnergyGainRate()).isEqualTo(100);
+        assertThat(archer.getBaseStats().getSkillPower()).isEqualTo(0);
+        assertThat(archer.getBaseStats().getCritChance()).isEqualTo(20);
+        assertThat(archer.getBaseStats().getCritDamage()).isEqualTo(150);
 
-        // 暗夜刺客：specialPriority 覆盖为 BACKLINE
-        assertThat(data.getUnit("unit_assassin_01").getSpecialPriority().jsonName()).isEqualTo("BACKLINE");
+        // 霜峰弃子（v5 改名保 id）：specialPriority 显式 null
+        assertThat(data.getUnit("unit_assassin_01").getSpecialPriority()).isNull();
+        // 暗影之刃：specialPriority 覆盖为 BACKLINE
+        assertThat(data.getUnit("unit_shadow_blade").getSpecialPriority().jsonName()).isEqualTo("BACKLINE");
     }
 
     @Test
@@ -132,11 +136,11 @@ class JsonLoaderTest {
     }
 
     @Test
-    @DisplayName("羁绊档位：8 羁绊 count 升序、(6) 档含 lifesteal stat 通道")
+    @DisplayName("羁绊档位：v5 全量 8 条 × 2/4/6 替换制，stat/effect/mechanic 三通道逐档落位")
     void synergyTiersLoaded() {
         assertThat(data.getSynergies().keySet())
-                .containsExactly("syn_orc", "syn_warrior", "syn_mage", "syn_assassin",
-                        "syn_beast", "syn_ranger", "syn_undead", "syn_giant");
+                .containsExactly("syn_orc", "syn_beast", "syn_undead", "syn_giant",
+                        "syn_warrior", "syn_mage", "syn_assassin", "syn_ranger");
 
         SynergyData warrior = data.getSynergy("syn_warrior");
         assertThat(warrior.getSource().jsonName()).isEqualTo("CLASS");
@@ -144,22 +148,43 @@ class JsonLoaderTest {
         assertThat(warrior.getThresholds()).extracting(SynergyData.Threshold::getCount)
                 .containsExactly(2, 4, 6);
 
-        List<EffectData> tier6 = warrior.getThresholds().get(2).getEffects();
-        assertThat(tier6).hasSize(3);
-        // 第三条为 stat:lifesteal（V1.3 起 effect 通道 LIFESTEAL 写法废弃）
-        assertThat(tier6.get(2).getStat().jsonName()).isEqualTo("lifesteal");
-        assertThat(tier6.get(2).getOp().jsonName()).isEqualTo("ADD");
-        assertThat(tier6.get(2).getValue()).isEqualTo(20f);
+        // 战士 (6) 档：armor stat + WARCRY_TAUNT + SHIELD_WALL（三通道共存）
+        List<EffectData> warriorTier6 = warrior.getThresholds().get(2).getEffects();
+        assertThat(warriorTier6).hasSize(3);
+        assertThat(warriorTier6.get(0).getStat().jsonName()).isEqualTo("armor");
+        assertThat(warriorTier6.get(0).getOp().jsonName()).isEqualTo("ADD");
+        assertThat(warriorTier6.get(0).getValue()).isEqualTo(60f);
+        assertThat(warriorTier6.get(1).getMechanic().jsonName()).isEqualTo("WARCRY_TAUNT");
+        assertThat(warriorTier6.get(1).getTarget().jsonName()).isEqualTo("TRAITS");
+        assertThat(warriorTier6.get(1).getTrait()).isEqualTo("战士");
+        assertThat(warriorTier6.get(2).getMechanic().jsonName()).isEqualTo("SHIELD_WALL");
 
-        // 兽人 (6) 档：effect 通道 SHIELD 0.3
-        EffectData orcShield = data.getSynergy("syn_orc").getThresholds().get(2).getEffects().get(0);
-        assertThat(orcShield.getEffect().jsonName()).isEqualTo("SHIELD");
-        assertThat(orcShield.getValue()).isEqualTo(0.3f);
-        assertThat(orcShield.getStat()).isNull();
+        // 兽人 (6) 档：lifesteal stat + BURN 附带 + SCAR
+        List<EffectData> orcTier6 = data.getSynergy("syn_orc").getThresholds().get(2).getEffects();
+        assertThat(orcTier6).hasSize(3);
+        assertThat(orcTier6.get(0).getStat().jsonName()).isEqualTo("lifesteal");
+        assertThat(orcTier6.get(1).getMechanic().jsonName()).isEqualTo("BASIC_ATTACK_STATUS");
+        assertThat(orcTier6.get(1).getStatus().jsonName()).isEqualTo("BURN");
+        assertThat(orcTier6.get(1).getDuration()).isEqualTo(3f);
+        assertThat(orcTier6.get(2).getMechanic().jsonName()).isEqualTo("SCAR");
+        assertThat(orcTier6.get(2).getValue2()).isEqualTo(6f);
 
-        // Phase 5.1 CP4：synergy 级 desc 手写文案（裁决 2）——主题句落位且六条全非空
+        // 巨人 (6) 档：effect 通道 SHIELD 0.2（开局盾沿用 effect 词汇）
+        List<EffectData> giantTier6 = data.getSynergy("syn_giant").getThresholds().get(2).getEffects();
+        EffectData giantShield = giantTier6.get(giantTier6.size() - 1);
+        assertThat(giantShield.getEffect().jsonName()).isEqualTo("SHIELD");
+        assertThat(giantShield.getValue()).isEqualTo(0.2f);
+        assertThat(giantShield.getStat()).isNull();
+
+        // 游侠 (4) 档：critChance stat 通道（§五.5 属性化兑现）
+        List<EffectData> rangerTier4 = data.getSynergy("syn_ranger").getThresholds().get(1).getEffects();
+        assertThat(rangerTier4).extracting(EffectData::getStat)
+                .extracting(s -> s == null ? null : s.jsonName())
+                .containsExactly("range", "attack", "critChance", "attackSpeed");
+
+        // v5 CP4：synergy 级 desc 手写文案——主题句落位且八条全非空
         assertThat(data.getSynergy("syn_orc").getDesc())
-                .isEqualTo("焰痕部族的雇佣兵，越战越硬的正面铁壁");
+                .isEqualTo("焰痕部族的雇佣兵——每一道疤都是一次结清的账");
         for (SynergyData synergy : data.getSynergies().values()) {
             assertThat(synergy.getDesc()).as("羁绊 %s desc 非空", synergy.getId()).isNotEmpty();
         }
@@ -177,23 +202,27 @@ class JsonLoaderTest {
     }
 
     @Test
-    @DisplayName("软告警：孤儿技能仅 long_snipe（starfall 已被墓穴/雪山 Boss 引用）+ 0 孤儿羁绊 + 风味聚合")
+    @DisplayName("软告警：孤儿技能仅 long_snipe + 0 孤儿羁绊 + 风味聚合仅 Boss 种族/职业")
     void softWarningsOnSeed() {
         List<String> warnings = data.getWarnings();
-        // 孤儿技能：Phase 6 铺量后仅 long_snipe 无单位引用
+        // 孤儿技能：v5 铺量后仅 long_snipe 无单位引用
         assertThat(warnings).anyMatch(w -> w.contains("孤儿技能") && w.contains("skill_long_snipe"));
         assertThat(warnings).noneMatch(w -> w.contains("孤儿技能") && w.contains("skill_starfall"));
         assertThat(warnings).noneMatch(w -> w.contains("孤儿技能") && w.contains("skill_rampage"));
         assertThat(warnings).noneMatch(w -> w.contains("孤儿技能") && w.contains("skill_mass_heal"));
-        assertThat(warnings).noneMatch(w -> w.contains("孤儿技能") && w.contains("skill_poison_cloud"));
         assertThat(warnings).noneMatch(w -> w.contains("孤儿技能") && w.contains("skill_warcry"));
-        // 孤儿羁绊：亡灵/巨人随场景棋子登记后均有可购模板，告警清零
+        assertThat(warnings).noneMatch(w -> w.contains("孤儿技能") && w.contains("skill_ignite"));
+        assertThat(warnings).noneMatch(w -> w.contains("孤儿技能") && w.contains("skill_repossess"));
+        assertThat(warnings).noneMatch(w -> w.contains("孤儿技能") && w.contains("skill_payday"));
+        // 孤儿羁绊：8 条 key 全部有可购模板，告警清零
         assertThat(warnings).noneMatch(w -> w.contains("孤儿羁绊"));
-        // 风味聚合：暗夜/精灵/植物/人类/构造/Boss 一行列出（亡灵/巨人已入羁绊登记脱离风味集合）
-        assertThat(warnings).anyMatch(w -> w.contains("风味") && w.contains("暗夜")
-                && w.contains("精灵") && w.contains("植物") && w.contains("Boss"));
+        // 风味聚合：v5 后仅 Boss 风味（植物/构造/独眼/Boss）残留；四种族/四职业已全登记
+        assertThat(warnings).anyMatch(w -> w.contains("风味") && w.contains("植物")
+                && w.contains("构造") && w.contains("独眼") && w.contains("Boss"));
+        assertThat(warnings).noneMatch(w -> w.contains("风味") && w.contains("兽人"));
         assertThat(warnings).noneMatch(w -> w.contains("风味") && w.contains("亡灵"));
         assertThat(warnings).noneMatch(w -> w.contains("风味") && w.contains("巨人"));
+        assertThat(warnings).noneMatch(w -> w.contains("风味") && w.contains("野兽"));
         // 无 ALL_ENEMIES 非 Boss 引用告警（星陨只被 Boss 引用）
         assertThat(warnings).noneMatch(w -> w.contains("ALL_ENEMIES 被非 Boss"));
     }
@@ -210,16 +239,30 @@ class JsonLoaderTest {
     // —— CP31 铺量断言（units.json 可购模板 3 → 9）——
 
     @Test
-    @DisplayName("铺量模板落位：6 新模板名称/种族/职业/费阶/技能全量映射")
+    @DisplayName("v5 重排模板落位：改名 4 例保 id + 新增 6 例全量映射")
     void bulkTemplatesMapped() {
-        assertBulkTemplate("unit_boar_rider", "野猪骑士", "兽人", "战士", 1, "skill_rampage");
-        assertBulkTemplate("unit_wolf_pup", "狼崽", "野兽", "刺客", 1, "skill_execute");
-        assertBulkTemplate("unit_mage_apprentice", "暗夜学徒", "暗夜", "法师", 1, "skill_poison_cloud");
-        assertBulkTemplate("unit_fairy_druid", "精灵德鲁伊", "精灵", "法师", 2, "skill_mass_heal");
-        assertBulkTemplate("unit_beast_archer", "兽猎手", "野兽", "游侠", 2, "skill_pierce");
-        assertBulkTemplate("unit_shadow_blade", "暗影之刃", "暗夜", "刺客", 3, "skill_execute");
-        // 暗影之刃：3 费刺客切入后排（沿刺客 specialPriority 口径）
+        // v5 §2.2 改名保 id 4 例（unit_mage_apprentice/unit_assassin_01/unit_fairy_druid/unit_legend_warsong_singer）
+        assertBulkTemplate("unit_mage_apprentice", "焰痕祭司", "兽人", "法师", 1, "skill_ignite");
+        assertBulkTemplate("unit_fairy_druid", "荒野德鲁伊", "野兽", "法师", 2, "skill_mass_heal");
+        assertBulkTemplate("unit_legend_warsong_singer", "冰川颂者", "巨人", "法师", 3, "skill_mass_heal");
+        assertBulkTemplate("unit_legend_quartermaster", "王家军需官", "兽人", "法师", 3, "skill_payday");
+        // v5 §4.3 新增 6 例
+        assertBulkTemplate("unit_spear_headhunter", "掷矛猎头者", "兽人", "游侠", 1, "skill_headhunt");
+        assertBulkTemplate("unit_ambush_panther", "伏击豹", "野兽", "刺客", 1, "skill_ambush_pounce");
+        assertBulkTemplate("unit_debt_collector", "收账人", "亡灵", "刺客", 1, "skill_repossess");
+        assertBulkTemplate("unit_lamplighter", "守灯人", "亡灵", "法师", 2, "skill_lamplight");
+        assertBulkTemplate("unit_bowstring_archer", "空弦射手", "亡灵", "游侠", 2, "skill_audit_stamp");
+        assertBulkTemplate("unit_rubble_slinger", "碎石仔", "巨人", "游侠", 1, "skill_rock_toss");
+        // 既有模板重排抽查：暗影之刃改兽人降 2 费、暗夜刺客→霜峰弃子（巨人刺客 2 费）
+        assertBulkTemplate("unit_shadow_blade", "暗影之刃", "兽人", "刺客", 2, "skill_execute");
+        assertBulkTemplate("unit_assassin_01", "霜峰弃子", "巨人", "刺客", 2, "skill_ambush_snow");
+        assertBulkTemplate("unit_ranger_01", "丛林游侠", "野兽", "游侠", 2, "skill_entangle");
+        assertBulkTemplate("unit_death_knight", "死亡骑士", "亡灵", "战士", 3, "skill_banner_charge");
+        // 暗影之刃：切入后排（沿刺客 specialPriority 口径）
         assertThat(data.getUnit("unit_shadow_blade").getSpecialPriority().jsonName()).isEqualTo("BACKLINE");
+        // 收账人：LOWEST_HP 覆盖；空弦射手：HIGHEST_ATK 覆盖
+        assertThat(data.getUnit("unit_debt_collector").getSpecialPriority().jsonName()).isEqualTo("LOWEST_HP");
+        assertThat(data.getUnit("unit_bowstring_archer").getSpecialPriority().jsonName()).isEqualTo("HIGHEST_ATK");
     }
 
     /** 铺量模板共性断言：非 Boss、升星倍率缺省 1.8（防手误漏写/错写关键字段） */
@@ -237,7 +280,7 @@ class JsonLoaderTest {
     }
 
     @Test
-    @DisplayName("铺量后费阶池分布：非 Boss 可购 1 费 6 / 2 费 5 / 3 费 7（商店 tierPool 同口径）")
+    @DisplayName("v5 费阶池分布：非 Boss 可购 1 费 10 / 2 费 9 / 3 费 5（商店 tierPool 同口径，v5 §4.4）")
     void purchasableTierDistribution() {
         Map<Integer, List<String>> byCost = new LinkedHashMap<Integer, List<String>>();
         for (UnitData unit : data.getUnits().values()) {
@@ -246,12 +289,13 @@ class JsonLoaderTest {
             }
         }
         assertThat(byCost.get(1)).containsExactly("unit_warrior_01", "unit_boar_rider",
-                "unit_wolf_pup", "unit_mage_apprentice", "unit_skeleton_soldier", "unit_frost_imp");
-        assertThat(byCost.get(2)).containsExactly("unit_ranger_01", "unit_fairy_druid",
-                "unit_beast_archer", "unit_wraith", "unit_frost_giant");
-        assertThat(byCost.get(3)).containsExactly("unit_assassin_01", "unit_shadow_blade",
-                "unit_death_knight", "unit_glacial_giant", "unit_legend_quartermaster",
-                "unit_legend_thornhart", "unit_legend_warsong_singer");
+                "unit_mage_apprentice", "unit_spear_headhunter", "unit_wolf_pup", "unit_ambush_panther",
+                "unit_skeleton_soldier", "unit_debt_collector", "unit_frost_imp", "unit_rubble_slinger");
+        assertThat(byCost.get(2)).containsExactly("unit_shadow_blade", "unit_beast_archer",
+                "unit_ranger_01", "unit_fairy_druid", "unit_wraith", "unit_lamplighter",
+                "unit_bowstring_archer", "unit_frost_giant", "unit_assassin_01");
+        assertThat(byCost.get(3)).containsExactly("unit_legend_quartermaster", "unit_legend_thornhart",
+                "unit_death_knight", "unit_glacial_giant", "unit_legend_warsong_singer");
     }
 
     // —— Phase 6（CP3/CP11）：三英雄与场景链 / 门控互斥 ——
@@ -275,7 +319,7 @@ class JsonLoaderTest {
     }
 
     @Test
-    @DisplayName("三场景解锁链 forest→crypt→snow：shopUnlocks 声明落位且与英雄传奇互斥（加载即证明）")
+    @DisplayName("三场景解锁链 forest→crypt→snow：墓穴 6 亡灵/雪山 5 巨人 shopUnlocks 且与英雄传奇互斥（加载即证明）")
     void sceneChainAndShopUnlocks() {
         assertThat(data.getScenes().keySet())
                 .containsExactly("scene_forest", "scene_crypt", "scene_snow");
@@ -284,10 +328,15 @@ class JsonLoaderTest {
         assertThat(data.getScene("scene_snow").getUnlockAfter()).isEqualTo("scene_crypt");
         assertThat(data.getScene("scene_forest").getShopUnlocks()).isEmpty();
         assertThat(data.getScene("scene_crypt").getShopUnlocks())
-                .containsExactly("unit_skeleton_soldier", "unit_wraith", "unit_death_knight");
+                .containsExactly("unit_skeleton_soldier", "unit_wraith", "unit_debt_collector",
+                        "unit_bowstring_archer", "unit_lamplighter", "unit_death_knight");
         assertThat(data.getScene("scene_snow").getShopUnlocks())
-                .containsExactly("unit_frost_imp", "unit_frost_giant", "unit_glacial_giant");
+                .containsExactly("unit_frost_imp", "unit_rubble_slinger", "unit_frost_giant",
+                        "unit_assassin_01", "unit_glacial_giant");
         assertThat(data.getScene("scene_snow").getBosses()).containsEntry(25, "boss_star_warden");
+        // CP6：森林敌池首条 minRound=1（S5 兑现——狼崽开荒）
+        assertThat(data.getScene("scene_forest").getEnemyPool().get(0).getUnitId()).isEqualTo("unit_wolf_pup");
+        assertThat(data.getScene("scene_forest").getEnemyPool().get(0).getMinRound()).isEqualTo(1);
     }
 
     @Test

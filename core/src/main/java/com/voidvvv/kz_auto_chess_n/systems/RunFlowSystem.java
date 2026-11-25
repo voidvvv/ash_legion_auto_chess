@@ -19,6 +19,7 @@ import com.voidvvv.kz_auto_chess_n.entities.RunEndCause;
 import com.voidvvv.kz_auto_chess_n.entities.RunState;
 import com.voidvvv.kz_auto_chess_n.entities.Side;
 import com.voidvvv.kz_auto_chess_n.entities.WaveSpec;
+import com.voidvvv.kz_auto_chess_n.utils.RandomGenerator;
 
 import java.util.List;
 import java.util.Objects;
@@ -40,6 +41,8 @@ public final class RunFlowSystem {
     private final MasteryCalculator masteryCalculator;
     /** RESULT 横幅已停留秒数（onBattleOver 归零；仅败局自动推进消费） */
     private float resultTimer;
+    /** 胜利战毕延迟已流逝秒数（tickBattleEnd 按逻辑步累积；仅 PLAYER_WIN 消费——窗口满才进 RESULT） */
+    private float victoryEndDelayElapsed;
 
     /** 注入式熟练度结算（Q5 裁决：纯函数 stub，Phase 6 接档案域换实现） */
     public RunFlowSystem(MasteryCalculator masteryCalculator) {
@@ -74,9 +77,10 @@ public final class RunFlowSystem {
             if (runState.getPhase() != GamePhase.SHOPPING) {
                 return false;
             }
+            victoryEndDelayElapsed = 0f; // 新战斗计时归零（防跨战残留——上局在延迟窗口内放弃的边界）
             BattleState state = battleSystem.startBattle(ctx.getPlayer(), runState.getEnemyWave(),
-                    ctx.getGameData(), ctx.getRng(), runState.getIdIssuer(),
-                    runState.getModifiers()); // 零棋子允许开战；局外修正透传（Phase 6）
+                    ctx.getGameData(), battleRng(ctx), runState.getIdIssuer(),
+                    runState.getModifiers(), runState.getRound()); // 零棋子允许开战；D10 敌方档位随轮次截断
             ctx.setBattleState(state);
             runState.setPhase(GamePhase.BATTLE);
             return true;
@@ -85,6 +89,7 @@ public final class RunFlowSystem {
             if (ctx.getRunState().getPhase() != GamePhase.BATTLE || ctx.getBattleState() == null) {
                 return false;
             }
+            ctx.getBattleState().markSurrendered(); // §1.4：成功处理入口记录认输标记（归因最高优先级候选）
             ctx.getBattleState().finish(BattleOutcome.ENEMY_WIN); // 幂等（finish 首个结局生效）
             return true;
         });
@@ -121,7 +126,7 @@ public final class RunFlowSystem {
     /**
      * 新开一局（StartRun handler 体；测试与 restart 直调）。要求新鲜 RunContext
      * （round=1 / phase=SHOPPING / runStarted=false 由 RunState 初始态保证）。
-     * 轮开始事件：敌阵生成（RNG=杂兵数）+ 商店免费刷新（RNG=10）+ 通知行。
+     * 轮开始事件：敌阵生成（正式 RNG=杂兵数 / 对拍 0 RNG）+ 商店免费补货（经补货分派单点）+ 通知行。
      */
     public void startRun(RunContext ctx) {
         RunState runState = ctx.getRunState();
@@ -129,14 +134,21 @@ public final class RunFlowSystem {
         runState.setPhase(GamePhase.SHOPPING);
         ctx.setBattleState(null);
         beginRound(ctx);
-        ctx.getShop().reroll(runState.getRound(), ctx.getGameData(), ctx.getRng(),
-                runState.getModifiers()); // 免费刷新同吃概率加成与池门控（Phase 6，口径与 RefreshShop 一致）
+        ctx.getShop().replenish(ctx, false); // 补货分派单点（§0.2）：正式 reroll / 对拍固定免费五槽
         runState.addNotice("第 " + runState.getRound() + " 轮开始（商店免费刷新）");
     }
 
-    /** 轮开始事件子集（Phase 2 口径）：enemyWave = generateEnemyWave(...)（RNG 消耗 = 杂兵数）。 */
+    /**
+     * 轮开始事件子集（Phase 2 口径）：正式 = generateEnemyWave(...)（RNG 消耗 = 杂兵数）；
+     * 对拍（品质改造 §0.2）= {@link PaiTestScript} 固定敌阵按题按轮直取（0 RNG），表序 = 入场序。
+     */
     public void beginRound(RunContext ctx) {
         RunState runState = ctx.getRunState();
+        if (ctx.getMode().isSampleDuel()) {
+            runState.setEnemyWave(PaiTestScript.enemyWave(ctx.getSampleTopic(), runState.getRound(),
+                    ctx.getGameData()));
+            return;
+        }
         List<WaveSpec> wave = waveGenerator.generateEnemyWave(
                 runState.getRound(), runState.getSceneId(), ctx.getGameData(), ctx.getRng());
         runState.setEnemyWave(wave);
@@ -153,11 +165,12 @@ public final class RunFlowSystem {
             return;
         }
         resultTimer = 0f;
+        victoryEndDelayElapsed = 0f; // 战毕流转点归零（计时 idle 恒 0；见 tickBattleEnd）
         RunState runState = ctx.getRunState();
         runState.setPhase(GamePhase.RESULT);
         if (ctx.getBattleState().getOutcome() == BattleOutcome.PLAYER_WIN) {
             runState.setPendingChest(chestSystem.roll(
-                    runState.getRound(), ctx.getGameData(), ctx.getRng()));
+                    runState.getRound(), ctx.getGameData(), chestRng(ctx)));
             return;
         }
         // 判负瞬间机会 +1（零棋子照扣——D-a 防刷口径；GDD §2.2）
@@ -169,6 +182,28 @@ public final class RunFlowSystem {
             runState.setPendingChest(chestSystem.buildDefeatOffer(runState.getRound()));
         }
         // 其余（零棋子败 / 第 3 败）：无败箱，横幅 3s/点击 → continueAfterDefeat 分岔
+    }
+
+    /**
+     * 战毕延迟观察（BattleScreen BATTLE 期每逻辑步 isOver 后调用，口径 #7）：胜局先定格战场
+     * {@link GameBalance#VICTORY_RESULT_DELAY_SECONDS}——死亡反馈（death 动画/淡出走 render 时钟）
+     * 与战场在窗口内持续展示，到时才委托 {@link #onBattleOver} 进 RESULT 弹奖励；
+     * 败局 / 超时 / 投降零延迟直达（原即时行为）。委托单点 {@link #onBattleOver}：
+     * 胜负判定与宝箱 roll 仍每战只发生一次（流转后相位门拦截，本方法与 onBattleOver 均不再生效）。
+     */
+    public void tickBattleEnd(RunContext ctx, float dt) {
+        if (ctx.getRunState().getPhase() != GamePhase.BATTLE
+                || ctx.getBattleState() == null || !ctx.getBattleState().isOver()) {
+            return; // 防御性门（调用方口径：BATTLE 期 isOver 后每逻辑步调用）
+        }
+        if (ctx.getBattleState().getOutcome() != BattleOutcome.PLAYER_WIN) {
+            onBattleOver(ctx); // 失败 / 超时：原即时流转（横幅即现）
+            return;
+        }
+        victoryEndDelayElapsed += dt;
+        if (victoryEndDelayElapsed >= GameBalance.VICTORY_RESULT_DELAY_SECONDS) {
+            onBattleOver(ctx); // 窗口满：胜局流转（横幅 + 胜箱此刻出现）
+        }
     }
 
     /** RESULT 横幅计时：仅败局自动推进（胜局必须 PickChest，无自动出口——口径 #9） */
@@ -201,24 +236,48 @@ public final class RunFlowSystem {
     }
 
     /**
-     * 胜局推进（PickChest handler 结算奖励后调用）：round==25 → RUN_END(COMPLETED)；
-     * 否则 round+1 + 怜悯双清零 + 敌阵重生成 + 商店免费刷新（architecture §5.1"新轮进入"）。
+     * 胜局推进（PickChest handler 结算奖励后调用）：达到本局轮次上限 → RUN_END(COMPLETED)
+     * （正式 25 / 对拍 3——§0.2「领完第 3 轮胜箱走现有终局分支，界面显示对拍完成」）；
+     * 否则 round+1 + 怜悯双清零 + 敌阵重生成 + 商店免费补货（architecture §5.1"新轮进入"）。
      */
     public void advanceAfterVictory(RunContext ctx) {
         RunState runState = ctx.getRunState();
         ctx.setBattleState(null);
         runState.setPendingChest(null);
-        if (runState.getRound() >= GameBalance.TOTAL_ROUNDS) {
-            endRun(ctx, RunEndCause.COMPLETED); // 第 25 轮领箱后通关（architecture §4.4 回放流终点）
+        if (runState.getRound() >= ctx.totalRounds()) {
+            endRun(ctx, RunEndCause.COMPLETED); // 末轮领箱后终局（architecture §4.4 回放流终点）
             return;
         }
         runState.advanceRound();
         runState.setDefeatCountPerRound(0); // 新轮机会清零（§5.1 关键区分：重试不清、新轮清）
         runState.setPhase(GamePhase.SHOPPING);
         beginRound(ctx);
-        ctx.getShop().reroll(runState.getRound(), ctx.getGameData(), ctx.getRng(),
-                runState.getModifiers()); // 新轮免费刷新同吃加成与门控（Phase 6）
+        ctx.getShop().replenish(ctx, false); // 补货分派单点（§0.2）：对拍写新轮固定五槽 + 序号归零
         runState.addNotice("第 " + runState.getRound() + " 轮开始（商店免费刷新）");
+    }
+
+    /**
+     * 交战 RNG（品质改造 §0.2）：对拍每战新建 {@code seed + 1009×(round−1)}——同轮重试从同一随机
+     * 起点开始，且购买/刷新/买经验不影响交战随机；正式沿用上下文单 RNG（贯穿波次与暴击，口径不变）。
+     */
+    private static RandomGenerator battleRng(RunContext ctx) {
+        if (!ctx.getMode().isSampleDuel()) {
+            return ctx.getRng();
+        }
+        return new RandomGenerator(PaiTestScript.battleSeed(
+                ctx.getRunState().getSeed(), ctx.getRunState().getRound()));
+    }
+
+    /**
+     * 胜箱 RNG（品质改造 §0.2）：对拍单独 {@code 交战种子 + 1}——避免交战多打几下改变装备选项；
+     * 正式沿用上下文单 RNG（胜箱与暴击同流，Phase 6 口径不变）。
+     */
+    private static RandomGenerator chestRng(RunContext ctx) {
+        if (!ctx.getMode().isSampleDuel()) {
+            return ctx.getRng();
+        }
+        return new RandomGenerator(PaiTestScript.chestSeed(
+                ctx.getRunState().getSeed(), ctx.getRunState().getRound()));
     }
 
     /** RUN_END 进入：endCause + 熟练度结算 stub（Q5 裁决；Phase 6 接档案域） */

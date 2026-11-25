@@ -3,8 +3,8 @@ package com.voidvvv.kz_auto_chess_n.screens;
 import com.badlogic.gdx.Game;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Screen;
-import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.Batch;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.Stage;
@@ -16,13 +16,16 @@ import com.voidvvv.kz_auto_chess_n.data.GameData;
 import com.voidvvv.kz_auto_chess_n.data.HeroData;
 import com.voidvvv.kz_auto_chess_n.data.SceneData;
 import com.voidvvv.kz_auto_chess_n.render.Assets;
+import com.voidvvv.kz_auto_chess_n.render.ButtonArt;
 import com.voidvvv.kz_auto_chess_n.render.PlaceholderKeys;
 import com.voidvvv.kz_auto_chess_n.render.board.BoardGeometry;
+import com.voidvvv.kz_auto_chess_n.render.ui.UnitInfoText;
 import com.voidvvv.kz_auto_chess_n.save.MetaService;
 import com.voidvvv.kz_auto_chess_n.save.ProfileService;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BooleanSupplier;
 
 /**
  * 远征准备屏（architecture §七 RunSetupScreen：英雄选择 + 场景选择两步式合一）。
@@ -34,9 +37,11 @@ public final class RunSetupScreen implements Screen {
     private static final float CARD_W = 186f;
     private static final float CARD_H = 84f;
     private static final float CARD_GAP = 16f;
-    private static final float HERO_Y = 232f;
+    private static final float HERO_Y = 216f;
     private static final float SCENE_Y = 116f;
     private static final float SCENE_H = 56f;
+    /** 英雄卡被动文案折行列数（肖像让位后 ≈108px 可用宽；正文楷体 8.5px 列宽口径） */
+    private static final int PASSIVE_WRAP_COLUMNS = 12;
 
     private final Game game;
     private final Assets assets;
@@ -69,32 +74,27 @@ public final class RunSetupScreen implements Screen {
         for (int i = 0; i < scenes.size(); i++) {
             stage.addActor(new SceneCard(i));
         }
-        Actor start = new TextButton("开始远征", 160f, 36f, new Runnable() {
-            @Override
-            public void run() {
-                startRun();
-            }
-        });
+        Actor start = new TextButton("开始远征", 160f, 36f, this::startRun, this::canStartRun);
         start.setPosition((BoardGeometry.VIRTUAL_W - 160f) / 2f, 44f);
         stage.addActor(start);
-        Actor back = new TextButton("返回", 96f, 28f, new Runnable() {
-            @Override
-            public void run() {
-                game.setScreen(new MainMenuScreen(game, assets, data, metaService));
-            }
-        });
+        Actor back = new TextButton("返回", 96f, 28f,
+                () -> game.setScreen(new MainMenuScreen(game, assets, data, metaService)), () -> true);
         back.setPosition((BoardGeometry.VIRTUAL_W - 96f) / 2f, 8f);
         stage.addActor(back);
     }
 
     /** 域边界事件：结算 StartRun 参数（hero/scene 必选，seed 由 UI 给定——Q3 裁决口径） */
     private void startRun() {
-        if (selectedHero < 0 || selectedScene < 0) {
+        if (!canStartRun()) {
             return; // 未选齐：忽略（UI 已用提示文案引导）
         }
         long runSeed = System.nanoTime();
         game.setScreen(new BattleScreen(game, assets, data, metaService,
                 runSeed, scenes.get(selectedScene).getId(), heroes.get(selectedHero).getId()));
+    }
+
+    private boolean canStartRun() {
+        return selectedHero >= 0 && selectedScene >= 0;
     }
 
     private float cardX(int index) {
@@ -115,10 +115,10 @@ public final class RunSetupScreen implements Screen {
     public void render(float delta) {
         ScreenUtils.clear(0.05f, 0.04f, 0.08f, 1f);
         stage.getBatch().begin();
-        assets.font().getData().setScale(2f);
-        assets.font().draw(stage.getBatch(), "远征准备", 276f, 336f); // 4 字 ×24px 居中
-        assets.font().getData().setScale(1f);
-        assets.font().draw(stage.getBatch(), "选择英雄与场景", 286f, 318f);
+        assets.titleFont().draw(stage.getBatch(), "远征准备", 0f, 344f,
+                BoardGeometry.VIRTUAL_W, com.badlogic.gdx.utils.Align.center, false);
+        assets.uiFont().draw(stage.getBatch(), "选择英雄与场景", 0f, 316f,
+                BoardGeometry.VIRTUAL_W, com.badlogic.gdx.utils.Align.center, false);
         stage.getBatch().end();
         stage.act(delta);
         stage.draw();
@@ -149,9 +149,11 @@ public final class RunSetupScreen implements Screen {
     /** 英雄卡：名 + 被动一行 + 熟练度 Lv/经验 + 选中高亮 */
     private final class HeroCard extends Actor {
         private final int index;
+        private final List<String> passiveLines;
 
         HeroCard(int index) {
             this.index = index;
+            this.passiveLines = UnitInfoText.wrap(passiveText(heroes.get(index)), PASSIVE_WRAP_COLUMNS);
             setSize(CARD_W, CARD_H);
             setPosition(cardX(index), HERO_Y);
             addListener(new ClickListener() {
@@ -166,16 +168,26 @@ public final class RunSetupScreen implements Screen {
         public void draw(Batch batch, float parentAlpha) {
             HeroData hero = heroes.get(index);
             boolean selected = selectedHero == index;
-            Color old = batch.getColor();
+            float oldColor = batch.getPackedColor();
             batch.setColor(selected ? 0.4f : 0.24f, selected ? 0.46f : 0.3f,
                     selected ? 0.4f : 0.36f, parentAlpha);
             batch.draw(assets.region(PlaceholderKeys.PANEL_9SLICE), getX(), getY(), getWidth(), getHeight());
-            batch.setColor(old);
+            // 原创英雄肖像（48×48，右上；缺素材跳过不占位）
+            TextureRegion portrait = assets.regionOrNull("portrait_" + hero.getId());
+            if (portrait != null) {
+                batch.setColor(1f, 1f, 1f, parentAlpha);
+                batch.draw(portrait, getX() + 130f, getY() + 34f, 48f, 48f);
+            }
+            batch.setPackedColor(oldColor);
             int level = ProfileService.masteryLevel(metaService.getProfile(), hero.getId());
-            assets.font().draw(batch, hero.getName(), getX() + 10f, getY() + 66f);
-            assets.font().draw(batch, passiveText(hero), getX() + 10f, getY() + 48f);
-            assets.font().draw(batch, masteryText(level), getX() + 10f, getY() + 30f);
-            assets.font().draw(batch, selected ? "（已选）" : "点击选择", getX() + 10f, getY() + 12f);
+            assets.uiFont().draw(batch, hero.getName(), getX() + 10f, getY() + 70f);
+            // 被动文案按肖像让位后的列宽折行（正文楷体 8.5px → 12 列 ≈ 102px）
+            assets.bodyFont().draw(batch, passiveLines.get(0), getX() + 10f, getY() + 55f);
+            if (passiveLines.size() > 1) {
+                assets.bodyFont().draw(batch, passiveLines.get(1), getX() + 10f, getY() + 45f);
+            }
+            assets.uiFont().draw(batch, masteryText(level), getX() + 10f, getY() + 28f);
+            assets.uiFont().draw(batch, selected ? "（已选）" : "点击选择", getX() + 10f, getY() + 12f);
         }
     }
 
@@ -202,7 +214,7 @@ public final class RunSetupScreen implements Screen {
             SceneData scene = scenes.get(index);
             boolean unlocked = isSceneUnlocked(index);
             boolean selected = selectedScene == index;
-            Color old = batch.getColor();
+            float oldColor = batch.getPackedColor();
             if (unlocked) {
                 batch.setColor(selected ? 0.4f : 0.24f, selected ? 0.46f : 0.3f,
                         selected ? 0.4f : 0.36f, parentAlpha);
@@ -210,45 +222,48 @@ public final class RunSetupScreen implements Screen {
                 batch.setColor(0.16f, 0.16f, 0.18f, parentAlpha);
             }
             batch.draw(assets.region(PlaceholderKeys.PANEL_9SLICE), getX(), getY(), getWidth(), getHeight());
-            batch.setColor(old);
-            assets.font().draw(batch, scene.getName(), getX() + 10f, getY() + 38f);
+            batch.setPackedColor(oldColor);
+            assets.uiFont().draw(batch, scene.getName(), getX() + 10f, getY() + 38f);
             if (unlocked) {
-                assets.font().draw(batch, selected ? "（已选）" : "点击选择", getX() + 10f, getY() + 18f);
+                assets.uiFont().draw(batch, selected ? "（已选）" : "点击选择", getX() + 10f, getY() + 18f);
             } else {
                 SceneData prerequisite = data.getScene(scene.getUnlockAfter());
                 String gate = prerequisite == null ? scene.getUnlockAfter() : prerequisite.getName();
-                assets.font().draw(batch, "通关「" + gate + "」解锁", getX() + 10f, getY() + 18f);
+                assets.uiFont().draw(batch, "通关「" + gate + "」解锁", getX() + 10f, getY() + 18f);
             }
         }
     }
 
-    /** 通用文字按钮（自绘壳，沿 PauseMenuDialog.MenuButton 形制独立实现避免跨包复用） */
+    /** 通用文字按钮（原创四态按钮壳 + 内置字体；沿 PauseMenuDialog.MenuButton 形制独立实现） */
     private final class TextButton extends Actor {
         private final Runnable action;
         private final String text;
         private final float textY;
+        private final ClickListener listener;
+        private final BooleanSupplier enabled;
 
-        TextButton(String text, float width, float height, Runnable action) {
+        TextButton(String text, float width, float height, Runnable action,
+                   BooleanSupplier enabled) {
             this.text = text;
             this.action = action;
+            this.enabled = enabled;
             this.textY = height / 2f + 5f;
             setSize(width, height);
-            addListener(new ClickListener() {
+            this.listener = new ClickListener() {
                 @Override
                 public void clicked(InputEvent event, float x, float y) {
                     TextButton.this.action.run();
                 }
-            });
+            };
+            addListener(listener);
         }
 
         @Override
         public void draw(Batch batch, float parentAlpha) {
-            Color old = batch.getColor();
-            batch.setColor(0.75f, 0.35f, 0.25f, parentAlpha);
-            batch.draw(assets.region(PlaceholderKeys.PANEL_9SLICE), getX(), getY(), getWidth(), getHeight());
-            batch.setColor(old);
-            assets.font().draw(batch, text, getX() + getWidth() / 2f - text.length() * 6f,
-                    getY() + textY);
+            ButtonArt.drawShell(batch, assets, listener,
+                    getX(), getY(), getWidth(), getHeight(), parentAlpha, !enabled.getAsBoolean());
+            assets.uiFont().draw(batch, text, getX(), getY() + textY, getWidth(),
+                    com.badlogic.gdx.utils.Align.center, false);
         }
     }
 

@@ -261,8 +261,13 @@ class GameBalanceTest {
         assertThat(GameBalance.BOSS_ROUNDS).containsExactly(7, 15, 25);
         assertThat(GameBalance.LOGIC_STEP).isCloseTo(1f / 60f, within(1e-8f));
         assertThat(GameBalance.BATTLE_TIMEOUT).isEqualTo(60f);
-        assertThat(GameBalance.CRIT_CHANCE).isEqualTo(0.20f);
-        assertThat(GameBalance.CRIT_MULTIPLIER).isEqualTo(1.5f);
+        // 暴击两键已属性化（v5 §五.5）：缺省值走 StatKey（见 StatPipelineTest / JsonLoaderTest）
+        // UI 整体缩小档位（2026-11-21 主人整改）：1.0 = 恢复原大小
+        assertThat(GameBalance.RENDER_GLOBAL_SCALE).isEqualTo(0.8f);
+        // 测试档起始金：常量 999 保留，仅经启动参数 --test-gold=<n> 启用（见 GameLaunchArgsTest）；
+        // 正式口径恒 START_GOLD=10（品质改造批0：默认路径已恢复设计基线）
+        assertThat(GameBalance.TEST_PERIOD_START_GOLD).isEqualTo(999);
+        assertThat(GameBalance.START_GOLD).isEqualTo(10); // 正式口径不动摇
         assertThat(GameBalance.ENERGY_MAX).isEqualTo(100);
         assertThat(GameBalance.ENERGY_PER_HIT).isEqualTo(10);
         assertThat(GameBalance.ENERGY_PER_HIT_TAKEN).isEqualTo(5);
@@ -288,6 +293,20 @@ class GameBalanceTest {
         for (int round = 1; round <= 25; round++) {
             boolean expected = Arrays.binarySearch(new int[]{7, 15, 25}, round) >= 0;
             assertThat(GameBalance.isBossRound(round)).isEqualTo(expected);
+        }
+    }
+
+    @Test
+    @DisplayName("D10 敌方羁绊档位上限：r1~5=0 / r6~12=2 / r13~19=4 / r20+=6（v5 §4.1 临时口径）")
+    void enemySynergyCountCapByRound() {
+        int[] expected = new int[25];
+        for (int round = 1; round <= 25; round++) {
+            expected[round - 1] = round <= 5 ? 0 : round <= 12 ? 2 : round <= 19 ? 4 : 6;
+        }
+        for (int round = 1; round <= 25; round++) {
+            assertThat(GameBalance.enemySynergyCountCap(round))
+                    .as("第 %d 轮档位上限", round)
+                    .isEqualTo(expected[round - 1]);
         }
     }
 }

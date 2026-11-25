@@ -4,6 +4,7 @@ import com.voidvvv.kz_auto_chess_n.data.EffectData;
 import com.voidvvv.kz_auto_chess_n.data.EffectOp;
 import com.voidvvv.kz_auto_chess_n.data.GameData;
 import com.voidvvv.kz_auto_chess_n.data.SynergyData;
+import com.voidvvv.kz_auto_chess_n.data.SynergyMechanic;
 import com.voidvvv.kz_auto_chess_n.data.SynergySource;
 import com.voidvvv.kz_auto_chess_n.data.UnitData;
 import com.voidvvv.kz_auto_chess_n.entities.StatModifierBlock;
@@ -37,10 +38,20 @@ public final class SynergySystem {
     /**
      * 结算一侧阵容的羁绊快照（带增幅，Phase 6 裁决 D12）：synergyAmp = synergyId → 比例
      * （0.25 = +25%，「荆语」）。增幅作用于该羁绊当档全部效果（档位替换制语义不变）：
-     * ADD 通道四舍五入取整（整型 stat 语义）、PCT 与 effect 通道保留浮点。
+     * ADD 通道四舍五入取整（整型 stat 语义）、PCT 与 effect 通道保留浮点；
+     * mechanic 通道数值不放大（R6：触发语义不宜乘算，裁决 D12 仅声明 stat/effect）。
      */
     public SynergySnapshot resolve(Collection<UnitData> templates, GameData data,
                                    Map<String, Float> synergyAmp) {
+        return resolve(templates, data, synergyAmp, Integer.MAX_VALUE);
+    }
+
+    /**
+     * D10 敌方档位截断：每个羁绊计数取 min(count, countCap) 后再判档
+     * （r1~5 传 0 = 敌方无羁绊效果；玩家侧传 Integer.MAX_VALUE = 不截断）。
+     */
+    public SynergySnapshot resolve(Collection<UnitData> templates, GameData data,
+                                   Map<String, Float> synergyAmp, int countCap) {
         Objects.requireNonNull(templates, "templates 不能为 null");
         Objects.requireNonNull(data, "data 不能为 null");
         Objects.requireNonNull(synergyAmp, "synergyAmp 不能为 null");
@@ -48,6 +59,7 @@ public final class SynergySystem {
         List<SynergySnapshot.ActiveSynergy> actives = new ArrayList<SynergySnapshot.ActiveSynergy>();
         StatModifierBlock statModifiers = StatModifierBlock.empty();
         List<EffectData> openingEffects = new ArrayList<EffectData>();
+        List<EffectData> mechanics = new ArrayList<EffectData>();
 
         for (SynergyData synergy : data.getSynergies().values()) {
             int count = 0;
@@ -58,27 +70,36 @@ public final class SynergySystem {
                     count++;
                 }
             }
+            count = Math.min(count, countCap);
             SynergyData.Threshold tier = synergy.activeThreshold(count);
             if (tier == null) {
                 continue; // 未达最低档
             }
-            actives.add(new SynergySnapshot.ActiveSynergy(synergy.getId(), synergy.getName(), tier.getCount()));
             Float amp = synergyAmp.get(synergy.getId());
+            List<EffectData> activeEffects = new ArrayList<EffectData>(tier.getEffects().size());
             for (EffectData effect : tier.getEffects()) {
-                EffectData scaled = amp == null ? effect : amplify(effect, amp);
+                EffectData scaled = amp == null || effect.isMechanicChannel() ? effect : amplify(effect, amp);
+                activeEffects.add(scaled);
                 if (scaled.isStatChannel()) {
                     statModifiers = statModifiers.plus(StatModifierBlock.of(
                             scaled.getStat(), scaled.getOp(), scaled.getValue()));
+                } else if (scaled.isMechanicChannel()
+                        && scaled.getMechanic() == SynergyMechanic.OPENING_ENERGY) {
+                    openingEffects.add(scaled); // CP22：OPENING_ENERGY 并入开局通道（t=0 落地）
+                } else if (scaled.isMechanicChannel()) {
+                    mechanics.add(scaled); // 触发式机制词（K13；startBattle 按 target 谓词下发）
                 } else {
                     openingEffects.add(scaled);
                 }
             }
+            actives.add(new SynergySnapshot.ActiveSynergy(synergy.getId(), synergy.getName(), tier.getCount(),
+                    activeEffects));
         }
 
         if (actives.isEmpty()) {
             return SynergySnapshot.EMPTY;
         }
-        return new SynergySnapshot(actives, statModifiers, openingEffects);
+        return new SynergySnapshot(actives, statModifiers, openingEffects, mechanics);
     }
 
     /** 增幅单条效果（裁决 D12）：ADD 四舍五入取整；PCT/effect 保留浮点 */

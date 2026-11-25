@@ -1,5 +1,6 @@
 package com.voidvvv.kz_auto_chess_n.systems;
 
+import com.voidvvv.kz_auto_chess_n.config.GameBalance;
 import com.voidvvv.kz_auto_chess_n.data.BaseStats;
 import com.voidvvv.kz_auto_chess_n.data.EffectOp;
 import com.voidvvv.kz_auto_chess_n.data.StatKey;
@@ -8,6 +9,9 @@ import com.voidvvv.kz_auto_chess_n.data.TargetPriority;
 import com.voidvvv.kz_auto_chess_n.data.UnitData;
 import com.voidvvv.kz_auto_chess_n.entities.ActiveStatus;
 import com.voidvvv.kz_auto_chess_n.entities.BattleStats;
+import com.voidvvv.kz_auto_chess_n.entities.BattleUnit;
+import com.voidvvv.kz_auto_chess_n.entities.CombatCounters;
+import com.voidvvv.kz_auto_chess_n.entities.Side;
 import com.voidvvv.kz_auto_chess_n.entities.StatModifierBlock;
 import com.voidvvv.kz_auto_chess_n.entities.StatModifierSource;
 import org.junit.jupiter.api.DisplayName;
@@ -32,7 +36,7 @@ class StatPipelineTest {
     /** 基准夹具模板：hp100 / atk10 / armor5 / aspd1.0 / range3 / ms1.0 / ls0 / egr100 / sp0 */
     private static UnitData tpl() {
         return new UnitData("u", "夹具兵", "兽人", "战士", 1,
-                new BaseStats(100, 10, 5, 1f, 3, 1f, 0, 100, 0), 1.8f,
+                new BaseStats(100, 10, 5, 1f, 3, 1f, 0, 100, 0, 20, 150), 1.8f,
                 TargetPriority.NEAREST, null, "skill_warcry", false);
     }
 
@@ -141,9 +145,9 @@ class StatPipelineTest {
     }
 
     @Test
-    @DisplayName("9 键齐全：get 覆盖全部 StatKey 且互不串键")
-    void allNineKeysReachable() {
-        BattleStats stats = new BattleStats(1f, 2f, 3f, 4f, 5f, 6f, 7f, 8f, 9f);
+    @DisplayName("11 键齐全：get 覆盖全部 StatKey 且互不串键（v5 §五.5 暴击 +2）")
+    void allElevenKeysReachable() {
+        BattleStats stats = new BattleStats(1f, 2f, 3f, 4f, 5f, 6f, 7f, 8f, 9f, 10f, 11f);
         assertThat(stats.get(StatKey.HP)).isEqualTo(1f);
         assertThat(stats.get(StatKey.ATTACK)).isEqualTo(2f);
         assertThat(stats.get(StatKey.ARMOR)).isEqualTo(3f);
@@ -153,6 +157,46 @@ class StatPipelineTest {
         assertThat(stats.get(StatKey.LIFESTEAL)).isEqualTo(7f);
         assertThat(stats.get(StatKey.ENERGY_GAIN_RATE)).isEqualTo(8f);
         assertThat(stats.get(StatKey.SKILL_POWER)).isEqualTo(9f);
+        assertThat(stats.get(StatKey.CRIT_CHANCE)).isEqualTo(10f);
+        assertThat(stats.get(StatKey.CRIT_DAMAGE)).isEqualTo(11f);
+    }
+
+    // —— v5 §五.5 暴击属性化（CP1）——
+
+    @Test
+    @DisplayName("Q1 裁决锁定：敌方 k=3.4 只乘血/攻/甲，暴击两键保持模板值（20%/×1.5）")
+    void enemyScaleSkipsCritKeys() {
+        BattleStats scaled = StatPipeline.deriveBaseline(tpl(), 1, 3.4f, Collections.<StatModifierSource>emptyList());
+        assertThat(scaled.get(StatKey.HP)).isCloseTo(340f, within(1e-4f));    // 100 × 3.4
+        assertThat(scaled.get(StatKey.ATTACK)).isCloseTo(34f, within(1e-4f)); // 10 × 3.4
+        assertThat(scaled.get(StatKey.ARMOR)).isCloseTo(17f, within(1e-4f));  // 5 × 3.4
+        assertThat(scaled.get(StatKey.CRIT_CHANCE)).isEqualTo(20f);  // 模板值（v5 锚点 ×k 不含暴击）
+        assertThat(scaled.get(StatKey.CRIT_DAMAGE)).isEqualTo(150f); // 模板值（全局基线 ×1.5）
+    }
+
+    @Test
+    @DisplayName("暴击两键缺省 20/150；走 ADD/PCT 修正与既有键同构（先加后乘）")
+    void critKeysDefaultAndModifiers() {
+        BattleStats plain = StatPipeline.deriveBaseline(tpl(), 1, 1f, Collections.<StatModifierSource>emptyList());
+        assertThat(plain.get(StatKey.CRIT_CHANCE)).isEqualTo(20f);
+        assertThat(plain.get(StatKey.CRIT_DAMAGE)).isEqualTo(150f);
+
+        // 游侠 (4)/(6) 档形态：critChance ADD 15 → 35；critDamage PCT 50 → 225
+        StatModifierBlock ranger4 = StatModifierBlock.of(StatKey.CRIT_CHANCE, EffectOp.ADD, 15f);
+        assertThat(StatPipeline.deriveBaseline(tpl(), 1, 1f,
+                Collections.singletonList(source(ranger4))).get(StatKey.CRIT_CHANCE))
+                .isCloseTo(35f, within(1e-6f));
+
+        StatModifierBlock ranger6 = StatModifierBlock.of(StatKey.CRIT_CHANCE, EffectOp.ADD, 20f)
+                .plus(StatModifierBlock.of(StatKey.CRIT_DAMAGE, EffectOp.PCT, 50f));
+        BattleStats effective = StatPipeline.deriveBaseline(tpl(), 1, 1f,
+                Collections.singletonList(source(ranger6)));
+        assertThat(effective.get(StatKey.CRIT_CHANCE)).isCloseTo(40f, within(1e-6f));
+        assertThat(effective.get(StatKey.CRIT_DAMAGE)).isCloseTo(225f, within(1e-4f)); // (150+0)×1.5
+
+        // 第二级透传：无状态修正时有效值 = 基准
+        assertThat(StatPipeline.deriveEffective(plain, StatModifierBlock.empty())
+                .get(StatKey.CRIT_CHANCE)).isEqualTo(20f);
     }
 
     // —— 口径 #8：StatusType → StatKey 映射表 ——
@@ -199,6 +243,63 @@ class StatPipelineTest {
         List<ActiveStatus> statuses = Arrays.asList(
                 status(StatusType.ATK_UP, 20f), status(StatusType.ATK_UP, 35f));
         assertThat(StatPipeline.statusModifiers(statuses).pctOf(StatKey.ATTACK)).isEqualTo(35f);
+    }
+
+    // —— v5 计数通道（CP12，K2：遗物/旧疤并入第二级，先加后乘）——
+
+    @Test
+    @DisplayName("遗物计数：atk ADD 4 / hp ADD 20 → 有效攻 (10+4)、有效血 (100+20)，与状态 PCT 先加后乘")
+    void relicCountersMergeIntoSecondLevel() {
+        BattleStats base = StatPipeline.deriveBaseline(tpl(), 1, 1f, Collections.<StatModifierSource>emptyList());
+        CombatCounters counters = new CombatCounters();
+        counters.addRelic(4f, 20f);
+
+        BattleStats plain = StatPipeline.deriveEffective(base, StatModifierBlock.empty(), counters);
+        assertThat(plain.get(StatKey.ATTACK)).isCloseTo(14f, within(1e-6f));
+        assertThat(plain.get(StatKey.HP)).isCloseTo(120f, within(1e-6f));
+
+        // 与状态 PCT 叠加序：ATK_UP 30 → (10+4)×1.3 = 18.2（先加后乘）
+        StatModifierBlock mods = StatPipeline.statusModifiers(
+                Collections.singletonList(status(StatusType.ATK_UP, 30f)));
+        BattleStats stacked = StatPipeline.deriveEffective(base, mods, counters);
+        assertThat(stacked.get(StatKey.ATTACK)).isCloseTo(18.2f, within(1e-4f));
+    }
+
+    @Test
+    @DisplayName("旧疤 3 层：攻 +15%（10×1.15）+ 甲 +9（5+9）；层数×常量进 ADD/PCT 通道")
+    void scarStacksApplyPerLayer() {
+        BattleStats base = StatPipeline.deriveBaseline(tpl(), 1, 1f, Collections.<StatModifierSource>emptyList());
+        CombatCounters counters = new CombatCounters();
+        counters.addScarStack();
+        counters.addScarStack();
+        counters.addScarStack();
+        assertThat(counters.getScarStacks()).isEqualTo(3);
+
+        BattleStats effective = StatPipeline.deriveEffective(base, StatModifierBlock.empty(), counters);
+        assertThat(effective.get(StatKey.ATTACK))
+                .isCloseTo(10f * (1f + 3 * GameBalance.SCAR_ATK_PCT_PER_STACK / 100f), within(1e-4f));
+        assertThat(effective.get(StatKey.ARMOR))
+                .isCloseTo(5f + 3 * GameBalance.SCAR_ARMOR_ADD_PER_STACK, within(1e-6f));
+    }
+
+    @Test
+    @DisplayName("零计数器 = 旧两参结果逐位相等（回归锚）；BattleUnit 计数通道接入 getEffective")
+    void zeroCountersMatchLegacyOverload() {
+        BattleStats base = StatPipeline.deriveBaseline(tpl(), 1, 1f, Collections.<StatModifierSource>emptyList());
+        StatModifierBlock mods = StatPipeline.statusModifiers(
+                Collections.singletonList(status(StatusType.ATK_UP, 30f)));
+        assertThat(StatPipeline.deriveEffective(base, mods)).isEqualTo(StatPipeline.deriveEffective(base, mods, new CombatCounters()));
+
+        // BattleUnit 侧：计数器入账 + 打脏后有效攻立即反映（framework-internal 写路径）
+        BattleUnit unit = new BattleUnit(1, tpl(), 1, Side.PLAYER,
+                com.voidvvv.kz_auto_chess_n.systems.support.BattleTestFixtures.meleeSkill(), base);
+        assertThat(unit.getEffective(StatKey.ATTACK)).isEqualTo(10f);
+        unit.getCombatCounters().addRelic(4f, 20f);
+        unit.invalidateStats();
+        assertThat(unit.getEffective(StatKey.ATTACK)).isCloseTo(14f, within(1e-6f));
+        assertThat(unit.getCombatCounters().getBasicAttackCount()).isEqualTo(0);
+        unit.getCombatCounters().addBasicAttack();
+        assertThat(unit.getCombatCounters().getBasicAttackCount()).isEqualTo(1);
     }
 
     @Test

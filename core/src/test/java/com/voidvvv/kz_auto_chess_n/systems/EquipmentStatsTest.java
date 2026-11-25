@@ -75,7 +75,7 @@ class EquipmentStatsTest {
     @DisplayName("与 StatPipeline.deriveBaseline 联动：模板 × 星级后先加后乘（hp (100+200)、attack 10×1.2）")
     void integratesWithStatPipeline() {
         UnitData template = new UnitData("u1", "夹具u1", "兽人", "战士", 1,
-                new BaseStats(100, 10, 5, 1f, 1, 1f, 0, 100, 0), 1.8f,
+                new BaseStats(100, 10, 5, 1f, 1, 1f, 0, 100, 0, 20, 150), 1.8f,
                 TargetPriority.NEAREST, null, "sk_u1", false);
         Equipment sword = item(1, eq("eq_sword", EquipmentSlot.WEAPON, StatKey.ATTACK, EffectOp.PCT, 20f));
         Equipment plate = item(2, eq("eq_plate", EquipmentSlot.ARMOR, StatKey.HP, EffectOp.ADD, 200f));

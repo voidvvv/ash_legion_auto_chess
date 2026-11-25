@@ -16,11 +16,20 @@ public final class GameBalance {
     // —— 战斗 ——
     public static final float LOGIC_STEP = 1f / 60f;
     public static final float BATTLE_TIMEOUT = 60f;
-    public static final float CRIT_CHANCE = 0.20f;
-    public static final float CRIT_MULTIPLIER = 1.5f;
+    // 暴击两键已属性化（v5 §五.5）：缺省值以 StatKey.CRIT_CHANCE/CRIT_DAMAGE.baseStatsDefault() 为唯一事实源
 
     /** 全局攻速系数（battle §5.1：敌我对称、只在消耗点乘算——BattleUnit.attackInterval() 一处；1 = 关闭） */
     public static final float ATTACK_SPEED_GLOBAL_FACTOR = 0.6f;
+
+    /** BGM 开关（品质改造 §1.2：Music 接口已接线，默认关闭——播放方式待 codex 下批裁定） */
+    public static boolean BGM_ENABLED = false;
+
+    /** UI/世界整体渲染缩放（2026-11-21 主人反馈「所有 UI 偏大」：整体调小一档 = 0.8×；
+     *  消费点两处——BattleTransitionController.zoom() 的 worldCamera 基准（<b>除以</b> s：libGDX zoom
+     *  = 可见世界 ÷ 画布，缩小 s 倍 ⇔ zoom = 基准/s）与 BattleScreen 的 uiStage/dialogStage 根缩放
+     *  （<b>乘</b> s、居中）。两域统一屏幕映射 screen(v)=(v−C)·s+C（C=屏心），s ≤ 1 时全部布局恒在视口；
+     *  1.0 = 恢复原大小 */
+    public static final float RENDER_GLOBAL_SCALE = 0.8f;
 
     // —— 开战转场「清场入阵」（battle §二 / render §5.6；2026-09-09 修订取代 2026-09-02 倒计时案）——
     /** 开战转场时长秒数（区间 0.4~0.8 待调；0 = 关闭转场——直接解冻且输入禁用窗口消失，软回滚杠杆 K11） */
@@ -42,6 +51,16 @@ public final class GameBalance {
     public static final float RETARGET_INTERVAL = 2f;
     public static final float DOT_TICK_INTERVAL = 1f;
 
+    // —— 旧疤（兽人(6) SCAR，v5 §4.1 计数通道；每层幅度全局常量，次数/封顶在 synergies.json value/value2）——
+    /** 每层攻击加成（百分点，有效攻 ×(1+0.05×层数)） */
+    public static final float SCAR_ATK_PCT_PER_STACK = 5f;
+    /** 每层护甲加成（ADD） */
+    public static final float SCAR_ARMOR_ADD_PER_STACK = 3f;
+
+    // —— 卫队战吼（战士(4)/(6) WARCRY_TAUNT，CP23 K7；延迟/持续在 synergies.json value/value2）——
+    /** 战吼震慑半径（曼哈顿，格） */
+    public static final int WARCRY_TAUNT_RADIUS = 1;
+
     // —— 技能 ——
     public static final int MAX_EFFECTS_PER_SKILL = 3;
     /** 就地施放重入深度上限（口径 #19）：能量跨百回调的嵌套施放链防御性保险，超限推迟到下一行动 tick */
@@ -56,11 +75,54 @@ public final class GameBalance {
     public static final int DRAG_DEAD_ZONE_PX = 20;
     /** 战毕横幅停留秒数（到时自动回 SHOPPING，Q3） */
     public static final float RESULT_BANNER_SECONDS = 3f;
+    /** 胜利战毕节奏：最后敌人死亡后先定格战场展示死亡反馈，再进 RESULT 弹奖励（胜局专属延迟——
+     *  消费点 RunFlowSystem.tickBattleEnd；败局 / 超时保持即时流转）。×2 变速按逻辑时长同倍缩短 */
+    public static final float VICTORY_RESULT_DELAY_SECONDS = 1.5f;
     /** 战斗快进倍率（×2 变速档，只乘 accumulator 消费速率，Q2） */
     public static final float BATTLE_SPEED_FACTOR_FAST = 2f;
 
     // —— 经济 ——
-    public static final int START_GOLD = 10;
+    public static final int START_GOLD = 10; // 正式口径（GDD §3.2：开局 10 金）
+    /** 测试档起始金币值：仅经启动参数 {@code --test-gold=<n>} 启用（见 {@link #applyLaunchArgs}）；
+     *  未启用时生产路径走 {@link #START_GOLD}=10 正式口径，单元测试/控制台不受影响。 */
+    public static final int TEST_PERIOD_START_GOLD = 999;
+    /** 运行时测试档覆盖（-1 = 关闭，默认）。仅 {@link #applyLaunchArgs(String[])} 写入、
+     *  经 {@code RunMode.fromLaunchOverride} 解析为首屏运行模式（品质改造 §0.1）；
+     *  起始金由 {@code BattleScreen.startGold(RunMode, RunModifiers)} 按模式结算
+     *  （测试档恒 {@link #TEST_PERIOD_START_GOLD}、正式恒 {@link #START_GOLD} + 局外加成），
+     *  无其他写点。 */
+    public static int testStartGoldOverride = -1;
+
+    /** 解析启动参数（Lwjgl3Launcher 入口调用）：{@code --test-gold=<n>} 启用测试档起始金；
+     *  无参 / 空参 / 非法值一律回到关闭态。 */
+    public static void applyLaunchArgs(String[] args) {
+        testStartGoldOverride = -1;
+        if (args == null) {
+            return;
+        }
+        for (String arg : args) {
+            if (arg == null || !arg.startsWith("--test-gold")) {
+                continue;
+            }
+            if (arg.startsWith("--test-gold=")) {
+                try {
+                    testStartGoldOverride = Math.max(0, Integer.parseInt(arg.substring("--test-gold=".length())));
+                } catch (NumberFormatException ignored) {
+                    testStartGoldOverride = -1; // 非法值按未启用处理
+                }
+            } else if (arg.equals("--test-gold")) {
+                testStartGoldOverride = TEST_PERIOD_START_GOLD; // 无值形式 = 测试档典型值 999
+            }
+        }
+    }
+
+    /** 启动参数解析结果只读视图（{@code --test-gold=<n>} 的 n；无值形式 = 测试档典型值；未启用 =
+     *  正式口径 {@link #START_GOLD}）。品质改造 §0.1 起：新局起始金改由
+     *  {@code BattleScreen.startGold(RunMode, RunModifiers)} 按模式结算，本函数不再参与起始金，
+     *  保留为解析口径断言面（GameLaunchArgsTest）。 */
+    public static int effectiveStartGold() {
+        return testStartGoldOverride >= 0 ? testStartGoldOverride : START_GOLD;
+    }
     public static final int SHOP_REFRESH_COST = 2;
     public static final int BUY_EXP_COST = 4;
     public static final int BUY_EXP_GAIN = 4;
@@ -155,6 +217,15 @@ public final class GameBalance {
     public static int enemyCount(int round) {
         checkRound(round);
         return Math.round(ENEMY_COUNT.valueAt(round));
+    }
+
+    /** D10 敌方羁绊档位上限（v5 §4.1 临时口径）：r1~5=0（无）、r6~12=2、r13~19=4、r20+=6 */
+    public static int enemySynergyCountCap(int round) {
+        checkRound(round);
+        if (round <= 5) { return 0; }
+        if (round <= 12) { return 2; }
+        if (round <= 19) { return 4; }
+        return 6;
     }
 
     /** 宝箱金币：3 + floor(轮/3)，封顶 12（修订二）；Boss 箱 ×2（GDD §3.2） */

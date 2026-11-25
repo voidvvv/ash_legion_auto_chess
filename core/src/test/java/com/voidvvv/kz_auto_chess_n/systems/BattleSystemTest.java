@@ -3,7 +3,9 @@ package com.voidvvv.kz_auto_chess_n.systems;
 import com.voidvvv.kz_auto_chess_n.config.GameBalance;
 import com.voidvvv.kz_auto_chess_n.data.BaseStats;
 import com.voidvvv.kz_auto_chess_n.data.Delivery;
+import com.voidvvv.kz_auto_chess_n.data.EffectData;
 import com.voidvvv.kz_auto_chess_n.data.EffectOp;
+import com.voidvvv.kz_auto_chess_n.data.EffectTarget;
 import com.voidvvv.kz_auto_chess_n.data.EquipmentData;
 import com.voidvvv.kz_auto_chess_n.data.EquipmentEffect;
 import com.voidvvv.kz_auto_chess_n.data.EquipmentPassive;
@@ -16,6 +18,7 @@ import com.voidvvv.kz_auto_chess_n.data.SkillShape;
 import com.voidvvv.kz_auto_chess_n.data.StatusType;
 import com.voidvvv.kz_auto_chess_n.data.StatKey;
 import com.voidvvv.kz_auto_chess_n.data.SynergyData;
+import com.voidvvv.kz_auto_chess_n.data.SynergyMechanic;
 import com.voidvvv.kz_auto_chess_n.data.SynergySource;
 import com.voidvvv.kz_auto_chess_n.data.TargetPriority;
 import com.voidvvv.kz_auto_chess_n.data.UnitData;
@@ -61,13 +64,13 @@ class BattleSystemTest {
 
     private static UnitData melee(String id, String race, float hp, float atk, float aspd) {
         return new UnitData(id, "夹具" + id, race, "战士", 1,
-                new BaseStats((int) hp, (int) atk, 0, aspd, 1, 1f, 0, 100, 0), 1.8f,
+                new BaseStats((int) hp, (int) atk, 0, aspd, 1, 1f, 0, 100, 0, 20, 150), 1.8f,
                 TargetPriority.NEAREST, null, "sk_hit", false);
     }
 
     private static UnitData ranged(String id, float hp, float atk, float aspd) {
         return new UnitData(id, "夹具" + id, "精灵", "游侠", 1,
-                new BaseStats((int) hp, (int) atk, 0, aspd, 3, 1f, 0, 100, 0), 1.8f,
+                new BaseStats((int) hp, (int) atk, 0, aspd, 3, 1f, 0, 100, 0, 20, 150), 1.8f,
                 TargetPriority.NEAREST, null, "sk_hit", false);
     }
 
@@ -358,7 +361,7 @@ class BattleSystemTest {
         GameData data = data();
         Player player = deployPlayer(data, melee("killer", "兽人", 100, 100, 1f), 2, 4);
         UnitData lowHpObserver = new UnitData("observer", "观察者", "精灵", "游侠", 1,
-                new BaseStats(100, 1, 0, 1f, 3, 1f, 0, 100, 0), 1.8f,
+                new BaseStats(100, 1, 0, 1f, 3, 1f, 0, 100, 0, 20, 150), 1.8f,
                 TargetPriority.NEAREST, TargetPriority.LOWEST_HP, "sk_hit", false);
         Unit observerUnit = new Unit(2, lowHpObserver, 1);
         player.addToBench(observerUnit);
@@ -384,7 +387,7 @@ class BattleSystemTest {
     void retargetEvery120Ticks() {
         GameData data = data();
         UnitData lowHpObserver = new UnitData("observer", "观察者", "精灵", "游侠", 1,
-                new BaseStats(10000, 1, 0, 1f, 3, 1f, 0, 100, 0), 1.8f,
+                new BaseStats(10000, 1, 0, 1f, 3, 1f, 0, 100, 0, 20, 150), 1.8f,
                 TargetPriority.NEAREST, TargetPriority.LOWEST_HP, "sk_hit", false);
         Player player = deployPlayer(data, lowHpObserver, 2, 4);
         List<WaveSpec> wave = waveOf(melee("e1", "哥布林", 1000, 1, 1f), 1f, 1, 0, 4, 0);
@@ -413,6 +416,55 @@ class BattleSystemTest {
         assertThat(state.getOutcome()).isEqualTo(BattleOutcome.TIMEOUT);
         assertThat(state.getOutcome().playerWon()).isFalse();
         assertThat(state.getElapsed()).isGreaterThanOrEqualTo(GameBalance.BATTLE_TIMEOUT);
+    }
+
+    // —— v5 undying 倒地全链（CP17，C1/C7）——
+
+    /** 死骑型模板：undying 1.0s / 40% 血 */
+    private static UnitData deathKnight() {
+        return new UnitData("dk", "夹具死骑", "亡灵", "战士", 3,
+                new BaseStats(200, 22, 13, 0.9f, 1, 1f, 0, 100, 0, 20, 150), 1.8f,
+                TargetPriority.NEAREST, null, "sk_hit", false,
+                null, new com.voidvvv.kz_auto_chess_n.data.UndyingSpec(1.0f, 0.4f));
+    }
+
+    @Test
+    @DisplayName("死骑倒地链（C7）：首倒 UNIT_DOWNED 非死亡不判负 → 1s 后 UNIT_REVIVED 满能施放 → 二次倒下 UNIT_DIED 真死")
+    void deathKnightDownsRevivesThenTrulyDies() {
+        GameData data = data();
+        Player player = deployPlayer(data, deathKnight(), 2, 4);
+        List<WaveSpec> wave = waveOf(melee("eslayer", "哥布林", 100000, 300, 1f), 1f, 2, 2);
+        BattleState state = start(data, player, wave, 42L);
+        state.skipIntroCountdown();
+
+        SYSTEM.runToEnd(state, 4000);
+
+        List<CombatEvent> events = state.getEvents();
+        long downedCount = events.stream()
+                .filter(e -> e.getType() == CombatEvent.Type.UNIT_DOWNED).count();
+        long revivedCount = events.stream()
+                .filter(e -> e.getType() == CombatEvent.Type.UNIT_REVIVED).count();
+        long diedCount = events.stream()
+                .filter(e -> e.getType() == CombatEvent.Type.UNIT_DIED).count();
+        assertThat(downedCount).isEqualTo(1); // 首倒分流
+        assertThat(revivedCount).isEqualTo(1); // 1.0s 后站起
+        assertThat(diedCount).isEqualTo(1);    // 二次 HP≤0 真死（仅一条 UNIT_DIED）
+
+        // 复活后满能 → 下个行动 tick 施放（UNIT_REVIVED 之后存在死骑的 CAST）
+        int revivedIdx = -1;
+        int dkId = state.getUnits().get(0).getId();
+        for (int i = 0; i < events.size(); i++) {
+            if (events.get(i).getType() == CombatEvent.Type.UNIT_REVIVED) {
+                revivedIdx = i;
+            }
+        }
+        final int from = revivedIdx;
+        assertThat(events.stream().skip(from)
+                .anyMatch(e -> e.getType() == CombatEvent.Type.CAST && e.getSourceId() == dkId))
+                .isTrue();
+
+        assertThat(state.isOver()).isTrue();
+        assertThat(state.getOutcome()).isEqualTo(BattleOutcome.ENEMY_WIN); // 死骑真死 → 玩家全灭
     }
 
     @Test
@@ -603,7 +655,7 @@ class BattleSystemTest {
     void energyGainStacksWithMageSynergy() {
         Map<String, UnitData> units = new LinkedHashMap<String, UnitData>();
         units.put("mage1", new UnitData("mage1", "夹具法师", "精灵", "法师", 1,
-                new BaseStats(100, 10, 0, 1f, 1, 1f, 0, 100, 0), 1.8f,
+                new BaseStats(100, 10, 0, 1f, 1, 1f, 0, 100, 0, 20, 150), 1.8f,
                 TargetPriority.NEAREST, null, "sk_hit", false));
         Map<String, SkillData> skills = new LinkedHashMap<String, SkillData>();
         skills.put("sk_hit", hitSkill());
@@ -682,5 +734,318 @@ class BattleSystemTest {
             ids.add(unit.getId());
         }
         return ids;
+    }
+
+    // —— v5 批0：D10 敌方羁绊档位截断（CP7）——
+
+    @Test
+    @DisplayName("D10 敌方档位截断：r2 双兽人不触发兽人(2)（cap 0）；r8 触发（cap 2 → hp+150）")
+    void enemySynergyCappedByRound() {
+        GameData data = data();
+        Player player = deployPlayer(data, melee("lone", "哥布林", 100, 10, 1f), 2, 4);
+        // 敌方两只兽人（夹具 syn_orc (2) 档 = hp ADD 150）
+        List<WaveSpec> wave = waveOf(data.getUnit("orc"), 1f, 2, 0, 3, 0);
+
+        BattleState round2 = SYSTEM.startBattle(player, wave, data,
+                new RandomGenerator(42L), new SequentialIdIssuer(), RunModifiers.EMPTY, 2);
+        assertThat(round2.getUnits().get(1).getBaseStats().get(StatKey.HP))
+                .isCloseTo(100f, within(1e-4f)); // cap 0 → 敌方无羁绊
+
+        BattleState round8 = SYSTEM.startBattle(player, wave, data,
+                new RandomGenerator(42L), new SequentialIdIssuer(), RunModifiers.EMPTY, 8);
+        assertThat(round8.getUnits().get(1).getBaseStats().get(StatKey.HP))
+                .isCloseTo(250f, within(1e-4f)); // cap 2 → (2) 档 hp+150
+        // 玩家侧不截断：旧六参重载委托 round=25（cap 6）与七参 25 输出全等
+        BattleState legacy = SYSTEM.startBattle(player, wave, data,
+                new RandomGenerator(42L), new SequentialIdIssuer());
+        BattleState round25 = SYSTEM.startBattle(player, wave, data,
+                new RandomGenerator(42L), new SequentialIdIssuer(), RunModifiers.EMPTY, 25);
+        assertThat(round25.getUnits().get(1).getBaseStats().get(StatKey.HP))
+                .isCloseTo(legacy.getUnits().get(1).getBaseStats().get(StatKey.HP), within(1e-6f));
+    }
+
+    @Test
+    @DisplayName("机制词下发（CP7 基建）：TRAITS 过滤——兽人(6) SCAR 只下发兽人侧兽人系，人类杂兵不入")
+    void mechanicsGrantedByTraitPredicate() {
+        Map<String, UnitData> units = new LinkedHashMap<String, UnitData>();
+        units.put("orc1", new UnitData("orc1", "夹具兽人", "兽人", "战士", 1,
+                new BaseStats(100, 10, 0, 1f, 1, 1f, 0, 100, 0, 20, 150), 1.8f,
+                TargetPriority.NEAREST, null, "sk_hit", false));
+        units.put("grunt", new UnitData("grunt", "夹具杂兵", "哥布林", "战士", 1,
+                new BaseStats(100, 10, 0, 1f, 1, 1f, 0, 100, 0, 20, 150), 1.8f,
+                TargetPriority.NEAREST, null, "sk_hit", false));
+        Map<String, SkillData> skills = new LinkedHashMap<String, SkillData>();
+        skills.put("sk_hit", hitSkill());
+        Map<String, SynergyData> synergies = new LinkedHashMap<String, SynergyData>();
+        synergies.put("syn_orc", new SynergyData("syn_orc", "兽人", SynergySource.RACE, "兽人",
+                Arrays.asList(new SynergyData.Threshold(2, Arrays.asList(
+                        new EffectData(null, null, SynergyMechanic.SCAR, null,
+                                3f, 6f, null, null, EffectTarget.TRAITS, "兽人"))))));
+        GameData data = new GameData(units, skills, synergies,
+                new LinkedHashMap<String, com.voidvvv.kz_auto_chess_n.data.SceneData>(), new ArrayList<String>());
+
+        Player player = new Player(10);
+        for (int i = 0; i < 2; i++) {
+            Unit unit = new Unit(100 + i, units.get("orc1"), 1);
+            player.addToBench(unit);
+            player.deploy(unit, i, 4);
+        }
+        Unit grunt = new Unit(200, units.get("grunt"), 1); // 同侧人类杂兵（职业战士）
+        player.addToBench(grunt);
+        player.deploy(grunt, 4, 4);
+        List<WaveSpec> wave = waveOf(units.get("grunt"), 1f, 2, 0);
+
+        BattleState state = SYSTEM.startBattle(player, wave, data,
+                new RandomGenerator(42L), new SequentialIdIssuer());
+        assertThat(state.getUnits().get(0).getMechanic(SynergyMechanic.SCAR)).isNotNull();  // 兽人命中
+        assertThat(state.getUnits().get(1).getMechanic(SynergyMechanic.SCAR)).isNotNull();
+        assertThat(state.getUnits().get(2).getMechanic(SynergyMechanic.SCAR)).isNull();     // 哥布林不入
+        assertThat(state.getUnits().get(3).getMechanic(SynergyMechanic.SCAR)).isNull();     // 敌方不入（玩家侧羁绊）
+    }
+
+    // —— v5 批4：开局谓词 + 群星响应（CP22）——
+
+    @Test
+    @DisplayName("群星响应开局能量（CP22）：法师(6) OPENING_ENERGY 50 TRAITS → 仅法师系单位 +50，野兽杂兵与敌方不入")
+    void openingEnergyByTraitsPredicate() {
+        Map<String, UnitData> units = new LinkedHashMap<String, UnitData>();
+        units.put("mage", new UnitData("mage", "夹具法师", "精灵", "法师", 1,
+                new BaseStats(100, 10, 0, 1f, 3, 1f, 0, 100, 0, 20, 150), 1.8f,
+                TargetPriority.NEAREST, null, "sk_hit", false));
+        units.put("beast", new UnitData("beast", "夹具野兽", "野兽", "游侠", 1,
+                new BaseStats(100, 10, 0, 1f, 3, 1f, 0, 100, 0, 20, 150), 1.8f,
+                TargetPriority.NEAREST, null, "sk_hit", false));
+        Map<String, SkillData> skills = new LinkedHashMap<String, SkillData>();
+        skills.put("sk_hit", hitSkill());
+        Map<String, SynergyData> synergies = new LinkedHashMap<String, SynergyData>();
+        synergies.put("syn_mage", new SynergyData("syn_mage", "法师", SynergySource.CLASS, "法师",
+                Arrays.asList(new SynergyData.Threshold(6, Arrays.asList(
+                        new EffectData(null, null, SynergyMechanic.OPENING_ENERGY, null,
+                                50f, null, null, null, EffectTarget.TRAITS, "法师"))))));
+        GameData data = new GameData(units, skills, synergies,
+                new LinkedHashMap<String, com.voidvvv.kz_auto_chess_n.data.SceneData>(),
+                new ArrayList<String>());
+
+        Player player = new Player(10);
+        int roster = 1;
+        for (int i = 0; i < 6; i++) { // 6 法师触发 (6) 档
+            Unit unit = new Unit(roster++, units.get("mage"), 1);
+            player.addToBench(unit);
+            player.deploy(unit, i, 4);
+        }
+        Unit beast = new Unit(roster++, units.get("beast"), 1); // 同侧野兽杂兵（不入 TRAITS 法师）
+        player.addToBench(beast);
+        player.deploy(beast, 5, 5);
+        List<WaveSpec> wave = waveOf(melee("grunt", "哥布林", 100, 10, 1f), 1f, 2, 0);
+
+        BattleState state = start(data, player, wave, 42L);
+        for (int i = 0; i < 6; i++) {
+            assertThat(state.getUnits().get(i).getEnergy())
+                    .as("法师系单位 %s 开局 +50", i).isEqualTo(50f);
+        }
+        assertThat(state.getUnits().get(6).getEnergy()).isEqualTo(0f);  // 野兽杂兵不入
+        assertThat(state.getUnits().get(7).getEnergy()).isEqualTo(0f);  // 敌方不入（玩家侧快照）
+    }
+
+    @Test
+    @DisplayName("开局通道 fail-fast（口径 #17 扩）：未知 effect（非 SHIELD/OPENING_ENERGY）抛错")
+    void openingRejectsUnknownEffect() {
+        Map<String, UnitData> units = new LinkedHashMap<String, UnitData>();
+        units.put("orc", melee("orc", "兽人", 100, 10, 1f));
+        Map<String, SkillData> skills = new LinkedHashMap<String, SkillData>();
+        skills.put("sk_hit", hitSkill());
+        Map<String, SynergyData> synergies = new LinkedHashMap<String, SynergyData>();
+        synergies.put("syn_bad", new SynergyData("syn_bad", "兽人", SynergySource.RACE, "兽人",
+                Arrays.asList(new SynergyData.Threshold(2, Arrays.asList(
+                        new EffectData(null, StatusType.STUN, null, null,
+                                0.5f, null, null, null, EffectTarget.ALLIES, null))))));
+        GameData data = new GameData(units, skills, synergies,
+                new LinkedHashMap<String, com.voidvvv.kz_auto_chess_n.data.SceneData>(),
+                new ArrayList<String>());
+
+        Player player = new Player(10);
+        for (int i = 0; i < 2; i++) {
+            Unit unit = new Unit(100 + i, units.get("orc"), 1);
+            player.addToBench(unit);
+            player.deploy(unit, i, 4);
+        }
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                        start(data, player, waveOf(melee("g", "哥布林", 100, 10, 1f), 1f, 2, 0), 42L))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("开局通道不支持的效果");
+    }
+
+    // —— v5 批4：三连装填（CP27，K10）——
+
+    /** 游侠模板：critChance 可调（0 = 天然永不暴、100 = 天然必暴——对拍刀序确定） */
+    private static UnitData ranger(String id, float hp, float atk, int critChance) {
+        return new UnitData(id, "夹具" + id, "精灵", "游侠", 1,
+                new BaseStats((int) hp, (int) atk, 0, 1f, 3, 1f, 0, 100, 0, critChance, 150), 1.8f,
+                TargetPriority.NEAREST, null, "sk_hit", false);
+    }
+
+    /** 肉靶模板（range 3：与游侠互在射程 → 全程不动，ATTACK_LAUNCHED 序确定） */
+    private static UnitData tank(String id) {
+        return new UnitData(id, "夹具" + id, "哥布林", "游侠", 1,
+                new BaseStats(100000, 1, 0, 1f, 3, 1f, 0, 100, 0, 20, 150), 1.8f,
+                TargetPriority.NEAREST, null, "sk_hit", false);
+    }
+
+    /** 无 CRIT_RHYTHM（A，threshold=0 无羁绊）/ 有 CRIT_RHYTHM 3/50（B）两个数据集——
+     *  stat 通道全同，时间线全同；threshold 可调（6 游侠满编 / 1 单游侠），词值恒 3 刀必暴 +50pp */
+    private static GameData rhythmData(boolean withRhythm) {
+        return rhythmData(withRhythm ? 6 : 0);
+    }
+
+    private static GameData rhythmData(int threshold) {
+        Map<String, SkillData> skills = new LinkedHashMap<String, SkillData>();
+        skills.put("sk_hit", hitSkill());
+        Map<String, SynergyData> synergies = new LinkedHashMap<String, SynergyData>();
+        if (threshold > 0) {
+            synergies.put("syn_ranger", new SynergyData("syn_ranger", "游侠", SynergySource.CLASS, "游侠",
+                    Arrays.asList(new SynergyData.Threshold(threshold, Arrays.asList(
+                            new EffectData(null, null, SynergyMechanic.CRIT_RHYTHM, null,
+                                    3f, 50f, null, null, EffectTarget.TRAITS, "游侠"))))));
+        }
+        return new GameData(new LinkedHashMap<String, UnitData>(), skills, synergies,
+                new LinkedHashMap<String, com.voidvvv.kz_auto_chess_n.data.SceneData>(),
+                new ArrayList<String>());
+    }
+
+    /** 6 游侠（critChance=0）× 2 肉靶：同 seed 跑指定 tick 数（无死亡 → 时间线确定） */
+    private static BattleState runRhythmBattle(GameData data, int ticks, long seed) {
+        Player player = new Player(10);
+        for (int i = 0; i < 6; i++) {
+            Unit unit = new Unit(100 + i, ranger("r" + i, 100000, 10, 0), 1);
+            player.addToBench(unit);
+            player.deploy(unit, i, 4);
+        }
+        List<WaveSpec> wave = waveOf(tank("t1"), 1f, 1, 2, 4, 2);
+        BattleState state = SYSTEM.startBattle(player, wave, data,
+                new RandomGenerator(seed), new SequentialIdIssuer());
+        state.skipIntroCountdown();
+        for (int i = 0; i < ticks; i++) {
+            SYSTEM.step(state);
+        }
+        return state;
+    }
+
+    private static List<CombatEvent> attacksOf(BattleState state) {
+        List<CombatEvent> attacks = new ArrayList<CombatEvent>();
+        for (CombatEvent e : state.getEvents()) {
+            if (e.getType() == CombatEvent.Type.ATTACK_LAUNCHED) {
+                attacks.add(e);
+            }
+        }
+        return attacks;
+    }
+
+    /** 按出手单位分组的普攻命中序列（skillId=null 的 HIT；限玩家侧——肉靶反打的普攻不入对拍） */
+    private static Map<Integer, List<CombatEvent>> basicHitsBySource(BattleState state) {
+        Map<Integer, List<CombatEvent>> hits = new LinkedHashMap<Integer, List<CombatEvent>>();
+        for (CombatEvent e : state.getEvents()) {
+            if (e.getType() == CombatEvent.Type.HIT && e.getSkillId() == null
+                    && state.getUnitById(e.getSourceId()).getSide() == Side.PLAYER) {
+                List<CombatEvent> list = hits.get(e.getSourceId());
+                if (list == null) {
+                    list = new ArrayList<CombatEvent>();
+                    hits.put(e.getSourceId(), list);
+                }
+                list.add(e);
+            }
+        }
+        return hits;
+    }
+
+    @Test
+    @DisplayName("三连同 seed 对拍（K10 确定性红线）：有/无 CRIT_RHYTHM 两场 ATTACK_LAUNCHED 逐位一致、RNG 消耗一致——覆写不增耗")
+    void critRhythmOverwriteKeepsRngOrder() {
+        BattleState plain = runRhythmBattle(rhythmData(false), 700, 42L);
+        BattleState rhythm = runRhythmBattle(rhythmData(true), 700, 42L);
+
+        List<CombatEvent> attacksA = attacksOf(plain);
+        List<CombatEvent> attacksB = attacksOf(rhythm);
+        assertThat(attacksA.size()).isGreaterThan(12);            // 每游侠 ≥2 刀（样本充分）
+        assertThat(attacksB).isEqualTo(attacksA);                 // 出手序逐位一致（覆写不改时间线）
+        assertThat(rhythm.getRng().getConsumedCount())
+                .isEqualTo(plain.getRng().getConsumedCount());    // RNG 消耗序不变（零新增消耗点）
+        assertThat(rhythm.getRng().getConsumedCount())
+                .isEqualTo(attacksB.size());                      // 仍 = 暴击 roll 唯一消耗点
+
+        Map<Integer, List<CombatEvent>> hitsA = basicHitsBySource(plain);
+        Map<Integer, List<CombatEvent>> hitsB = basicHitsBySource(rhythm);
+        assertThat(hitsA.size()).isEqualTo(6);
+        for (Map.Entry<Integer, List<CombatEvent>> entry : hitsB.entrySet()) {
+            List<CombatEvent> hitA = hitsA.get(entry.getKey());
+            List<CombatEvent> hitB = entry.getValue();
+            assertThat(hitB).hasSameSizeAs(hitA); // 命中序一致（时间线未漂移）
+            for (int i = 0; i < hitB.size(); i++) {
+                int blade = i + 1;
+                if (blade % 3 == 0) {
+                    assertThat(hitB.get(i).isCrit())
+                            .as("单位 %s 第 %d 刀必暴", entry.getKey(), blade).isTrue();
+                    assertThat(hitB.get(i).getAmount())
+                            .as("必暴刀 ×2.0（150+50）").isCloseTo(hitA.get(i).getAmount() * 2f, within(1e-3f));
+                } else {
+                    assertThat(hitB.get(i).isCrit()).isFalse();   // critChance=0：非必暴刀照 roll 结果
+                    assertThat(hitB.get(i).getAmount()).isCloseTo(hitA.get(i).getAmount(), within(1e-6f));
+                }
+            }
+            for (CombatEvent hit : hitA) {                        // 无机制场：全程零暴击
+                assertThat(hit.isCrit()).isFalse();
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("三连计数跨目标延续：第 1 刀杀敌换目标后，第 3 刀（总计数）仍必暴（per-unit 累计）")
+    void critRhythmCounterPersistsAcrossTargets() {
+        Player player = new Player(10);
+        Unit hunter = new Unit(1, ranger("hunter", 1000, 100, 0), 1); // 一刀 100（无暴）
+        player.addToBench(hunter);
+        player.deploy(hunter, 2, 4);
+        List<WaveSpec> wave = new ArrayList<WaveSpec>();
+        wave.add(new WaveSpec(new UnitData("prey1", "夹具猎物1", "哥布林", "游侠", 1,
+                new BaseStats(100, 1, 0, 1f, 3, 1f, 0, 100, 0, 20, 150), 1.8f,
+                TargetPriority.NEAREST, null, "sk_hit", false), 1, 1f, 1, 2));
+        wave.add(new WaveSpec(new UnitData("prey2", "夹具猎物2", "哥布林", "游侠", 1,
+                new BaseStats(250, 1, 0, 1f, 3, 1f, 0, 100, 0, 20, 150), 1.8f,
+                TargetPriority.NEAREST, null, "sk_hit", false), 1, 1f, 4, 2));
+
+        BattleState state = SYSTEM.startBattle(player, wave, rhythmData(1),
+                new RandomGenerator(42L), new SequentialIdIssuer());
+        state.skipIntroCountdown();
+        SYSTEM.runToEnd(state, 600);
+
+        List<CombatEvent> hunterHits = basicHitsBySource(state).get(1);
+        assertThat(hunterHits).hasSize(3);                       // 刀 1 杀 prey1；刀 2/3 打 prey2
+        assertThat(hunterHits.get(0).isCrit()).isFalse();        // 第 1 刀（prey1，致死）
+        assertThat(hunterHits.get(1).isCrit()).isFalse();        // 第 2 刀（prey2，跨目标延续计数）
+        assertThat(hunterHits.get(2).isCrit()).isTrue();         // 第 3 刀必暴（总计数 3）
+        assertThat(hunterHits.get(2).getAmount()).isCloseTo(200f, within(1e-3f)); // 100×2.0
+        assertThat(state.getOutcome()).isEqualTo(BattleOutcome.PLAYER_WIN);
+    }
+
+    @Test
+    @DisplayName("暴伤 +50pp 只作用必暴刀（R2 口径）：critChance=100 时 1/2 刀 ×1.5、第 3 刀 ×2.0")
+    void critRhythmBonusOnlyOnForcedBlade() {
+        Player player = new Player(10);
+        Unit hunter = new Unit(1, ranger("surer", 100000, 10, 100), 1); // 天然刀刀必暴
+        player.addToBench(hunter);
+        player.deploy(hunter, 2, 4);
+        List<WaveSpec> wave = waveOf(tank("t1"), 1f, 2, 2);
+
+        BattleState state = SYSTEM.startBattle(player, wave, rhythmData(1),
+                new RandomGenerator(42L), new SequentialIdIssuer());
+        state.skipIntroCountdown();
+        for (int i = 0; i < 360; i++) { // ~3 刀（首刀 ~100 tick 发射 + 弹道 ~24 tick + 间隔 100）
+            SYSTEM.step(state);
+        }
+
+        List<CombatEvent> hits = basicHitsBySource(state).get(1);
+        assertThat(hits.size()).isGreaterThanOrEqualTo(3);
+        assertThat(hits.get(0).getAmount()).isCloseTo(15f, within(1e-3f)); // ×1.5（天然暴，无加成）
+        assertThat(hits.get(1).getAmount()).isCloseTo(15f, within(1e-3f)); // ×1.5
+        assertThat(hits.get(2).getAmount()).isCloseTo(20f, within(1e-3f)); // ×2.0（必暴刀 150+50）
     }
 }

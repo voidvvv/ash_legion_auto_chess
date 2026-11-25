@@ -8,6 +8,7 @@ import com.voidvvv.kz_auto_chess_n.data.SkillData;
 import com.voidvvv.kz_auto_chess_n.data.StatKey;
 import com.voidvvv.kz_auto_chess_n.data.StatusType;
 import com.voidvvv.kz_auto_chess_n.data.SynergyData;
+import com.voidvvv.kz_auto_chess_n.data.SynergyMechanic;
 import com.voidvvv.kz_auto_chess_n.data.SynergySource;
 import com.voidvvv.kz_auto_chess_n.data.UnitData;
 import com.voidvvv.kz_auto_chess_n.entities.Unit;
@@ -30,7 +31,7 @@ public final class UnitInfoText {
 
     // —— 词表（§2.1 属性行短形；档位行共用） ——
 
-    /** 属性短名（悬停卡/详情弹窗属性行与档位行共用） */
+    /** 属性短名（悬停卡/详情弹窗属性行与档位行共用；v5 §五.5 暴击两键同表） */
     public static String statLabel(StatKey key) {
         switch (key) {
             case HP: return "生命";
@@ -41,18 +42,27 @@ public final class UnitInfoText {
             case RANGE: return "射程";
             case LIFESTEAL: return "吸血";
             case ENERGY_GAIN_RATE: return "回能";
+            case CRIT_CHANCE: return "暴击";
+            case CRIT_DAMAGE: return "暴伤";
             case SKILL_POWER:
             default: return "技能强度";
         }
     }
 
-    /** 单条档位效果 → 数值文案：ADD → +v（百分比刻度键附 %）；PCT → +v%；SHIELD → 护盾NN% */
+    /**
+     * 单条档位效果 → 数值文案（三通道，v5 K1）：stat → 标签+v（百分比刻度键附 %）；
+     * effect → SHIELD=护盾NN%；mechanic → 玩家可读机制短文案（{@link #mechanicText}）。
+     * 未知通道组合回退词表名/占位，绝不抛异常。
+     */
     static String effectText(EffectData effect) {
+        if (effect.isMechanicChannel()) {
+            return mechanicText(effect);
+        }
         if (!effect.isStatChannel()) {
             if (effect.getEffect() == StatusType.SHIELD) {
                 return "护盾" + Math.round(effect.getValue() * 100f) + "%";
             }
-            return effect.getEffect().jsonName(); // 未知特殊效果：保守回退词表名（不炸）
+            return effect.getEffect() == null ? "未知效果" : effect.getEffect().jsonName(); // 保守回退词表名（不炸）
         }
         String label = statLabel(effect.getStat());
         if (effect.getOp() == EffectOp.PCT) {
@@ -60,6 +70,72 @@ public final class UnitInfoText {
         }
         String suffix = effect.getStat().isPercentScale() ? "%" : "";
         return label + "+" + numberText(effect.getValue()) + suffix;
+    }
+
+    /** 机制通道短文案（v5 §一/K1 参数表；措辞与 stat/effect 行同风格——短、无空格、带关键数值） */
+    private static String mechanicText(EffectData effect) {
+        SynergyMechanic mechanic = effect.getMechanic();
+        if (mechanic == null) {
+            return "未知词条";
+        }
+        float value = effect.getValue();
+        float second = orElseZero(effect.getValue2());
+        switch (mechanic) {
+            case BASIC_ATTACK_STATUS:
+                return "普攻" + statusLabel(effect.getStatus())
+                        + numberText(value) + "%·" + numberText(orElseZero(effect.getDuration())) + "秒";
+            case SCAR:
+                return "每受" + numberText(value) + "击积1疤（至" + numberText(second) + "层）";
+            case DEATH_TAX:
+                return "名册：继承攻+" + numberText(value) + "·生命+" + numberText(second);
+            case DOUBLE_DEATHRATTLE:
+                return "亡语双响";
+            case DEATH_AUDIT:
+                return "点算：移除血<" + numberText(value) + "%敌";
+            case ENEMY_DEATH_SURGE:
+                return "敌死攻速+" + numberText(value) + "%·" + numberText(orElseZero(effect.getDuration())) + "秒";
+            case REFLECT:
+                return "反弹" + numberText(value) + "%甲后伤";
+            case DAMAGE_REDUCTION:
+                return "免伤" + numberText(value) + "%";
+            case KNOCKBACK_IMMUNE:
+                return "免疫击退";
+            case WARCRY_TAUNT:
+                return "开战" + numberText(value) + "秒嘲讽" + numberText(second) + "秒";
+            case SHIELD_WALL:
+                return "盾墙：挡远程普攻";
+            case SPELL_PEN:
+                return "法穿" + numberText(value) + "%";
+            case OPENING_ENERGY:
+                return "开局能量+" + numberText(value);
+            case AFTER_CAST_ENERGY:
+                return "施法回能+" + numberText(value);
+            case EXECUTE:
+                return "收割：血<" + numberText(second) + "%敌增伤" + numberText(value) + "%";
+            case KILL_ENERGY_REFUND:
+                return "击杀回能100";
+            case CRIT_RHYTHM:
+                return "第" + numberText(value) + "刀必暴·暴伤+" + numberText(second) + "%";
+            default:
+                return mechanic.jsonName(); // 词表外机制词：显示词表名（不炸）
+        }
+    }
+
+    /** 状态短名（BASIC_ATTACK_STATUS 附带载荷等）；未登记状态回退词表名 */
+    private static String statusLabel(StatusType status) {
+        if (status == null) {
+            return "状态";
+        }
+        switch (status) {
+            case BURN: return "灼烧";
+            case SLOW: return "减速";
+            case STUN: return "眩晕";
+            default: return status.jsonName();
+        }
+    }
+
+    private static float orElseZero(Float value) {
+        return value == null ? 0f : value;
     }
 
     /** 羁绊档位行（结构化生成，R2 混合口径）：如 2:生命+150；4:生命+400·攻击+20% */

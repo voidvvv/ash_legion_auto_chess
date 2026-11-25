@@ -1,0 +1,22 @@
+Golden UI
+by Buch — OpenGameArt
+
+License: CC0 1.0 Universal (Public Domain Dedication)
+https://creativecommons.org/publicdomain/zero/1.0/
+
+Source page:
+https://opengameart.org/content/golden-ui
+
+Author's note on the source page:
+"NOT REQUIRED, though appreciated: credit me as Buch and link back to my OGA profile page."
+
+This package does not ship its own LICENSE file. The CC0 grant is stated on the
+OpenGameArt source page (CC0 icon + "License(s): CC0"). This file is a locally
+written summary/pointer, not the original pack license file.
+
+Files included for provenance:
+- ui.psd
+- ui_split.png
+- ui_preview_upscaled.png
+- provenance/opengameart-golden-ui.html
+- provenance/cc0-1.0-deed.html

@@ -1,13 +1,16 @@
 package com.voidvvv.kz_auto_chess_n.systems;
 
 import com.voidvvv.kz_auto_chess_n.config.GameBalance;
+import com.voidvvv.kz_auto_chess_n.data.CastCondition;
 import com.voidvvv.kz_auto_chess_n.data.Delivery;
+import com.voidvvv.kz_auto_chess_n.data.EffectData;
 import com.voidvvv.kz_auto_chess_n.data.SkillData;
 import com.voidvvv.kz_auto_chess_n.data.SkillEffect;
 import com.voidvvv.kz_auto_chess_n.data.SkillEffectType;
 import com.voidvvv.kz_auto_chess_n.data.SkillShape;
 import com.voidvvv.kz_auto_chess_n.data.StatKey;
 import com.voidvvv.kz_auto_chess_n.data.StatusType;
+import com.voidvvv.kz_auto_chess_n.data.SynergyMechanic;
 import com.voidvvv.kz_auto_chess_n.entities.BattleState;
 import com.voidvvv.kz_auto_chess_n.entities.BattleUnit;
 import com.voidvvv.kz_auto_chess_n.entities.CombatEvent;
@@ -58,6 +61,9 @@ public final class SkillExecutor {
         if (mainTarget == null) {
             return false; // 延后（口径 #18）
         }
+        if (!castConditionMet(skill, mainTarget)) {
+            return false; // 条件不满足 → 延后（依账除名「持能等待」）
+        }
 
         float attackSnapshot = caster.getEffective(StatKey.ATTACK);
         float scaleFactor = GameBalance.skillStarScale(caster.getStar())
@@ -74,6 +80,10 @@ public final class SkillExecutor {
         } else {
             List<BattleUnit> targets = resolveTargets(state, caster, skill, mainTarget);
             applyEffects(state, caster, skill, targets, attackSnapshot, scaleFactor);
+        }
+        EffectData afterCast = caster.getMechanic(SynergyMechanic.AFTER_CAST_ENERGY);
+        if (afterCast != null) {
+            damagePipeline.gainEnergy(state, caster, afterCast.getValue()); // 群星响应：施法后 +value（CP22）
         }
         return true;
     }
@@ -153,17 +163,17 @@ public final class SkillExecutor {
             return null;
         }
         BattleUnit target = state.getUnitById(caster.getTargetId());
-        if (target == null || target.isCleaned() || target.getSide() == caster.getSide()) {
-            return null;
+        if (target == null || !target.isActable() || target.getSide() == caster.getSide()) {
+            return null; // 过滤点四（C7 ③）
         }
         return target;
     }
 
-    /** HP% 最低友军（含自己）；全满返回 null（延后）；平局取 id 小者 */
+    /** HP% 最低友军（含自己）；全满返回 null（延后）；平局取 id 小者（倒地者不可疗——C7 ③） */
     private static BattleUnit lowestAlly(BattleState state, BattleUnit caster) {
         BattleUnit best = null;
         for (BattleUnit unit : state.getUnits()) {
-            if (unit.getSide() != caster.getSide() || unit.isCleaned()) {
+            if (unit.getSide() != caster.getSide() || !unit.isActable()) {
                 continue;
             }
             if (unit.hpRatio() >= 1f) {
@@ -180,19 +190,19 @@ public final class SkillExecutor {
     private static List<BattleUnit> aliveEnemies(BattleState state, BattleUnit caster) {
         List<BattleUnit> enemies = new ArrayList<BattleUnit>();
         for (BattleUnit unit : state.getUnits()) {
-            if (unit.getSide() != caster.getSide() && unit.isAlive()) {
+            if (unit.getSide() != caster.getSide() && unit.isActable()) { // 过滤点四（C7 ③）
                 enemies.add(unit);
             }
         }
         return enemies;
     }
 
-    /** AOE_1 十字 / AOE_2 菱形（曼哈顿 ≤ radius，含边界格），命中区域内全部存活敌方 */
+    /** AOE_1 十字 / AOE_2 菱形（曼哈顿 ≤ radius，含边界格），命中区域内全部可行动存活敌方 */
     private static List<BattleUnit> enemiesWithin(BattleState state, BattleUnit caster,
                                                   int centerX, int centerY, int radius) {
         List<BattleUnit> hits = new ArrayList<BattleUnit>();
         for (BattleUnit unit : state.getUnits()) {
-            if (unit.getSide() == caster.getSide() || unit.isCleaned()) {
+            if (unit.getSide() == caster.getSide() || !unit.isActable()) { // 过滤点四（C7 ③）
                 continue;
             }
             int distance = Math.abs(unit.getGridX() - centerX) + Math.abs(unit.getGridY() - centerY);
@@ -219,10 +229,13 @@ public final class SkillExecutor {
                                 float attackSnapshot, float scaleFactor) {
         float value = effect.getValue() == null ? 0f : effect.getValue();
         switch (effect.getEffect()) {
-            case DAMAGE:
+            case DAMAGE: {
+                // 穿甲（法师(4)/(6) SPELL_PEN）：技能直伤无视目标护甲 value%（CP20 遗留 → 批4 接线，K9）
+                float armorPenRatio = mechanicRatioOf(caster, SynergyMechanic.SPELL_PEN);
                 damagePipeline.applyDirectHit(state, caster, target, attackSnapshot,
-                        value * scaleFactor, false, false, skill.getId());
+                        value * scaleFactor, false, 0f, false, skill.getId(), armorPenRatio);
                 break;
+            }
             case HEAL:
                 damagePipeline.applyHeal(state, target,
                         target.getEffective(StatKey.HP) * value * scaleFactor);
@@ -234,18 +247,77 @@ public final class SkillExecutor {
                 break;
             case APPLY_STATUS: {
                 StatusType status = effect.getStatus();
-                float power = isDotType(status) ? attackSnapshot * value : value;
+                float power = StatusSystem.isDotType(status) ? attackSnapshot * value : value;
                 float duration = effect.getDuration() == null ? 0f : effect.getDuration();
                 statusSystem.apply(state, target, status, power, duration, caster.getId());
                 break;
             }
+            case GAIN_ENERGY:
+                damagePipeline.gainEnergy(state, target, value); // 走回能管线（受 energyGainRate 加权）
+                break;
+            case KNOCKBACK:
+                applyKnockback(state, target, caster, (int) value);
+                break;
+            case BANISH:
+                Banish.execute(state, target);
+                break;
             default:
                 throw new IllegalArgumentException("未知 SkillEffectType: " + effect.getEffect());
         }
     }
 
-    private static boolean isDotType(StatusType status) {
-        return status == StatusType.BLEED || status == StatusType.POISON;
+    /** 技能级施放条件（v5「依账除名」）：condition 为 null 恒满足 */
+    private static boolean castConditionMet(SkillData skill, BattleUnit mainTarget) {
+        CastCondition condition = skill.getCondition();
+        if (condition == null) {
+            return true;
+        }
+        if (condition.getType() == CastCondition.Type.TARGET_HP_BELOW) {
+            return mainTarget.hpRatio() < condition.getValue();
+        }
+        throw new IllegalArgumentException("未知施放条件: " + condition.getType());
+    }
+
+    /**
+     * 击退（薄执行，K13）：KNOCKBACK_IMMUNE 机制（经 startBattle 下发）或已倒地（CP17 起判定）/清扫者不动；
+     * 方向 = 主轴远离施放者（|dx|≥|dy| 取 x 向，否则 y 向；同格不动），
+     * 逐格 removeFromGrid+placeUnit，目标格被占/越界即止（保留已推进格）。
+     */
+    private static void applyKnockback(BattleState state, BattleUnit target, BattleUnit caster, int distance) {
+        if (target.isCleaned() || target.getMechanic(SynergyMechanic.KNOCKBACK_IMMUNE) != null) {
+            return;
+        }
+        int dx = target.getGridX() - caster.getGridX();
+        int dy = target.getGridY() - caster.getGridY();
+        if (dx == 0 && dy == 0) {
+            return; // 同格不动
+        }
+        boolean alongX = Math.abs(dx) >= Math.abs(dy);
+        int stepX = alongX ? Integer.signum(dx) : 0;
+        int stepY = alongX ? 0 : Integer.signum(dy);
+        int fromX = target.getGridX();
+        int fromY = target.getGridY();
+        int x = fromX;
+        int y = fromY;
+        state.removeFromGrid(target);
+        for (int i = 0; i < distance; i++) {
+            int nextX = x + stepX;
+            int nextY = y + stepY;
+            if (nextX < 0 || nextX >= GameBalance.BOARD_COLS
+                    || nextY < 0 || nextY >= GameBalance.BOARD_ROWS
+                    || state.unitAt(nextX, nextY) != null) {
+                break; // 越界或被占即止
+            }
+            x = nextX;
+            y = nextY;
+        }
+        state.placeUnit(target, x, y); // 一步未进时 x/y = from，原地放回
+    }
+
+    /** 机制比例查询（SPELL_PEN 等，无词 = 0）——百分比刻度 ÷100 在结算点（约定） */
+    private static float mechanicRatioOf(BattleUnit unit, SynergyMechanic kind) {
+        EffectData data = unit == null ? null : unit.getMechanic(kind);
+        return data == null ? 0f : data.getValue() / 100f;
     }
 
     private static List<BattleUnit> singleList(BattleUnit unit) {

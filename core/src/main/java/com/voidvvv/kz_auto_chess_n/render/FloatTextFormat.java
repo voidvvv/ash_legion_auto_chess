@@ -15,6 +15,8 @@ public final class FloatTextFormat {
     public static final Color PURPLE = new Color(0.62f, 0.36f, 0.92f, 1f);
     /** 暴击橙红（普攻 crit） */
     public static final Color ORANGE_RED = new Color(1f, 0.42f, 0.12f, 1f);
+    /** 放逐灰（CP19：UNIT_BANISHED「除名」飘字） */
+    public static final Color BANISH_GRAY = new Color(0.7f, 0.7f, 0.75f, 1f);
     /** 暴击飘字尺寸倍率（render §5.4 表现层自由项） */
     public static final float CRIT_SCALE = 1.2f;
 
@@ -52,6 +54,8 @@ public final class FloatTextFormat {
                 return new Spec(round(event.getAmount()), Color.GREEN, 1f);
             case SHIELDED:
                 return new Spec(round(event.getAmount()), Color.BLUE, 1f);
+            case UNIT_BANISHED:
+                return new Spec("除名", BANISH_GRAY, 1f); // CP19：放逐灰字（amount 无语义）
             default:
                 return null;
         }
