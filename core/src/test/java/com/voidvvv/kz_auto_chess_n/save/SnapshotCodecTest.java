@@ -1,7 +1,12 @@
 package com.voidvvv.kz_auto_chess_n.save;
 
+import com.voidvvv.kz_auto_chess_n.command.CommandManager;
+import com.voidvvv.kz_auto_chess_n.command.PickChestCommand;
 import com.voidvvv.kz_auto_chess_n.command.RunContext;
+import com.voidvvv.kz_auto_chess_n.command.StartBattleCommand;
 import com.voidvvv.kz_auto_chess_n.config.DataValidationException;
+import com.voidvvv.kz_auto_chess_n.config.GameBalance;
+import com.voidvvv.kz_auto_chess_n.entities.BattleOutcome;
 import com.voidvvv.kz_auto_chess_n.entities.BattleState;
 import com.voidvvv.kz_auto_chess_n.data.BaseStats;
 import com.voidvvv.kz_auto_chess_n.data.EquipmentData;
@@ -256,15 +261,30 @@ class SnapshotCodecTest {
     @Test
     @DisplayName("续战等价：restore 后推进一轮，与未挂起的同 seed 上下文直接推进逐位相同")
     void resumeEquivalenceAfterOneRound() {
-        GameData data = data();
+        GameData data = battleData();
         RunContext baseline = richContext(data); // 未挂起参照系
+        String legacyJson = SnapshotCodec.write(SnapshotCodec.capture(richContext(data)));
+        assertThat(legacyJson).doesNotContain("roundIncomePaid");
         RunContext restored = SnapshotCodec.restore(
-                SnapshotCodec.capture(richContext(data)), data, Profile.fresh(), new ShopSystem());
+                SnapshotCodec.read(legacyJson), data, Profile.fresh(), new ShopSystem());
+        assertThat(restored.getRunState().isRoundIncomePaid()).isFalse();
 
         RunFlowSystem flow = new RunFlowSystem();
-        flow.advanceAfterVictory(baseline);
-        flow.advanceAfterVictory(restored);
+        CommandManager manager = new CommandManager();
+        flow.registerHandlers(manager);
+        int previousRound = restored.getRunState().getRound();
+        int previousGold = restored.getPlayer().getGold();
+        int previousExp = restored.getPlayer().getCurrentExp();
+        for (RunContext ctx : Arrays.asList(baseline, restored)) {
+            manager.addCommand(StartBattleCommand.INSTANCE);
+            manager.executeAll(ctx);
+            ctx.getBattleState().finish(BattleOutcome.PLAYER_WIN);
+            flow.tickBattleEnd(ctx, GameBalance.VICTORY_RESULT_DELAY_SECONDS);
+            manager.addCommand(new PickChestCommand(0));
+            manager.executeAll(ctx);
+        }
 
+        assertThat(restored.getRunState().getRound()).isEqualTo(previousRound + 1);
         assertThat(restored.getRunState().getRound()).isEqualTo(baseline.getRunState().getRound());
         assertThat(restored.getRunState().getEnemyWave())
                 .containsExactlyElementsOf(baseline.getRunState().getEnemyWave()); // RNG 流对齐
@@ -272,6 +292,9 @@ class SnapshotCodecTest {
         assertThat(restored.getRng().getConsumedCount())
                 .isEqualTo(baseline.getRng().getConsumedCount());
         assertThat(restored.getPlayer().getGold()).isEqualTo(baseline.getPlayer().getGold());
+        assertThat(restored.getPlayer().getGold()).isEqualTo(previousGold + GameBalance.ROUND_INCOME_GOLD
+                + GameBalance.chestGold(previousRound, GameBalance.isBossRound(previousRound)));
+        assertThat(restored.getPlayer().getCurrentExp()).isEqualTo(previousExp + GameBalance.roundIncomeExp(previousRound));
     }
 
     private static List<String> slotIds(ShopSystem shop) {
@@ -445,7 +468,7 @@ class SnapshotCodecTest {
         RunSnapshot captured = SnapshotCodec.capture(richContext(data));
         RunSnapshot broken = new RunSnapshot(captured.getVersion(), captured.getSeed(),
                 captured.getRngConsumedCount(), captured.getSceneId(), captured.getHeroId(),
-                captured.getRound(), captured.getDefeatCountPerRound(),
+                captured.getRound(), captured.getDefeatCountPerRound(), captured.isRoundIncomePaid(),
                 captured.getIdIssuerNext(), captured.getPlayerGold(), captured.getPlayerLevel(),
                 captured.getPlayerExp(),
                 Collections.singletonList(new RunSnapshot.UnitSnapshot(

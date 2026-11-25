@@ -15,6 +15,7 @@ import com.voidvvv.kz_auto_chess_n.entities.ChestOffer;
 import com.voidvvv.kz_auto_chess_n.entities.ChestOption;
 import com.voidvvv.kz_auto_chess_n.entities.ChestOrigin;
 import com.voidvvv.kz_auto_chess_n.entities.GamePhase;
+import com.voidvvv.kz_auto_chess_n.entities.Player;
 import com.voidvvv.kz_auto_chess_n.entities.RunEndCause;
 import com.voidvvv.kz_auto_chess_n.entities.RunState;
 import com.voidvvv.kz_auto_chess_n.entities.Side;
@@ -86,7 +87,8 @@ public final class RunFlowSystem {
             return true;
         });
         manager.registerHandler(SurrenderCommand.class, (cmd, ctx) -> {
-            if (ctx.getRunState().getPhase() != GamePhase.BATTLE || ctx.getBattleState() == null) {
+            if (ctx.getRunState().getPhase() != GamePhase.BATTLE || ctx.getBattleState() == null
+                    || ctx.getBattleState().isOver()) {
                 return false;
             }
             ctx.getBattleState().markSurrendered(); // §1.4：成功处理入口记录认输标记（归因最高优先级候选）
@@ -106,6 +108,7 @@ public final class RunFlowSystem {
             runState.addNotice(chestSystem.apply(option, ctx.getPlayer(),
                     runState.getIdIssuer(), ctx.getGameData()));
             runState.setPendingChest(null); // 领取即消费（胜局 advanceAfterVictory 亦清；败局分支必先清——守卫拦未领箱）
+            grantRoundIncome(ctx, offer);
             if (offer.getOrigin() == ChestOrigin.DEFEAT) {
                 continueAfterDefeat(ctx); // 败箱领取 → 同轮重试（机会已在判负时计过）
             } else {
@@ -161,7 +164,8 @@ public final class RunFlowSystem {
      * battleState 保留供横幅读 outcome。
      */
     public void onBattleOver(RunContext ctx) {
-        if (ctx.getRunState().getPhase() != GamePhase.BATTLE) {
+        if (ctx.getRunState().getPhase() != GamePhase.BATTLE
+                || ctx.getBattleState() == null || !ctx.getBattleState().isOver()) {
             return;
         }
         resultTimer = 0f;
@@ -238,9 +242,9 @@ public final class RunFlowSystem {
     /**
      * 胜局推进（PickChest handler 结算奖励后调用）：达到本局轮次上限 → RUN_END(COMPLETED)
      * （正式 25 / 对拍 3——§0.2「领完第 3 轮胜箱走现有终局分支，界面显示对拍完成」）；
-     * 否则 round+1 + 怜悯双清零 + 敌阵重生成 + 商店免费补货（architecture §5.1"新轮进入"）。
+     * 否则推进一轮，重置战败与补给计账，生成新敌阵并免费补货。
      */
-    public void advanceAfterVictory(RunContext ctx) {
+    private void advanceAfterVictory(RunContext ctx) {
         RunState runState = ctx.getRunState();
         ctx.setBattleState(null);
         runState.setPendingChest(null);
@@ -254,6 +258,32 @@ public final class RunFlowSystem {
         beginRound(ctx);
         ctx.getShop().replenish(ctx, false); // 补货分派单点（§0.2）：对拍写新轮固定五槽 + 序号归零
         runState.addNotice("第 " + runState.getRound() + " 轮开始（商店免费刷新）");
+    }
+
+    /** 在领箱返回备战时入账，每波一次。同轮重试的败箱、胜箱仍各自结算。 */
+    private void grantRoundIncome(RunContext ctx, ChestOffer offer) {
+        RunState run = ctx.getRunState();
+        BattleState battle = ctx.getBattleState();
+        // 对拍是固定经济的战斗样片。零棋子及第三败没有败箱，无法到达此入口。
+        if (ctx.getMode().isSampleDuel() || run.isRoundIncomePaid() || battle == null
+                || battle.isSurrendered()
+                || (offer.getOrigin() == ChestOrigin.VICTORY && run.getRound() >= ctx.totalRounds())) {
+            return;
+        }
+        Player player = ctx.getPlayer();
+        int gold = GameBalance.ROUND_INCOME_GOLD;
+        int exp = GameBalance.roundIncomeExp(run.getRound());
+        if (player.getLevel() == GameBalance.MAX_PLAYER_LEVEL) {
+            exp = 0;
+        } else if (player.getLevel() == GameBalance.MAX_PLAYER_LEVEL - 1) {
+            exp = Math.min(exp, GameBalance.expToNextLevel(player.getLevel()) - player.getCurrentExp());
+        }
+        player.addGold(gold);
+        if (exp > 0) {
+            player.addExp(exp);
+        }
+        run.markRoundIncomePaid();
+        run.addNotice("战后补给：金币 +" + gold + (exp > 0 ? "，经验 +" + exp : ""));
     }
 
     /**

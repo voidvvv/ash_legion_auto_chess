@@ -126,6 +126,7 @@ public final class GameBalance {
     public static final int SHOP_REFRESH_COST = 2;
     public static final int BUY_EXP_COST = 4;
     public static final int BUY_EXP_GAIN = 4;
+    public static final int ROUND_INCOME_GOLD = 3;
     public static final int CHEST_GOLD_CAP = 12; // 修订二：10→12（现公式最大基础值 11，≈解除封顶；待调）
     /** 每轮战败机会上限（3 次机会制，GDD §2.2；第 3 败直接终局无败箱；工作值待调） */
     public static final int DEFEAT_LIMIT_PER_ROUND = 3;
@@ -226,6 +227,15 @@ public final class GameBalance {
         if (round <= 12) { return 2; }
         if (round <= 19) { return 4; }
         return 6;
+    }
+
+    /** 基础战后经验：前半程逐步开放人口，后半程保持升级节奏。 */
+    public static int roundIncomeExp(int round) {
+        checkRound(round);
+        if (round < 8) {
+            return 2;
+        }
+        return round < 15 ? 3 : 4;
     }
 
     /** 宝箱金币：3 + floor(轮/3)，封顶 12（修订二）；Boss 箱 ×2（GDD §3.2） */

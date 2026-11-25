@@ -19,6 +19,8 @@ public final class RunSnapshot {
     private final int round;
     /** 本轮已战败次数（3 次机会制——D10 续玩语义：恢复后已耗机会不重置） */
     private final int defeatCountPerRound;
+    /** V2 可选字段，旧档默认 false。 */
+    private final boolean roundIncomePaid;
     /** 发号器下一待发号（单一 id 空间续号） */
     private final int idIssuerNext;
     private final int playerGold;
@@ -40,7 +42,7 @@ public final class RunSnapshot {
     private final List<WaveEntrySnapshot> enemyWave;
 
     public RunSnapshot(int version, long seed, int rngConsumedCount, String sceneId, String heroId,
-                       int round, int defeatCountPerRound, int idIssuerNext,
+                       int round, int defeatCountPerRound, boolean roundIncomePaid, int idIssuerNext,
                        int playerGold, int playerLevel, int playerExp,
                        List<UnitSnapshot> units, List<Integer> benchUnitIndex,
                        List<Integer> deploymentUnitIndex, List<EquipmentSnapshot> inventory,
@@ -53,6 +55,7 @@ public final class RunSnapshot {
         this.heroId = heroId;
         this.round = round;
         this.defeatCountPerRound = defeatCountPerRound;
+        this.roundIncomePaid = roundIncomePaid;
         this.idIssuerNext = idIssuerNext;
         this.playerGold = playerGold;
         this.playerLevel = playerLevel;
@@ -73,6 +76,7 @@ public final class RunSnapshot {
     public String getHeroId() { return heroId; }
     public int getRound() { return round; }
     public int getDefeatCountPerRound() { return defeatCountPerRound; }
+    public boolean isRoundIncomePaid() { return roundIncomePaid; }
     public int getIdIssuerNext() { return idIssuerNext; }
     public int getPlayerGold() { return playerGold; }
     public int getPlayerLevel() { return playerLevel; }

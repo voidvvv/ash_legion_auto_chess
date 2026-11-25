@@ -1,5 +1,6 @@
 package com.voidvvv.kz_auto_chess_n.systems;
 
+import com.badlogic.gdx.files.FileHandle;
 import com.voidvvv.kz_auto_chess_n.command.AbandonRunCommand;
 import com.voidvvv.kz_auto_chess_n.command.CommandManager;
 import com.voidvvv.kz_auto_chess_n.command.PickChestCommand;
@@ -37,11 +38,17 @@ import com.voidvvv.kz_auto_chess_n.entities.RunState;
 import com.voidvvv.kz_auto_chess_n.entities.SequentialIdIssuer;
 import com.voidvvv.kz_auto_chess_n.entities.Unit;
 import com.voidvvv.kz_auto_chess_n.entities.WaveSpec;
+import com.voidvvv.kz_auto_chess_n.save.Profile;
+import com.voidvvv.kz_auto_chess_n.save.RunSnapshot;
+import com.voidvvv.kz_auto_chess_n.save.SnapshotCodec;
+import com.voidvvv.kz_auto_chess_n.save.SnapshotStore;
 import com.voidvvv.kz_auto_chess_n.systems.support.BattleTestFixtures;
 import com.voidvvv.kz_auto_chess_n.utils.RandomGenerator;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -453,7 +460,7 @@ class RunFlowSystemTest {
     }
 
     @Test
-    @DisplayName("PickChest(0) 败箱金币：入账 defeatChestGold 值、回 SHOPPING 同轮重试（round/敌阵/商店不变）")
+    @DisplayName("首败有效领箱：败箱金币与基础补给同时入账，回同轮备战")
     void pickDefeatChestGoldRetriesSameRound() {
         GameData data = demoData();
         RunFlowSystem flow = new RunFlowSystem();
@@ -473,7 +480,9 @@ class RunFlowSystemTest {
         manager.addCommand(new PickChestCommand(0));
         manager.executeAll(ctx);
         assertThat(ctx.getPlayer().getGold())
-                .isEqualTo(goldBefore + GameBalance.defeatChestGold(1));
+                .isEqualTo(goldBefore + GameBalance.defeatChestGold(1) + GameBalance.ROUND_INCOME_GOLD);
+        assertThat(ctx.getPlayer().getCurrentExp()).isEqualTo(GameBalance.roundIncomeExp(1));
+        assertThat(ctx.getRunState().isRoundIncomePaid()).isTrue();
         assertThat(ctx.getRunState().getRound()).isEqualTo(1);
         assertThat(ctx.getRunState().getPhase()).isEqualTo(GamePhase.SHOPPING);
         assertThat(ctx.getBattleState()).isNull();
@@ -482,6 +491,66 @@ class RunFlowSystemTest {
         assertThat(ctx.getShop().getSlots()).containsExactlyElementsOf(slotsBefore);
         assertThat(ctx.getRng().getConsumedCount()).isEqualTo(consumedAtResult); // 零 RNG
         assertThat(ctx.getRunState().getDefeatCountPerRound()).isEqualTo(1); // 不再计
+    }
+
+    @Test
+    void retryRestoresPaidIncomeAndNextWavePaysAgain(@TempDir Path tempDir) {
+        GameData data = demoData();
+        RunFlowSystem flow = new RunFlowSystem();
+        CommandManager manager = armedManager(flow);
+        RunContext ctx = newContext(data);
+        flow.startRun(ctx);
+        deploy(ctx, "unit_trainee_01", 2, 5);
+        BattleSystem battle = new BattleSystem();
+
+        manager.addCommand(StartBattleCommand.INSTANCE);
+        manager.executeAll(ctx);
+        battle.runToEnd(ctx.getBattleState(), MAX_TICKS);
+        assertThat(ctx.getBattleState().getOutcome()).isEqualTo(BattleOutcome.ENEMY_WIN);
+        flow.tickBattleEnd(ctx, GameBalance.LOGIC_STEP);
+        manager.addCommand(new PickChestCommand(0));
+        manager.addCommand(new PickChestCommand(0));
+        manager.executeAll(ctx);
+        int paidGold = GameBalance.START_GOLD + GameBalance.defeatChestGold(1) + GameBalance.ROUND_INCOME_GOLD;
+        assertThat(ctx.getPlayer().getGold()).isEqualTo(paidGold);
+        assertThat(ctx.getPlayer().getCurrentExp()).isEqualTo(GameBalance.roundIncomeExp(1));
+
+        SnapshotStore store = new SnapshotStore(new FileHandle(tempDir.resolve("run_snapshot.json").toFile()));
+        assertThat(store.save(SnapshotCodec.capture(ctx))).isTrue();
+        RunSnapshot snapshot = store.load(data);
+        assertThat(snapshot.isRoundIncomePaid()).isTrue();
+        RunContext restored = SnapshotCodec.restore(snapshot, data, Profile.fresh(), new ShopSystem());
+        assertThat(restored.getRunState().getDefeatCountPerRound()).isEqualTo(1);
+        assertThat(restored.getPlayer().getGold()).isEqualTo(paidGold);
+        assertThat(restored.getPlayer().getCurrentExp()).isEqualTo(GameBalance.roundIncomeExp(1));
+
+        manager.addCommand(StartBattleCommand.INSTANCE);
+        manager.executeAll(restored);
+        battle.runToEnd(restored.getBattleState(), MAX_TICKS);
+        assertThat(restored.getBattleState().getOutcome()).isEqualTo(BattleOutcome.ENEMY_WIN);
+        flow.tickBattleEnd(restored, GameBalance.LOGIC_STEP);
+        manager.addCommand(new PickChestCommand(0));
+        manager.executeAll(restored);
+        paidGold += GameBalance.defeatChestGold(1);
+        assertThat(restored.getPlayer().getGold()).isEqualTo(paidGold);
+        assertThat(restored.getPlayer().getCurrentExp()).isEqualTo(GameBalance.roundIncomeExp(1));
+
+        deploy(restored, "unit_champion_01", 3, 4);
+        for (int round = 1; round <= 2; round++) {
+            manager.addCommand(StartBattleCommand.INSTANCE);
+            manager.executeAll(restored);
+            battle.runToEnd(restored.getBattleState(), MAX_TICKS);
+            assertThat(restored.getBattleState().getOutcome()).isEqualTo(BattleOutcome.PLAYER_WIN);
+            flow.tickBattleEnd(restored, GameBalance.VICTORY_RESULT_DELAY_SECONDS);
+            manager.addCommand(new PickChestCommand(2));
+            manager.executeAll(restored);
+            assertThat(restored.getRunState().getRound()).isEqualTo(round + 1);
+            assertThat(restored.getRunState().isRoundIncomePaid()).isFalse();
+        }
+        assertThat(restored.getPlayer().getInventory()).hasSize(2);
+        assertThat(restored.getPlayer().getGold()).isEqualTo(paidGold + GameBalance.ROUND_INCOME_GOLD);
+        assertThat(restored.getPlayer().getLevel()).isEqualTo(2);
+        assertThat(restored.getPlayer().getCurrentExp()).isZero();
     }
 
     @Test
@@ -559,6 +628,9 @@ class RunFlowSystemTest {
         // 再走一轮判负（领箱 → 开战 → 投降）
         manager.addCommand(new PickChestCommand(0));
         manager.executeAll(ctx);
+        assertThat(ctx.getPlayer().getGold()).isEqualTo(GameBalance.START_GOLD + GameBalance.defeatChestGold(1));
+        assertThat(ctx.getPlayer().getCurrentExp()).isZero();
+        assertThat(ctx.getRunState().isRoundIncomePaid()).isFalse();
         manager.addCommand(StartBattleCommand.INSTANCE);
         manager.executeAll(ctx);
         int consumedBeforeSurrender = ctx.getRng().getConsumedCount();
@@ -595,7 +667,7 @@ class RunFlowSystemTest {
     // —— 胜局推进（PickChest 唯一出口 → 新轮/终局） ——
 
     @Test
-    @DisplayName("PickChest 槽1 金币：入账 chestGold(round) 后推进新轮（敌阵重生成+免费刷新+通知）")
+    @DisplayName("PickChest 槽1 金币：宝箱和战后补给一起发放，再重生成敌阵并刷新商店")
     void pickChestGoldAdvancesToNextRound() {
         GameData data = demoData();
         RunFlowSystem flow = new RunFlowSystem();
@@ -612,7 +684,7 @@ class RunFlowSystemTest {
         manager.addCommand(new PickChestCommand(0));
         manager.executeAll(ctx);
         assertThat(ctx.getPlayer().getGold())
-                .isEqualTo(goldBefore + GameBalance.chestGold(1, false));
+                .isEqualTo(goldBefore + GameBalance.chestGold(1, false) + GameBalance.ROUND_INCOME_GOLD);
         assertThat(ctx.getRunState().getRound()).isEqualTo(2);
         assertThat(ctx.getRunState().getPhase()).isEqualTo(GamePhase.SHOPPING);
         assertThat(ctx.getRunState().getPendingChest()).isNull();
@@ -625,7 +697,7 @@ class RunFlowSystemTest {
     }
 
     @Test
-    @DisplayName("PickChest 槽2 经验书：+chestExpBook(round) 经验（Lv.1 恰好升 Lv.2）")
+    @DisplayName("PickChest 槽2 经验书：额外经验叠加战后补给")
     void pickChestExpBookAddsExperience() {
         GameData data = demoData();
         RunFlowSystem flow = new RunFlowSystem();
@@ -640,10 +712,10 @@ class RunFlowSystemTest {
         int goldBefore = ctx.getPlayer().getGold();
         manager.addCommand(new PickChestCommand(1));
         manager.executeAll(ctx);
-        assertThat(ctx.getPlayer().getGold()).isEqualTo(goldBefore); // 经验书不动金
+        assertThat(ctx.getPlayer().getGold()).isEqualTo(goldBefore + GameBalance.ROUND_INCOME_GOLD);
         assertThat(ctx.getPlayer().getLevel())
                 .isEqualTo(2); // expToNextLevel(1)=4 == chestExpBook(1)
-        assertThat(ctx.getPlayer().getCurrentExp()).isZero();
+        assertThat(ctx.getPlayer().getCurrentExp()).isEqualTo(GameBalance.roundIncomeExp(1));
         assertThat(ctx.getRunState().getRound()).isEqualTo(2);
     }
 
@@ -659,13 +731,22 @@ class RunFlowSystemTest {
         manager.addCommand(StartBattleCommand.INSTANCE);
         manager.executeAll(ctx);
         new BattleSystem().runToEnd(ctx.getBattleState(), MAX_TICKS);
-        flow.onBattleOver(ctx);
+        manager.addCommand(SurrenderCommand.INSTANCE); // 胜利定格期间的晚到输入不改写已完成结果
+        manager.executeAll(ctx);
+        assertThat(ctx.getBattleState().isSurrendered()).isFalse();
+        flow.tickBattleEnd(ctx, GameBalance.VICTORY_RESULT_DELAY_SECONDS);
+        flow.tickBattleEnd(ctx, GameBalance.VICTORY_RESULT_DELAY_SECONDS);
+        assertThat(ctx.getPlayer().getGold()).isEqualTo(GameBalance.START_GOLD);
+        assertThat(ctx.getPlayer().getCurrentExp()).isZero();
+        manager.addCommand(new PickChestCommand(2));
         manager.addCommand(new PickChestCommand(2));
         manager.executeAll(ctx);
         assertThat(ctx.getPlayer().getInventory()).hasSize(1);
         Equipment gained = ctx.getPlayer().getInventory().get(0);
         assertThat(gained.getTemplate().getId()).isEqualTo("eq_t_sword"); // 成/传池空 → 降级白池
         assertThat(ctx.getRunState().getRound()).isEqualTo(2);
+        assertThat(ctx.getPlayer().getGold()).isEqualTo(GameBalance.START_GOLD + GameBalance.ROUND_INCOME_GOLD);
+        assertThat(ctx.getPlayer().getCurrentExp()).isEqualTo(GameBalance.roundIncomeExp(1));
     }
 
     @Test
@@ -734,6 +815,7 @@ class RunFlowSystemTest {
         flow.startRun(ctx);
         deploy(ctx, "unit_champion_01", 2, 5);
         BattleSystem battleSystem = new BattleSystem();
+        int expectedGold = GameBalance.START_GOLD;
         for (int round = 1; round <= GameBalance.TOTAL_ROUNDS; round++) {
             manager.addCommand(StartBattleCommand.INSTANCE);
             manager.executeAll(ctx);
@@ -743,6 +825,11 @@ class RunFlowSystemTest {
             assertThat(ctx.getRunState().getPendingChest()).isNotNull(); // 每轮胜局必先领箱
             manager.addCommand(new PickChestCommand(0));
             manager.executeAll(ctx);
+            expectedGold += GameBalance.chestGold(round, GameBalance.isBossRound(round));
+            if (round < GameBalance.TOTAL_ROUNDS) {
+                expectedGold += GameBalance.ROUND_INCOME_GOLD;
+            }
+            assertThat(ctx.getPlayer().getGold()).isEqualTo(expectedGold);
         }
         assertThat(ctx.getRunState().getPhase()).isEqualTo(GamePhase.RUN_END);
         assertThat(ctx.getRunState().getRound()).isEqualTo(GameBalance.TOTAL_ROUNDS);
