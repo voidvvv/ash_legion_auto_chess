@@ -105,14 +105,19 @@ public final class UnitView {
         float size = BoardGeometry.UNIT_DRAW_PX * (1f - 0.4f * fade); // 死亡缩放（比例不变，自底锚上收）
 
         drawShadow(batch, cx, cy, alpha); // 脚下影子（棋体之下——§1.3）
-        TextureRegion region = assets.region(PlaceholderKeys.unitFrame(
-                unit.getTemplate().getId(), animName(), anim.frameIndex()));
+        String frameKey = PlaceholderKeys.unitFrame(
+                unit.getTemplate().getId(), animName(), anim.frameIndex());
+        TextureRegion region = assets.region(frameKey);
         boolean wasFlip = region.isFlipX();
         if (enemy != wasFlip) {
             region.flip(true, false);
         }
-        Color star = StarColors.of(unit.getStar());
-        batch.setColor(star.r, star.g, star.b, alpha);
+        if (assets.isGeneratedArt(frameKey)) {
+            batch.setColor(1f, 1f, 1f, alpha); // 原创真彩帧：不做星级 tint（星级由脚下星级点表达）
+        } else {
+            Color star = StarColors.of(unit.getStar());
+            batch.setColor(star.r, star.g, star.b, alpha);
+        }
         drawBody(batch, region, cx, cy, size);
         if (anim.hitFlashRatio() > 0f) { // 受击白闪叠加层（与本体共用同一变换）
             batch.setColor(1f, 1f, 1f, anim.hitFlashRatio() * 0.8f * alpha);

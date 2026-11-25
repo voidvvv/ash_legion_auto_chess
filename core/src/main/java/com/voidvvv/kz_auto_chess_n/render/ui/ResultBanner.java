@@ -87,22 +87,22 @@ public final class ResultBanner extends Group {
         batch.draw(assets.region(com.voidvvv.kz_auto_chess_n.render.PlaceholderKeys.WHITE),
                 120f, 130f, 400f, 110f); // 底板随归因区向上拓（§1.4）
         batch.setColor(Color.WHITE);
-        assets.font().getData().setScale(2f);
-        assets.font().setColor(tint);
-        assets.font().draw(batch, text, 296f, 210f); // 2 字 ×24px 居中（§1.4 胜负基线约 210）
-        assets.font().getData().setScale(1f);
-        assets.font().setColor(Color.WHITE);
-        float y = 181f; // §1.4 归因两行基线 181/167（392px 带内居中）
+        assets.titleFont().setColor(tint);
+        assets.titleFont().draw(batch, text, 0f, 214f, BoardGeometry.VIRTUAL_W,
+                com.badlogic.gdx.utils.Align.center, false); // 标题黑体 20px 居中（§1.4 胜负区）
+        assets.titleFont().setColor(Color.WHITE);
+        float y = 183f; // §1.4 归因两行（392px 带内居中；正文楷体 8.5px）
         for (int i = 0; i < attributionLines.size(); i++) {
-            assets.font().draw(batch, attributionLines.get(i), centeredX(attributionLines.get(i)), y);
-            y -= 14f;
+            assets.bodyFont().draw(batch, attributionLines.get(i), centeredX(attributionLines.get(i)), y);
+            y -= 12f;
         }
-        assets.font().draw(batch, hint, 272f, 147f); // 状态行基线（§1.4：归因之下）
+        assets.uiFont().draw(batch, hint, 124f, 151f, 392f,
+                com.badlogic.gdx.utils.Align.center, false); // 状态行（§1.4：归因之下）
     }
 
-    /** 归因行 392px 带内居中（§1.4「文本测量用现有字体」） */
+    /** 归因行 392px 带内居中（§1.4「文本测量用正文楷体」） */
     private float centeredX(String line) {
-        measureLayout.setText(assets.font(), line);
+        measureLayout.setText(assets.bodyFont(), line);
         return 124f + (392f - measureLayout.width) / 2f;
     }
 }

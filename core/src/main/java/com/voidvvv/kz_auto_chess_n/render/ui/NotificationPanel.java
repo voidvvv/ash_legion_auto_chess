@@ -235,7 +235,7 @@ public final class NotificationPanel extends Group {
                 - BoardGeometry.NOTIFY_PADDING_PX - BoardGeometry.NOTIFY_FIRST_BASELINE_INSET_PX;
         int count = 0;
         for (int i = lines.size() - 1; i >= 0 && count < NotificationLog.SMALL_WINDOW_LINES; i--, count++) {
-            assets.font().draw(batch, ellipsize(lines.get(i), maxWidth), textX, y);
+            assets.bodyFont().draw(batch, ellipsize(lines.get(i), maxWidth), textX, y);
             y -= BoardGeometry.NOTIFY_LINE_HEIGHT;
         }
     }
@@ -254,7 +254,7 @@ public final class NotificationPanel extends Group {
                 - BoardGeometry.NOTIFY_PADDING_PX - BoardGeometry.NOTIFY_FIRST_BASELINE_INSET_PX;
         for (int i = lines.size() - 1; i >= 0 && y > BoardGeometry.NOTIFY_LARGE_Y
                 + BoardGeometry.NOTIFY_PADDING_PX; i--) {
-            assets.font().draw(batch, ellipsize(lines.get(i), maxWidth), textX, y);
+            assets.bodyFont().draw(batch, ellipsize(lines.get(i), maxWidth), textX, y);
             y -= BoardGeometry.NOTIFY_LINE_HEIGHT;
         }
     }
@@ -267,7 +267,7 @@ public final class NotificationPanel extends Group {
         return NotificationFormat.ellipsize(line, maxWidth, new NotificationFormat.WidthMeasurer() {
             @Override
             public float widthOf(String text) {
-                measureLayout.setText(assets.font(), text);
+                measureLayout.setText(assets.bodyFont(), text);
                 return measureLayout.width;
             }
         });

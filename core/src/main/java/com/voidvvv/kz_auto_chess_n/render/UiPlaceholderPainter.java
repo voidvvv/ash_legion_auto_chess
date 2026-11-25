@@ -92,6 +92,18 @@ final class UiPlaceholderPainter {
             closeButton(pm, w, h, CLOSE_FILL);
         } else if (entry == UiKeys.BTN_CLOSE_PRESSED) {
             closeButton(pm, w, h, CLOSE_PRESSED);
+        } else if (entry == UiKeys.BTN_CLOSE_HOVER) {
+            closeButton(pm, w, h, CLOSE_FILL); // 悬停占位暂用正常底（真素材已交付，占位仅缺件兜底）
+        } else if (entry == UiKeys.BTN_CLOSE_DISABLED) {
+            closeButton(pm, w, h, TRACK_FILL);
+        } else if (entry == UiKeys.BUTTON_NORMAL) {
+            framed(pm, w, h, SLOT_FILL, PANEL_EDGE, 2);
+        } else if (entry == UiKeys.BUTTON_HOVER) {
+            framed(pm, w, h, TAB_ACTIVE_FILL, GOLD, 2);
+        } else if (entry == UiKeys.BUTTON_PRESSED) {
+            framed(pm, w, h, CLOSE_PRESSED, GOLD, 2);
+        } else if (entry == UiKeys.BUTTON_DISABLED) {
+            framed(pm, w, h, TRACK_FILL, TRACK_EDGE, 2);
         } else if (entry == UiKeys.DIVIDER_H) {
             fill(pm, DIVIDER_DARK, 0, 0, w, h / 2);  // 上缘暗线
             fill(pm, DIVIDER_LIGHT, 0, h / 2, w, h - h / 2); // 下缘亮线

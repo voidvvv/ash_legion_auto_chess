@@ -72,54 +72,56 @@ public final class BattleHud extends Group {
         batch.setColor(Color.WHITE);
     }
 
-    /** SPD 切换按钮（x1 ⇄ x2） */
+    /** SPD 切换按钮（x1 ⇄ x2；原创四态按钮壳） */
     private final class SpeedButton extends Actor {
-        @Override
-        public void draw(Batch batch, float parentAlpha) {
-            Color old = batch.getColor();
-            batch.setColor(0.35f, 0.45f, 0.6f, parentAlpha);
-            batch.draw(assets.region(PlaceholderKeys.PANEL_9SLICE), getX(), getY(), getWidth(), getHeight());
-            batch.setColor(old);
-            assets.font().draw(batch, speedFactor == 1f ? "速度 x1" : "速度 x2",
-                    getX() + 16f, getY() + 24f);
-        }
+        private final ClickListener listener;
 
         SpeedButton() {
             setSize(76f, 34f);
-            addListener(new ClickListener() {
+            this.listener = new ClickListener() {
                 @Override
                 public void clicked(InputEvent event, float x, float y) {
                     speedFactor = speedFactor == 1f ? GameBalance.BATTLE_SPEED_FACTOR_FAST : 1f;
                     speedListener.onSpeedChanged(speedFactor);
                 }
-            });
+            };
+            addListener(listener);
+        }
+
+        @Override
+        public void draw(Batch batch, float parentAlpha) {
+            com.voidvvv.kz_auto_chess_n.render.ButtonArt.drawShell(batch, assets, listener,
+                    getX(), getY(), getWidth(), getHeight(), parentAlpha, false);
+            assets.uiFont().draw(batch, speedFactor == 1f ? "速度 x1" : "速度 x2",
+                    getX(), getY() + 24f, getWidth(), com.badlogic.gdx.utils.Align.center, false);
         }
     }
 
-    /** 投降按钮（命令路径） */
+    /** 投降按钮（命令路径；原创四态按钮壳） */
     private static final class GiveUpButton extends Actor {
         private final CommandManager commandManager;
         private final Assets assets;
+        private final ClickListener listener;
 
         GiveUpButton(final CommandManager commandManager, Assets assets) {
             this.commandManager = commandManager;
             this.assets = assets;
             setSize(96f, 34f);
-            addListener(new ClickListener() {
+            this.listener = new ClickListener() {
                 @Override
                 public void clicked(InputEvent event, float x, float y) {
                     commandManager.addCommand(SurrenderCommand.INSTANCE);
                 }
-            });
+            };
+            addListener(listener);
         }
 
         @Override
         public void draw(Batch batch, float parentAlpha) {
-            Color old = batch.getColor();
-            batch.setColor(0.6f, 0.25f, 0.2f, parentAlpha);
-            batch.draw(assets.region(PlaceholderKeys.PANEL_9SLICE), getX(), getY(), getWidth(), getHeight());
-            batch.setColor(old);
-            assets.font().draw(batch, "投降", getX() + 36f, getY() + 24f);
+            com.voidvvv.kz_auto_chess_n.render.ButtonArt.drawShell(batch, assets, listener,
+                    getX(), getY(), getWidth(), getHeight(), parentAlpha, false);
+            assets.uiFont().draw(batch, "投降", getX(), getY() + 24f, getWidth(),
+                    com.badlogic.gdx.utils.Align.center, false);
         }
     }
 }

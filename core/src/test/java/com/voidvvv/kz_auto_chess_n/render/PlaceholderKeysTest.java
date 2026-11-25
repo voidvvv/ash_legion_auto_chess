@@ -58,7 +58,7 @@ class PlaceholderKeysTest {
     void enumerateForCoversEverything() {
         GameData data = BattleTestFixtures.microData(meleeSkill());
         List<String> keys = PlaceholderKeys.enumerateFor(data);
-        // 单位帧：microData 无单位 → 0；技能 2（起手+落点）；亡语弹通用 1；状态 10；数字 10；通用件 4；UI 框架件 20
+        // 单位帧：microData 无单位 → 0；技能 2（起手+落点）；亡语弹通用 1；状态 10；数字 10；通用件 4；UI 框架件 26（含按钮态 6）
         assertThat(keys).contains("fx_sk_melee", "fx_sk_melee_burst");
         assertThat(keys).contains("fx_deathrattle_projectile_burst"); // 亡语合成 id（2026-11-21 回归补）
         assertThat(keys).contains("fx_status_shield", "fx_status_stun");
@@ -78,8 +78,8 @@ class PlaceholderKeysTest {
                 "unit_x_attack_0", "unit_x_attack_1", "unit_x_attack_2",
                 "unit_x_cast_0", "unit_x_cast_1",
                 "unit_x_death_0", "unit_x_death_1", "unit_x_death_2");
-        // 状态 fx 10（v5 增 BURN）+ 亡语弹通用 1（回归补）+ UI 框架件 20（UI 抽屉化批0：必需 12 + 加分 8）
-        assertThat(full).hasSize(12 + 2 + 1 + 10 + 10 + 4 + 20);
+        // 状态 fx 10（v5 增 BURN）+ 亡语弹通用 1（回归补）+ UI 框架件 26（必需 12 + 加分 8 + 按钮态 6——第二阶段）
+        assertThat(full).hasSize(12 + 2 + 1 + 10 + 10 + 4 + 26);
     }
 
     @Test

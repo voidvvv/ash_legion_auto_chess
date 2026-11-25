@@ -208,7 +208,17 @@ public final class BattleScreen implements Screen {
         this.batch = new SpriteBatch();
         this.worldViewport = new FitViewport(BoardGeometry.VIRTUAL_W, BoardGeometry.VIRTUAL_H, worldCamera);
         this.uiStage = new com.badlogic.gdx.scenes.scene2d.Stage(
-                new FitViewport(BoardGeometry.VIRTUAL_W, BoardGeometry.VIRTUAL_H));
+                new FitViewport(BoardGeometry.VIRTUAL_W, BoardGeometry.VIRTUAL_H)) {
+            private final com.badlogic.gdx.math.Vector2 wheelPosition = new com.badlogic.gdx.math.Vector2();
+
+            @Override
+            public boolean scrolled(float amountX, float amountY) {
+                boolean blocked = paused || dialogManager.isShowing() || transitionController.isInputBlocked();
+                screenToStageCoordinates(wheelPosition.set(Gdx.input.getX(), Gdx.input.getY()));
+                drawerPanel.syncWheelFocus(this, blocked ? null : hit(wheelPosition.x, wheelPosition.y, true));
+                return !blocked && super.scrolled(amountX, amountY);
+            }
+        };
         this.battleRenderer = new BattleRenderer(assets);
         this.dialogManager = new UIDialogManager(assets);
         this.topBar = new TopBar(assets, new TopBar.PauseListener() {
@@ -265,7 +275,14 @@ public final class BattleScreen implements Screen {
                 worldCamera, shopBar, shoppingHud, battleHud, drawerPanel.bodyActor(), inputCatcher,
                 DrawerGeometry.SLIDE_PX);
         this.chestDialog = new ChestDialog(commandManager, assets, data);
-        this.pauseMenuDialog = new PauseMenuDialog(commandManager, assets, dialogManager);
+        this.pauseMenuDialog = new PauseMenuDialog(commandManager, assets, dialogManager,
+                new PauseMenuDialog.MenuListener() {
+                    @Override
+                    public void onMenuRequested() { // 暂停返回主菜单：不弃档——hide() 补写备战快照，
+                        // 不发 AbandonRunCommand（无终局结算/奖励/删档），「继续远征」可从上次备战续玩
+                        game.setScreen(new MainMenuScreen(game, assets, data, metaService));
+                    }
+                });
         this.drawerOutsideTouch = new DrawerOutsideTouchProcessor(uiStage.getViewport(),
                 new DrawerOutsideTouchProcessor.Host() {
                     @Override
@@ -496,7 +513,11 @@ public final class BattleScreen implements Screen {
                 ? boardProcessor.getDropPreview() : null);
         drawerPanel.refresh(boardProcessor != null && boardProcessor.isDragging()); // 拖拽中抑制装备格悬停预览（口径 B4-2）
         drawerPanel.apply(drawerController.progress());
-        synergyPanel.refresh(runContext);
+        // 批7 滚轮焦点纪律：模态/暂停冻结期释放 uiStage 滚轮焦点——弹窗底下不可见的滚动框不得继续吃滚轮
+        if (frozen && uiStage.getScrollFocus() != null) {
+            uiStage.setScrollFocus(null);
+        }
+        synergyPanel.refresh(runContext, frozen); // 批7：行悬停 tooltip 的模态抑制位
         notificationPanel.syncBattle(runContext.getBattleState()); // §1.5b：先同步战斗引用再刷事件（附着守卫）
         notificationPanel.refresh(runContext);
         hoverPreview.refresh(drawerController.progress() > 0f ? HoverCandidate.NONE // Q9：抽屉展开时压制备战期棋盘悬停卡
@@ -524,6 +545,8 @@ public final class BattleScreen implements Screen {
         syncChestDialog(phase);
         runEndPanel.setVisible(phase == GamePhase.RUN_END);
         uiStage.act(delta);
+        synergyPanel.syncTooltip(runContext, paused || dialogManager.isShowing() || transitionController.isInputBlocked(),
+                hoverPreview.hasVisibleCard() ? hoverPreview.visibleCardRect() : null);
         uiStage.getViewport().apply();
         uiStage.draw();
         dialogManager.act(delta);
@@ -592,7 +615,7 @@ public final class BattleScreen implements Screen {
             if (phase == GamePhase.BATTLE && runContext.getBattleState() != null) {
                 battleSystem.step(runContext.getBattleState());
                 if (runContext.getBattleState().isOver()) {
-                    runFlowSystem.onBattleOver(runContext); // 观察-委托（口径 #7）
+                    runFlowSystem.tickBattleEnd(runContext, GameBalance.LOGIC_STEP); // 观察-委托（口径 #7）；胜局先走 VICTORY_RESULT_DELAY_SECONDS 定格窗口再进 RESULT
                 }
             } else if (phase == GamePhase.RESULT) {
                 runFlowSystem.tickResult(runContext, GameBalance.LOGIC_STEP); // 横幅自动推进

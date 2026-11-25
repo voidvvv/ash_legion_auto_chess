@@ -12,32 +12,33 @@ import org.junit.jupiter.api.Test;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.security.MessageDigest;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
- * 真素材图集库存量回归锚（批 2 入库转正，2026-11-22）：
- * ①② 无条件断言（耐用的防漂移锚）——assets/art/units/ 目录清单 ≡ PlaceholderKeys 派生帧键集
- * （逐字符、恰 N 帧、无键外残留；N 随 units.json 模板数走）+ 全部 IHDR 32×32；
- * 生效契约链：Assets.region 先查 RealArt，文件存在即真素材、占位层不被咨询。
- * ③ 条件断言——SHA-256 与批 2 manifest 对账，<b>仅当 manifest 在库时执行</b>（manifest 已随
- * assets_src/draft_batch2/ 入库；未来换素材批时更新或移除对应 manifest，本用例自动跳过而非红测）。
+ * 原创单位图集库存量对账（品质改造第二阶段，2026-11-24 重写自 art/units 逐帧对账）：
+ * generated_v2 单位图集 = 每单位一张 128×96 PNG（四列三行 12 帧，atlas_rect 裁切）。
+ *
+ * <p>① 目录清单 ≡ units.json 模板集（33 张图集，逐字符、无残留）；② 全部 IHDR 128×96；
+ * ③ manifest 在库时帧键全集 ≡ PlaceholderKeys 派生帧集、每张图集的 12 个裁切矩形
+ * 在界内且互不重叠。生效契约链：Assets.region 先查 GeneratedArt，manifest+PNG 在位即真素材。
+ * 旧 assets/art/units/（itch 逐帧开源素材）已不再被运行期引用，不参与对账。
  */
 class ArtInventoryTest {
 
-    private static final Path ART_DIR = Paths.get("../assets/art/units");
-    private static final Path BATCH2_MANIFEST = Paths.get("../assets_src/draft_batch2/manifest.json");
+    private static final Path ATLAS_DIR = Paths.get("../assets/art/generated_v2/units");
+    private static final Path MANIFEST = Paths.get("../assets/art/generated_v2/manifest.json");
 
     private static GameData data;
 
@@ -46,89 +47,85 @@ class ArtInventoryTest {
         data = JsonLoader.loadFromDirectory(new FileHandle("../assets/data"));
     }
 
-    /** enumerateFor 派生的单位帧键集（每模板 12 帧；随 units.json 模板数伸缩，非手抄清单） */
-    private static Set<String> derivedFrameKeys() {
-        Set<String> unitIds = data.getUnits().keySet();
-        return PlaceholderKeys.enumerateFor(data).stream()
-                .filter(key -> {
-                    for (String unitId : unitIds) {
-                        if (key.startsWith(unitId + "_")) {
-                            return true; // {unitId}_{anim}_{frame} 帧键
-                        }
-                    }
-                    return false;
-                })
-                .collect(Collectors.toSet());
+    /** PNG IHDR 宽高（字节 16~23，网络字节序；不触 GL） */
+    private static int[] ihdrSize(File file) throws IOException {
+        byte[] header = new byte[26];
+        try (FileInputStream in = new FileInputStream(file)) {
+            assertThat(in.read(header)).as("IHDR 头可读: %s", file.getName()).isEqualTo(26);
+        }
+        return new int[]{
+                ((header[16] & 0xFF) << 24) | ((header[17] & 0xFF) << 16) | ((header[18] & 0xFF) << 8) | (header[19] & 0xFF),
+                ((header[20] & 0xFF) << 24) | ((header[21] & 0xFF) << 16) | ((header[22] & 0xFF) << 8) | (header[23] & 0xFF)};
     }
 
     @Test
-    @DisplayName("库存量对账：art/units 目录 ≡ 派生帧键集（逐字符含大小写、无键外残留/缺失）")
-    void directoryReconcilesWithDerivedFrameKeys() throws IOException {
-        Set<String> derived = derivedFrameKeys();
-        int templates = data.getUnits().size();
-        assertThat(derived).as("帧键数 = 模板数 × 12").hasSize(templates * 12); // 当前 33×12=396
-
-        Set<String> pngStems = new HashSet<String>();
-        Map<String, String> lowerToRaw = new HashMap<String, String>();
-        for (Path p : Files.list(ART_DIR).collect(Collectors.toList())) {
-            String name = p.getFileName().toString();
-            if (name.endsWith(".png")) {
-                String stem = name.substring(0, name.length() - 4);
-                pngStems.add(stem);
-                lowerToRaw.put(stem.toLowerCase(Locale.ROOT), stem); // 大小写陷阱防御（Windows 不区分、打包后会）
-            }
+    @DisplayName("图集目录 ≡ units.json 模板集（33 张 128×96 PNG，逐字符含大小写、无残留）")
+    void atlasDirectoryReconcilesWithUnitTemplates() throws IOException {
+        assumeTrue(Files.isDirectory(ATLAS_DIR), "generated_v2/units 不在库——跳过（占位兜底期）");
+        Set<String> expected = data.getUnits().keySet().stream()
+                .map(id -> id + ".png").collect(Collectors.toSet());
+        Set<String> actual;
+        try (Stream<Path> files = Files.list(ATLAS_DIR)) {
+            actual = files.filter(p -> !Files.isDirectory(p))
+                    .map(p -> p.getFileName().toString())
+                    .filter(n -> n.endsWith(".png"))
+                    .collect(Collectors.toSet());
         }
-        assertThat(pngStems).as("目录恰为派生键集（无多余/缺失）").isEqualTo(derived);
-        for (String key : derived) {
-            assertThat(lowerToRaw.get(key.toLowerCase(Locale.ROOT)))
-                    .as("文件名逐字符精确（含大小写）: %s", key).isEqualTo(key);
+        assertThat(actual).as("图集目录恰为模板集").isEqualTo(expected);
+        for (String unitId : data.getUnits().keySet()) {
+            int[] size = ihdrSize(ATLAS_DIR.resolve(unitId + ".png").toFile());
+            assertThat(size[0]).as("%s 图集宽 128（IHDR）", unitId).isEqualTo(GeneratedArt.UNIT_ATLAS_W);
+            assertThat(size[1]).as("%s 图集高 96（IHDR）", unitId).isEqualTo(GeneratedArt.UNIT_ATLAS_H);
         }
     }
 
     @Test
-    @DisplayName("尺寸锚：全部帧文件 IHDR 32×32（真素材画布口径不漂移）")
-    void allFrameFilesAre32x32() throws IOException {
-        for (String key : derivedFrameKeys()) {
-            File file = new File(ART_DIR.toFile(), key + ".png");
-            assertThat(file).as("帧文件存在: %s", key).exists();
-            byte[] header = new byte[26];
-            try (FileInputStream in = new FileInputStream(file)) {
-                assertThat(in.read(header)).isEqualTo(26);
+    @DisplayName("manifest 帧键 ≡ 派生帧集（33×12=396）；每图集 12 帧矩形在界内且互不重叠")
+    void manifestFrameRectsCoverDerivedKeysWithoutOverlap() throws IOException {
+        assumeTrue(Files.isRegularFile(MANIFEST), "manifest 不在库——跳过对账（占位兜底期）");
+        Set<String> derived = new HashSet<String>();
+        for (String unitId : data.getUnits().keySet()) {
+            for (String anim : PlaceholderKeys.ANIMS) {
+                for (int frame = 0; frame < PlaceholderKeys.frameCount(anim); frame++) {
+                    derived.add(PlaceholderKeys.unitFrame(unitId, anim, frame));
+                }
             }
-            assertThat(((header[16] & 0xFF) << 24) | ((header[17] & 0xFF) << 16)
-                    | ((header[18] & 0xFF) << 8) | (header[19] & 0xFF))
-                    .as("%s 宽 32（IHDR）", key).isEqualTo(32);
-            assertThat(((header[20] & 0xFF) << 24) | ((header[21] & 0xFF) << 16)
-                    | ((header[22] & 0xFF) << 8) | (header[23] & 0xFF))
-                    .as("%s 高 32（IHDR）", key).isEqualTo(32);
         }
-    }
+        Map<String, JsonValue> rows = new HashMap<String, JsonValue>();
+        for (JsonValue row : new JsonReader().parse(
+                new String(Files.readAllBytes(MANIFEST), StandardCharsets.UTF_8)).get("assets")) {
+            if ("unit".equals(row.getString("category"))) {
+                rows.put(row.getString("replacement_key"), row);
+            }
+        }
+        assertThat(rows.keySet()).as("manifest 单位帧键 ≡ 派生帧集").isEqualTo(derived);
 
-    @Test
-    @DisplayName("完整性对账（条件）：批 2 manifest 在库时，全部帧 SHA-256 与之逐一对账")
-    void shaMatchesBatch2ManifestWhenPresent() throws Exception {
-        assumeTrue(Files.exists(BATCH2_MANIFEST),
-                "批 2 manifest 不在库——跳过 SHA 对账（未来素材批随批更新/移除 manifest 即自洽）");
-        Map<String, String> manifestSha = new HashMap<String, String>();
-        for (JsonValue entry : new JsonReader().parse(
-                new String(Files.readAllBytes(BATCH2_MANIFEST), java.nio.charset.StandardCharsets.UTF_8))) {
-            manifestSha.put(entry.getString("key"), entry.getString("sha256"));
-        }
-        assertThat(manifestSha).hasSize(data.getUnits().size() * 12);
-
-        MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        for (Map.Entry<String, String> e : manifestSha.entrySet()) {
-            File file = new File(ART_DIR.toFile(), e.getKey() + ".png");
-            byte[] bytes = new byte[(int) file.length()];
-            try (FileInputStream in = new FileInputStream(file)) {
-                assertThat(in.read(bytes)).isEqualTo(bytes.length);
+        Map<String, int[]> placedByPath = new HashMap<String, int[]>(); // path → 位图掩码累计重叠检测
+        for (Map.Entry<String, JsonValue> e : rows.entrySet()) {
+            JsonValue rect = e.getValue().get("atlas_rect");
+            assertThat(rect).as("%s 带 atlas_rect", e.getKey()).isNotNull();
+            int x = rect.getInt(0);
+            int y = rect.getInt(1);
+            int w = rect.getInt(2);
+            int h = rect.getInt(3);
+            assertThat(w).as("%s 帧宽 32", e.getKey()).isEqualTo(GeneratedArt.UNIT_FRAME_PX);
+            assertThat(h).as("%s 帧高 32", e.getKey()).isEqualTo(GeneratedArt.UNIT_FRAME_PX);
+            String path = e.getValue().getString("path");
+            assertThat(x).isBetween(0, GeneratedArt.UNIT_ATLAS_W - w);
+            assertThat(y).isBetween(0, GeneratedArt.UNIT_ATLAS_H - h);
+            int[] mask = placedByPath.get(path);
+            if (mask == null) {
+                mask = new int[GeneratedArt.UNIT_ATLAS_W * GeneratedArt.UNIT_ATLAS_H];
+                placedByPath.put(path, mask);
             }
-            digest.reset();
-            StringBuilder sb = new StringBuilder(bytes.length * 2);
-            for (byte b : digest.digest(bytes)) {
-                sb.append(Character.forDigit((b >> 4) & 0xF, 16)).append(Character.forDigit(b & 0xF, 16));
+            for (int yy = y; yy < y + h; yy++) {
+                for (int xx = x; xx < x + w; xx++) {
+                    int idx = yy * GeneratedArt.UNIT_ATLAS_W + xx;
+                    assertThat(mask[idx]).as("%s 帧矩形与同图集前帧重叠", e.getKey()).isZero();
+                    mask[idx] = 1;
+                }
             }
-            assertThat(sb.toString()).as("%s SHA-256 与 manifest 一致", e.getKey()).isEqualTo(e.getValue());
         }
+        assertThat(placedByPath).as("图集张数 = 模板数（每 PNG 恰 12 帧）").hasSize(data.getUnits().size());
     }
 }

@@ -77,7 +77,7 @@ public final class PlaceholderKeys {
     }
 
     /** 全 key 枚举：unitId×5 动画×帧数 + skillId×2 + 亡语合成 id burst（逐亡语单位 + 亡语弹）+
-     *  StatusType×1 + 数字×10 + 通用件×4 + UI 框架件×20（{@link UiKeys#ALL}：必需 12 + 加分 8，UI 抽屉化批0） */
+     *  StatusType×1 + 数字×10 + 通用件×4 + UI 框架件×26（{@link UiKeys#ALL}：必需 12 + 加分 8 + 按钮态 6） */
     public static List<String> enumerateFor(GameData data) {
         List<String> keys = new ArrayList<String>();
         for (String unitId : data.getUnits().keySet()) {

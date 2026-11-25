@@ -2,7 +2,6 @@ package com.voidvvv.kz_auto_chess_n.render.ui;
 
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.Batch;
-import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.NinePatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.scenes.scene2d.Actor;
@@ -83,8 +82,13 @@ final class DrawerEquipSection extends Group {
                     }
                 });
         addActor(knob);
-        preview = new EquipPreview(insetPatch);
+        preview = new EquipPreview(insetPatch, trackPatch, assets.uiPatch(UiKeys.SCROLL_KNOB.id()));
         addActor(preview);
+    }
+
+    /** 收起抽屉时的滚轮焦点收口（描述滚动框与介绍/羁绊页同一条滚轮纪律） */
+    void releaseWheelFocus() {
+        preview.releaseWheelFocus();
     }
 
     /** 首个可见行 */
@@ -127,7 +131,13 @@ final class DrawerEquipSection extends Group {
         preview.setItem(DrawerEquipText.previewTarget(hoveredItem, inventory, pending.pendingItemId()));
     }
 
-    private TextureRegion iconRegion(EquipmentSlot slot) {
+    /** 装备图标：原创逐装备图（icon_<equipmentId>，24×24）优先，缺素材回退类别占位图标 */
+    private TextureRegion iconRegion(com.voidvvv.kz_auto_chess_n.data.EquipmentData template) {
+        TextureRegion icon = template == null ? null : assets.regionOrNull("icon_" + template.getId());
+        if (icon != null) {
+            return icon;
+        }
+        EquipmentSlot slot = template == null ? EquipmentSlot.WEAPON : template.getSlot();
         switch (slot) {
             case ARMOR:
                 return assets.uiRegion(UiKeys.ICON_EQUIP_ARMOR.id());
@@ -201,13 +211,10 @@ final class DrawerEquipSection extends Group {
                 Color tint = DrawerEquipText.rarityTint(item);
                 tintOverlay(batch, tint, RARITY_ALPHA * alpha);
                 EquipmentData template = item.getTemplate();
-                BitmapFont font = assets.font();
-                font.getData().setScale(DrawerSkin.SMALL_TEXT_SCALE); // 用后即还（共用字体纪律）
-                DrawerSkin.drawText(batch, font, DrawerEquipText.shortName(template.getName()),
-                        rect.x() + SLOT_TEXT_PAD, rect.y() + rect.height() - SLOT_PAD - DrawerSkin.SMALL_LINE_HEIGHT, alpha);
-                DrawerSkin.drawText(batch, font, DrawerEquipText.slotMark(template.getSlot()),
-                        rect.x() + SLOT_TEXT_PAD, rect.y() + SLOT_PAD + DrawerSkin.SMALL_LINE_HEIGHT, alpha);
-                font.getData().setScale(1f);
+                DrawerSkin.drawText(batch, assets.uiFont(), DrawerEquipText.shortName(template.getName()),
+                        rect.x() + SLOT_TEXT_PAD, rect.y() + rect.height() - SLOT_PAD - DrawerSkin.TEXT_HEIGHT, alpha);
+                DrawerSkin.drawText(batch, assets.uiFont(), DrawerEquipText.slotMark(template.getSlot()),
+                        rect.x() + SLOT_TEXT_PAD, rect.y() + SLOT_PAD + DrawerSkin.TEXT_HEIGHT, alpha);
             }
             if (pendingSource) {
                 tintOverlay(batch, DrawerEquipText.TINT_PENDING, PENDING_ALPHA * alpha);
@@ -226,23 +233,26 @@ final class DrawerEquipSection extends Group {
         }
     }
 
-    /** 装备大图预览：内凹底 + 图标位（上）+ 装备描述滚动框（下，可滚到底；ScrollPane 自行消费滚轮） */
+    /** 装备大图预览：内凹底 + 图标位（上）+ 装备描述滚动框（下，可滚到底；批7 起与介绍/羁绊页同一条滚动路径——
+     *  GlyphLayout 实测换行 + 纵向 pan + track/knob + 滚轮焦点纪律） */
     private final class EquipPreview extends Group {
         private final DrawerGeometry.Rect previewRect = DrawerGeometry.equipPreview();
         private final DrawerGeometry.Rect iconZone = DrawerGeometry.equipIconZone();
         private final DrawerGeometry.Rect descViewport = DrawerGeometry.equipDescViewport();
-        private final DrawerTextBlock descBlock = new DrawerTextBlock(assets, DrawerSkin.SMALL_TEXT_SCALE);
+        private final DrawerTextBlock descBlock = new DrawerTextBlock(assets);
         private final ScrollPane descPane;
         private Equipment item;
 
-        EquipPreview(NinePatch insetPatch) {
+        EquipPreview(NinePatch insetPatch, NinePatch trackPatch, NinePatch knobPatch) {
             setTouchable(Touchable.childrenOnly);
             addActor(new DrawerSkin.PatchActor(insetPatch, previewRect));
-            descPane = DrawerSkin.newTextScrollPane(descBlock);
+            descPane = DrawerSkin.newTextScrollPane(descBlock, trackPatch, knobPatch);
             descPane.setPosition(descViewport.x(), descViewport.y());
             descPane.setSize(descViewport.width(), descViewport.height());
+            DrawerSkin.manageWheelFocus(descPane);
             addActor(descPane);
-            setItem(null);
+            DrawerSkin.setContent(descPane, descBlock, Collections.singletonList(NO_ITEM_PLACEHOLDER),
+                    descViewport.width());
         }
 
         void setItem(Equipment item) {
@@ -250,18 +260,29 @@ final class DrawerEquipSection extends Group {
                 return; // 同一件（含同为 null）：沿用
             }
             this.item = item;
+            // 批7：原始逻辑行入块，换行交 DrawerTextBlock 实测（列估算口径退役）
             DrawerSkin.setContent(descPane, descBlock, item != null
-                            ? DrawerEquipText.descriptionLines(item.getTemplate(), DrawerEquipText.DESC_MAX_COLUMNS)
+                            ? EquipmentInfoText.lines(item.getTemplate())
                             : Collections.<String>singletonList(NO_ITEM_PLACEHOLDER),
                     descViewport.width());
+        }
+
+        void releaseWheelFocus() {
+            DrawerSkin.releaseWheelFocus(descPane);
         }
 
         @Override
         public void draw(Batch batch, float parentAlpha) {
             super.draw(batch, parentAlpha); // 底板 + 描述滚动框
             if (item != null) {
-                TextureRegion icon = iconRegion(item.getTemplate().getSlot());
-                float size = icon.getRegionWidth() * ICON_SCALE;
+                TextureRegion icon = iconRegion(item.getTemplate());
+                // 像素艺术整数倍缩放（类别占位 16→32 ×2；原创逐装备 24×24 在 40px 图标区取 ×1 原生档）
+                int scale = (int) ICON_SCALE;
+                while (scale > 1 && (icon.getRegionWidth() * scale > iconZone.width()
+                        || icon.getRegionWidth() * scale > iconZone.height())) {
+                    scale--;
+                }
+                float size = icon.getRegionWidth() * scale;
                 float alpha = parentAlpha * getColor().a;
                 DrawerSkin.drawRegion(batch, icon, iconZone.x() + (iconZone.width() - size) / 2f,
                         iconZone.y() + (iconZone.height() - size) / 2f, size, size, alpha);

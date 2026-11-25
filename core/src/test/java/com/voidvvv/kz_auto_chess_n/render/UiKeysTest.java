@@ -35,18 +35,32 @@ class UiKeysTest {
     }
 
     @Test
-    @DisplayName("全键集 = 必需 + 加分（20 键、互异）；文件名 = {id}.png、路径 = art/ui/{id}.png")
+    @DisplayName("原创按钮态 6 键：generated_v2 新增（四态通用按钮 + 关闭钮悬停/禁用），尺寸/切分线逐字锁定")
+    void buttonStateIdsMatchGeneratedManifest() {
+        assertThat(ids(UiKeys.BUTTONS)).containsExactly(
+                "ui_button_normal", "ui_button_hover", "ui_button_pressed", "ui_button_disabled",
+                "ui_btn_close_hover", "ui_btn_close_disabled");
+        assertEntry("ui_button_normal", 48, 24, 8, 8, 8, 8);
+        assertEntry("ui_button_hover", 48, 24, 8, 8, 8, 8);
+        assertEntry("ui_button_pressed", 48, 24, 8, 8, 8, 8);
+        assertEntry("ui_button_disabled", 48, 24, 8, 8, 8, 8);
+        assertEntry("ui_btn_close_hover", 14, 14, 0, 0, 0, 0);
+        assertEntry("ui_btn_close_disabled", 14, 14, 0, 0, 0, 0);
+    }
+
+    @Test
+    @DisplayName("全键集 = 必需 + 加分 + 按钮态（26 键、互异）；文件名 = {id}.png")
     void allKeysAreRequiredPlusBonusWithStableFileNames() {
         List<String> expected = new java.util.ArrayList<String>(ids(UiKeys.REQUIRED));
         expected.addAll(ids(UiKeys.BONUS));
-        assertThat(UiKeys.ALL).hasSize(20);
+        expected.addAll(ids(UiKeys.BUTTONS));
+        assertThat(UiKeys.ALL).hasSize(26);
         assertThat(ids(UiKeys.ALL)).containsExactlyElementsOf(expected);
         assertThat(UiKeys.allIds()).isEqualTo(expected);
         Set<String> ids = new HashSet<String>();
         for (UiKeys.Entry entry : UiKeys.ALL) {
             assertThat(ids.add(entry.id())).as("id 互异: %s", entry.id()).isTrue();
             assertThat(entry.fileName()).isEqualTo(entry.id() + ".png");
-            assertThat(UiArt.pathOf(entry.id())).isEqualTo("art/ui/" + entry.fileName());
         }
     }
 
@@ -94,10 +108,11 @@ class UiKeysTest {
     }
 
     @Test
-    @DisplayName("不拉伸件四边切分线恒 0：关闭钮 / 关闭钮按下态 / 角花 / 滚动箭头 / 三件装备占位图标")
+    @DisplayName("不拉伸件四边切分线恒 0：关闭钮三态 / 角花 / 滚动箭头 / 三件装备占位图标")
     void nonStretchKeysHaveZeroSplits() {
         List<UiKeys.Entry> fixed = java.util.Arrays.asList(
-                UiKeys.BTN_CLOSE, UiKeys.BTN_CLOSE_PRESSED, UiKeys.CORNER_ORNAMENT,
+                UiKeys.BTN_CLOSE, UiKeys.BTN_CLOSE_PRESSED, UiKeys.BTN_CLOSE_HOVER, UiKeys.BTN_CLOSE_DISABLED,
+                UiKeys.CORNER_ORNAMENT,
                 UiKeys.SCROLL_ARROW, UiKeys.ICON_EQUIP_WEAPON, UiKeys.ICON_EQUIP_ARMOR, UiKeys.ICON_EQUIP_TRINKET);
         for (UiKeys.Entry entry : fixed) {
             assertThat(entry.left() + entry.right() + entry.top() + entry.bottom())

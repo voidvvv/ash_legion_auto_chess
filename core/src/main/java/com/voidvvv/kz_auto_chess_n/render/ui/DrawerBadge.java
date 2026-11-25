@@ -51,7 +51,7 @@ final class DrawerBadge extends Actor {
         DrawerSkin.beginUntinted(batch, alpha);
         platePatch.draw(batch, getX(), getY(), getWidth(), getHeight());
         DrawerSkin.endUntinted(batch);
-        DrawerSkin.drawText(batch, assets.font(), text, getX() + BADGE_TEXT_X,
+        DrawerSkin.drawText(batch, assets.uiFont(), text, getX() + BADGE_TEXT_X,
                 DrawerSkin.centeredTextTop(getY(), getHeight(), DrawerSkin.TEXT_HEIGHT), alpha);
     }
 }

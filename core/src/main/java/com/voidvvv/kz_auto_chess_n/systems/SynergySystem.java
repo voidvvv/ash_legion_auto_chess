@@ -75,10 +75,11 @@ public final class SynergySystem {
             if (tier == null) {
                 continue; // 未达最低档
             }
-            actives.add(new SynergySnapshot.ActiveSynergy(synergy.getId(), synergy.getName(), tier.getCount()));
             Float amp = synergyAmp.get(synergy.getId());
+            List<EffectData> activeEffects = new ArrayList<EffectData>(tier.getEffects().size());
             for (EffectData effect : tier.getEffects()) {
                 EffectData scaled = amp == null || effect.isMechanicChannel() ? effect : amplify(effect, amp);
+                activeEffects.add(scaled);
                 if (scaled.isStatChannel()) {
                     statModifiers = statModifiers.plus(StatModifierBlock.of(
                             scaled.getStat(), scaled.getOp(), scaled.getValue()));
@@ -91,6 +92,8 @@ public final class SynergySystem {
                     openingEffects.add(scaled);
                 }
             }
+            actives.add(new SynergySnapshot.ActiveSynergy(synergy.getId(), synergy.getName(), tier.getCount(),
+                    activeEffects));
         }
 
         if (actives.isEmpty()) {

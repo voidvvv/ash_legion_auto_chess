@@ -120,6 +120,10 @@ public final class BattleRenderer {
     private java.util.List<ThreatPredictor.Preview> threatPreviews;
     private java.util.List<WaveSpec> threatWaveRef;
     private int threatFingerprint;
+    /** 原创棋盘贴图缓存（第二阶段）：场景切换才重查；缺素材时为 null → 白纹理旧画法兜底 */
+    private String boardArtScene;
+    private TextureRegion boardArtFrame;
+    private TextureRegion[][] boardArtTiles;
 
     public BattleRenderer(Assets assets) {
         this.assets = assets;
@@ -142,7 +146,7 @@ public final class BattleRenderer {
                      float drawerStageRightEdge) {
         syncBattleScope(ctx);
         batch.begin();
-        drawGrid(batch);
+        drawGrid(batch, ctx.getRunState().getSceneId());
         floatSlot = 0;
         if (ctx.getRunState().getPhase() == GamePhase.SHOPPING || ctx.getBattleState() == null) {
             drawLegalDropFill(batch, input); // §1.3：合法落点填色放棋体下面
@@ -186,29 +190,83 @@ public final class BattleRenderer {
         trackedBattle = current;
     }
 
-    // —— ④ 棋盘格底：敌区/缓冲带/玩家区分色 + 格线 ——
+    // —— ④ 棋盘格底：原创框 + 地砖（第二阶段）；缺素材回退敌区/缓冲带/玩家区分色 + 格线 ——
 
-    private void drawGrid(SpriteBatch batch) {
-        TextureRegion white = assets.region(PlaceholderKeys.WHITE);
+    /**
+     * 原创棋盘贴图缓存同步（sceneId 变化才重查；steady state 零磁盘零分配）。
+     * 框或任一地砖缺失 → 整体置 null（走白纹理旧画法），不出现半新半旧棋盘。
+     */
+    private boolean syncBoardArt(String sceneId) {
+        if (java.util.Objects.equals(sceneId, boardArtScene)) {
+            return boardArtTiles != null;
+        }
+        boardArtScene = sceneId;
+        boardArtFrame = null;
+        boardArtTiles = null;
+        if (sceneId == null) {
+            return false;
+        }
+        TextureRegion frameRegion = assets.regionOrNull(BoardArtKeys.frame(sceneId));
+        if (frameRegion == null) {
+            return false;
+        }
+        TextureRegion[][] tiles = new TextureRegion[GameBalance.BOARD_ROWS][GameBalance.BOARD_COLS];
         for (int y = 0; y < GameBalance.BOARD_ROWS; y++) {
             for (int x = 0; x < GameBalance.BOARD_COLS; x++) {
-                int px = BoardGeometry.BOARD_X + x * BoardGeometry.CELL;
-                int py = BoardGeometry.BOARD_Y + BoardGeometry.BOARD_H - (y + 1) * BoardGeometry.CELL;
-                batch.setColor(zoneTint(y));
-                batch.draw(white, px, py, BoardGeometry.CELL, BoardGeometry.CELL);
-                batch.setColor(GRID_LINE_TINT);
-                batch.draw(white, px, py, BoardGeometry.CELL, 1); // 格线（上边）
-                batch.draw(white, px, py, 1, BoardGeometry.CELL); // 格线（左边）
+                TextureRegion tile = assets.regionOrNull(BoardArtKeys.tile(sceneId, x, y));
+                if (tile == null) {
+                    return false; // 框在砖缺：按整幅缺素材处理（清单应整场景交付）
+                }
+                tiles[y][x] = tile;
             }
         }
-        batch.setColor(BOARD_FRAME_TINT); // 棋盘外框（§1.3：1px α0.34）
-        batch.draw(white, BoardGeometry.BOARD_X, BoardGeometry.BOARD_Y,
-                BoardGeometry.BOARD_W, 1);
-        batch.draw(white, BoardGeometry.BOARD_X, BoardGeometry.BOARD_Y + BoardGeometry.BOARD_H - 1,
-                BoardGeometry.BOARD_W, 1);
-        batch.draw(white, BoardGeometry.BOARD_X, BoardGeometry.BOARD_Y, 1, BoardGeometry.BOARD_H);
-        batch.draw(white, BoardGeometry.BOARD_X + BoardGeometry.BOARD_W - 1, BoardGeometry.BOARD_Y,
-                1, BoardGeometry.BOARD_H);
+        boardArtFrame = frameRegion;
+        boardArtTiles = tiles;
+        return true;
+    }
+
+    private void drawGrid(SpriteBatch batch, String sceneId) {
+        boolean hasBoardArt = syncBoardArt(sceneId);
+        TextureRegion white = assets.region(PlaceholderKeys.WHITE);
+        if (hasBoardArt) {
+            batch.setColor(com.badlogic.gdx.graphics.Color.WHITE);
+            int margin = BoardArtKeys.FRAME_MARGIN_PX;
+            batch.draw(boardArtFrame,
+                    BoardGeometry.BOARD_X - margin, BoardGeometry.BOARD_Y - margin,
+                    BoardGeometry.BOARD_W + 2 * margin, BoardGeometry.BOARD_H + 2 * margin);
+            for (int y = 0; y < GameBalance.BOARD_ROWS; y++) {
+                for (int x = 0; x < GameBalance.BOARD_COLS; x++) {
+                    batch.draw(boardArtTiles[y][x],
+                            BoardGeometry.BOARD_X + x * BoardGeometry.CELL,
+                            BoardGeometry.BOARD_Y + BoardGeometry.BOARD_H - (y + 1) * BoardGeometry.CELL,
+                            BoardGeometry.CELL, BoardGeometry.CELL);
+                }
+            }
+        } else {
+            for (int y = 0; y < GameBalance.BOARD_ROWS; y++) {
+                int py = BoardGeometry.BOARD_Y + BoardGeometry.BOARD_H - (y + 1) * BoardGeometry.CELL;
+                batch.setColor(zoneTint(y));
+                batch.draw(white, BoardGeometry.BOARD_X, py, BoardGeometry.BOARD_W, BoardGeometry.CELL);
+            }
+        }
+        batch.setColor(GRID_LINE_TINT);
+        for (int y = 1; y < GameBalance.BOARD_ROWS; y++) {
+            batch.draw(white, BoardGeometry.BOARD_X, BoardGeometry.BOARD_Y + y * BoardGeometry.CELL,
+                    BoardGeometry.BOARD_W, 1);
+        }
+        for (int x = 1; x < GameBalance.BOARD_COLS; x++) {
+            batch.draw(white, BoardGeometry.BOARD_X + x * BoardGeometry.CELL, BoardGeometry.BOARD_Y,
+                    1, BoardGeometry.BOARD_H);
+        }
+        if (!hasBoardArt) {
+            batch.setColor(BOARD_FRAME_TINT);
+            batch.draw(white, BoardGeometry.BOARD_X, BoardGeometry.BOARD_Y, BoardGeometry.BOARD_W, 1);
+            batch.draw(white, BoardGeometry.BOARD_X, BoardGeometry.BOARD_Y + BoardGeometry.BOARD_H - 1,
+                    BoardGeometry.BOARD_W, 1);
+            batch.draw(white, BoardGeometry.BOARD_X, BoardGeometry.BOARD_Y, 1, BoardGeometry.BOARD_H);
+            batch.draw(white, BoardGeometry.BOARD_X + BoardGeometry.BOARD_W - 1, BoardGeometry.BOARD_Y,
+                    1, BoardGeometry.BOARD_H);
+        }
         batch.setColor(com.badlogic.gdx.graphics.Color.WHITE);
     }
 
@@ -363,13 +421,13 @@ public final class BattleRenderer {
         batch.draw(white, BoardGeometry.THREAT_HINT_X, BoardGeometry.THREAT_HINT_Y,
                 BoardGeometry.THREAT_HINT_W, BoardGeometry.THREAT_HINT_H);
         batch.setColor(com.badlogic.gdx.graphics.Color.WHITE);
-        assets.font().setColor(THREAT_TEXT_TINT.r, THREAT_TEXT_TINT.g, THREAT_TEXT_TINT.b, fade);
+        assets.uiFont().setColor(THREAT_TEXT_TINT.r, THREAT_TEXT_TINT.g, THREAT_TEXT_TINT.b, fade);
         float textX = BoardGeometry.THREAT_HINT_X + BoardGeometry.THREAT_HINT_TEXT_INSET_PX;
-        assets.font().draw(batch, lines[0], textX, BoardGeometry.THREAT_HINT_LINE1_Y);
+        assets.uiFont().draw(batch, lines[0], textX, BoardGeometry.THREAT_HINT_LINE1_Y);
         if (lines.length > 1) {
-            assets.font().draw(batch, lines[1], textX, BoardGeometry.THREAT_HINT_LINE2_Y);
+            assets.uiFont().draw(batch, lines[1], textX, BoardGeometry.THREAT_HINT_LINE2_Y);
         }
-        assets.font().setColor(com.badlogic.gdx.graphics.Color.WHITE); // 用后即还（共用字体纪律）
+        assets.uiFont().setColor(com.badlogic.gdx.graphics.Color.WHITE); // 用后即还（共用字体纪律）
     }
 
     /** 合法落点填色（品质改造 §1.3：#80E0B0 α0.30，棋体之下——先于棋体绘制） */
@@ -493,21 +551,21 @@ public final class BattleRenderer {
         batch.draw(panel, BoardGeometry.SELL_ZONE_X, BoardGeometry.SELL_ZONE_Y,
                 BoardGeometry.SELL_ZONE_W, BoardGeometry.SELL_ZONE_H);
         batch.setColor(com.badlogic.gdx.graphics.Color.WHITE);
-        assets.font().setColor(1f, 1f, 1f, (hovering ? 1f : 0.65f) * fade); // 用后即还（共用字体纪律）
-        assets.font().draw(batch, "出售", BoardGeometry.SELL_ZONE_X + 16f, BoardGeometry.SELL_ZONE_Y + 28f);
-        assets.font().setColor(com.badlogic.gdx.graphics.Color.WHITE);
+        assets.uiFont().setColor(1f, 1f, 1f, (hovering ? 1f : 0.65f) * fade); // 用后即还（共用字体纪律）
+        assets.uiFont().draw(batch, "出售", BoardGeometry.SELL_ZONE_X + 16f, BoardGeometry.SELL_ZONE_Y + 28f);
+        assets.uiFont().setColor(com.badlogic.gdx.graphics.Color.WHITE);
     }
 
     /** 备战期引导文案（棋盘上方居中，不遮挡棋盘/备战席/⑧ 商店栏，feedback01 修正；字体缺文件回退时中文不渲染但不炸——§5.3-6） */
     private void drawShoppingHint(SpriteBatch batch, float fade, float worldScale, float drawerStageRightEdge) {
         if (hintLayout == null) {
-            hintLayout = new GlyphLayout(assets.font(), BoardGeometry.SHOP_HINT_TEXT);
+            hintLayout = new GlyphLayout(assets.uiFont(), BoardGeometry.SHOP_HINT_TEXT);
         }
-        assets.font().setColor(1f, 1f, 1f, fade); // 用后即还（共用字体纪律）
+        assets.uiFont().setColor(1f, 1f, 1f, fade); // 用后即还（共用字体纪律）
         // 左缘：默认居中；抽屉展开时让位到抽屉舞台右缘 + 4px 之外（批4，BoardGeometry.shopHintX 纯函数可测）
-        assets.font().draw(batch, BoardGeometry.SHOP_HINT_TEXT,
+        assets.uiFont().draw(batch, BoardGeometry.SHOP_HINT_TEXT,
                 BoardGeometry.shopHintX(hintLayout.width, worldScale, drawerStageRightEdge), BoardGeometry.SHOP_HINT_Y);
-        assets.font().setColor(com.badlogic.gdx.graphics.Color.WHITE);
+        assets.uiFont().setColor(com.badlogic.gdx.graphics.Color.WHITE);
     }
 
     // —— 战斗期：⑦ 单位视图 → ⑧ 弹道 → 特效 → 飘字 ——

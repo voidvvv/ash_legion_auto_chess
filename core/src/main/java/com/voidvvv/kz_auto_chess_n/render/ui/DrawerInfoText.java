@@ -1,7 +1,14 @@
 package com.voidvvv.kz_auto_chess_n.render.ui;
 
 import com.voidvvv.kz_auto_chess_n.config.GameBalance;
+import com.voidvvv.kz_auto_chess_n.data.BaseStats;
+import com.voidvvv.kz_auto_chess_n.data.EffectData;
+import com.voidvvv.kz_auto_chess_n.data.EffectTarget;
 import com.voidvvv.kz_auto_chess_n.data.GameData;
+import com.voidvvv.kz_auto_chess_n.data.SkillData;
+import com.voidvvv.kz_auto_chess_n.data.SynergyData;
+import com.voidvvv.kz_auto_chess_n.data.SynergySource;
+import com.voidvvv.kz_auto_chess_n.data.UnitData;
 import com.voidvvv.kz_auto_chess_n.entities.Unit;
 
 import java.util.ArrayList;
@@ -27,8 +34,103 @@ public final class DrawerInfoText {
 
     static final String NO_SELECTION_TITLE = "未选中棋子";
     static final String NO_SELECTION_INTRO = "（选中棋子后显示介绍）";
+    /** 羁绊页未选中占位（批7 三页签） */
+    static final String NO_SELECTION_SYNERGY = "（选中棋子后查看羁绊）";
+    /** 羁绊页：种族/职业均未登记羁绊的空态（缺资源） */
+    static final String NO_SYNERGY_REGISTERED = "（该棋子种族/职业暂无登记羁绊）";
 
     private DrawerInfoText() {
+    }
+
+    /**
+     * 「自身」页行集（批7 三页签：<b>原始逻辑行、不折行</b>——换行由 DrawerTextBlock 以 GlyphLayout 实测宽度执行）：
+     * 棋子身份（名/星/费/累计花费）→ 基础属性 → 自身技能。<b>不含</b>种族/职业羁绊说明（迁往羁绊页）。
+     * 未选中 → 空列表（调用方画占位行）。
+     */
+    public static List<String> selfLines(Unit unit, GameData data) {
+        if (unit == null) {
+            return Collections.emptyList();
+        }
+        List<String> lines = new ArrayList<String>();
+        UnitData template = unit.getTemplate();
+        BaseStats stats = template.getBaseStats();
+        lines.add(template.getName() + " " + unit.getStar() + "星（" + template.getCost()
+                + "费）· 累计花费 " + unit.getSpend());
+        lines.add("生命 " + UnitInfoText.numberText(stats.getHp()) + "   攻击 " + UnitInfoText.numberText(stats.getAttack())
+                + "   护甲 " + UnitInfoText.numberText(stats.getArmor()));
+        lines.add("攻速 " + UnitInfoText.numberText(stats.getAttackSpeed()) + "   射程 " + UnitInfoText.numberText(stats.getRange())
+                + "   移速 " + UnitInfoText.numberText(stats.getMoveSpeed()));
+        SkillData skill = data.getSkill(template.getSkillId());
+        if (skill != null) {
+            lines.add("技能 " + skill.getName() + "：" + skill.getDesc());
+        }
+        return lines;
+    }
+
+    /**
+     * 「羁绊」页行集（批7 三页签：<b>原始逻辑行、不折行</b>）：该棋子所属的种族/职业羁绊——
+     * 每条羁绊 = 标题行（来源标记 + 名）→ 主题描述 → <b>全部档位</b>效果详情行（N只：效果·效果）。
+     * 未登记的种族/职业不显示；两条都未登记 → 空列表（调用方画空态行）。
+     */
+    public static List<String> synergyLines(Unit unit, GameData data) {
+        if (unit == null) {
+            return Collections.emptyList();
+        }
+        List<String> lines = new ArrayList<String>();
+        UnitData template = unit.getTemplate();
+        appendSynergyPage(lines, data, SynergySource.RACE, template.getRace());
+        appendSynergyPage(lines, data, SynergySource.CLASS, template.getUnitClass());
+        return lines;
+    }
+
+    private static void appendSynergyPage(List<String> lines, GameData data, SynergySource source, String key) {
+        SynergyData synergy = UnitInfoText.findSynergy(data, source, key);
+        String kind = source == SynergySource.RACE ? "种族" : "职业";
+        if (synergy == null) {
+            lines.add(kind + "·" + key + "（暂无羁绊）");
+            return;
+        }
+        lines.add(kind + "羁绊·" + synergy.getName());
+        String desc = synergy.getDesc();
+        if (desc != null && !desc.isEmpty()) {
+            lines.add(synergyDescription(desc));
+        }
+        for (SynergyData.Threshold tier : synergy.getThresholds()) {
+            lines.add(tierLine(tier));
+        }
+    }
+
+    /** 档位详情行：N只：效果·效果（效果文案复用 {@link UnitInfoText#effectText} 三通道词表） */
+    private static String tierLine(SynergyData.Threshold tier) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(tier.getCount()).append("只：");
+        for (int i = 0; i < tier.getEffects().size(); i++) {
+            if (i > 0) {
+                sb.append("·");
+            }
+            sb.append(synergyEffectText(tier.getEffects().get(i)));
+        }
+        return sb.toString();
+    }
+
+    static String synergyDescription(String desc) {
+        return desc.replace("——", "：");
+    }
+
+    static String synergyEffectText(EffectData effect) {
+        String label = UnitInfoText.effectText(effect);
+        return effect.getTarget() == EffectTarget.TRAITS && effect.getTrait() != null
+                ? label + "（仅" + effect.getTrait() + "）" : label;
+    }
+
+    /** 未选中时的羁绊页占位行 */
+    public static List<String> noSelectionSynergy() {
+        return Collections.singletonList(NO_SELECTION_SYNERGY);
+    }
+
+    /** 两条羁绊都未登记时的羁绊页空态行（缺资源） */
+    public static List<String> noSynergyRegistered() {
+        return Collections.singletonList(NO_SYNERGY_REGISTERED);
     }
 
     /** 标题板文案：「名 N星」；未选中 → 占位标题（超宽按列截断） */

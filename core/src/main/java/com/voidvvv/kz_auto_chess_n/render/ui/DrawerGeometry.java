@@ -53,10 +53,10 @@ public final class DrawerGeometry {
     /** Q11：立绘 = 单位 idle 帧放大 2 倍（64px） */
     public static final int PORTRAIT_W = 64;
     public static final int PORTRAIT_H = 64;
-    /** 标签页：源 32×18 九宫格——横向取原生宽、纵向拉伸到 30（两枚 + 4px 间隙 = 64 高信息行） */
+    /** 标签页：源 32×18 九宫格——横向取原生宽、纵向拉伸到 20（品质改造批7 三页签 3×20 + 2×2 = 64 高信息行） */
     public static final int TAB_W = 32;
-    public static final int TAB_H = 30;
-    public static final int TAB_GAP = 4;
+    public static final int TAB_H = 20;
+    public static final int TAB_GAP = 2;
     /** Q4：头像条可见 6 槽 × 34（槽内放 32px 单位帧原尺寸），间距 4 */
     public static final int STRIP_VISIBLE_SLOTS = 6;
     public static final int STRIP_SLOT = 34;
@@ -261,14 +261,27 @@ public final class DrawerGeometry {
         return new Rect(portrait().right() + STRIP_GAP, INFO_ROW_Y, DESC_W, INFO_ROW_H);
     }
 
-    /** 「介绍」标签（上）：32×30（九宫格纵向拉伸），贴描述框右侧、右缘齐内边 */
-    public static Rect tabInfo() {
+    /**
+     * 「自身」标签（上，批7 三页签）：32×20（九宫格纵向拉伸），贴描述框右侧、右缘齐内边。
+     * 旧名 {@link #tabInfo()} 的兼容别名（批7 前的「介绍」页即现在的「自身」页）。
+     */
+    public static Rect tabSelf() {
+        return tabInfo();
+    }
+
+    /** 「羁绊」标签（中）：三标签竖排（20×3 + 2×2 = 64 高信息行） */
+    public static Rect tabSynergy() {
         return new Rect(DRAWER_W - PADDING - TAB_W, tabEquip().top() + TAB_GAP, TAB_W, TAB_H);
     }
 
-    /** 「装备」标签（下）：两标签整体在信息行内垂直居中（30 + 4 + 30 = 64） */
+    /** 「自身/介绍」标签（上）矩形（tabInfo = 批7「自身」页旧称，保留测试兼容） */
+    public static Rect tabInfo() {
+        return new Rect(DRAWER_W - PADDING - TAB_W, tabSynergy().top() + TAB_GAP, TAB_W, TAB_H);
+    }
+
+    /** 「装备」标签（下）：三标签整体在信息行内垂直居中（3×20 + 2×2 = 64，正好填满） */
     public static Rect tabEquip() {
-        int blockH = 2 * TAB_H + TAB_GAP;
+        int blockH = 3 * TAB_H + 2 * TAB_GAP;
         return new Rect(DRAWER_W - PADDING - TAB_W, INFO_ROW_Y + (INFO_ROW_H - blockH) / 2, TAB_W, TAB_H);
     }
 

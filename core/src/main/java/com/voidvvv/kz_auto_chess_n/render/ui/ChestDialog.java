@@ -140,14 +140,15 @@ public final class ChestDialog extends Group {
             batch.setColor(old);
             List<String> effects = optionEffectLines(data, option);
             if (effects.isEmpty()) { // 金币/经验书：原版式（名 + 选择）
-                assets.font().draw(batch, optionText(data, option), getX() + 14f, getY() + 34f);
-                assets.font().draw(batch, "选择", getX() + 44f, getY() + 14f);
+                assets.uiFont().draw(batch, optionText(data, option), getX() + 14f, getY() + 34f);
+                assets.uiFont().draw(batch, "选择", getX(), getY() + 14f, getWidth(),
+                        com.badlogic.gdx.utils.Align.center, false);
                 return;
             }
             // feedback07 装备选项：名 y+46 + 效果行 y+32/20/8（「选择」让位，口径 B5-2；整钮可点击不变）
-            assets.font().draw(batch, optionText(data, option), getX() + 14f, getY() + 46f);
+            assets.uiFont().draw(batch, optionText(data, option), getX() + 14f, getY() + 46f);
             for (int i = 0; i < effects.size(); i++) {
-                assets.font().draw(batch, effects.get(i), getX() + 10f, getY() + 32f - i * 12f);
+                assets.bodyFont().draw(batch, effects.get(i), getX() + 10f, getY() + 32f - i * 11f);
             }
         }
     }
@@ -158,20 +159,19 @@ public final class ChestDialog extends Group {
         batch.setColor(0f, 0f, 0f, 0.8f * parentAlpha);
         batch.draw(assets.region(PlaceholderKeys.WHITE), 110f, 100f, 420f, 176f); // 底板向上拓至 y=276（§1.4）
         batch.setColor(old);
-        assets.font().getData().setScale(1.5f);
-        assets.font().draw(batch, titleText(offer), 268f, 258f); // 标题基线约 258（§1.4）
-        assets.font().getData().setScale(1f);
-        float y = 240f; // 归因两行基线 240/226（§1.4）
+        assets.titleFont().draw(batch, titleText(offer), 110f, 258f, 420f,
+                com.badlogic.gdx.utils.Align.center, false); // 标题黑体 20px（§1.4）
+        float y = 240f; // 归因两行（§1.4；正文楷体）
         for (int i = 0; i < attributionLines.size(); i++) {
-            assets.font().draw(batch, attributionLines.get(i), centeredX(attributionLines.get(i)), y);
-            y -= 14f;
+            assets.bodyFont().draw(batch, attributionLines.get(i), centeredX(attributionLines.get(i)), y);
+            y -= 13f;
         }
         super.draw(batch, parentAlpha);
     }
 
     /** 归因行 392px 带内居中（§1.4「文本测量用现有字体」；带自底板 110px 起居中） */
     private float centeredX(String line) {
-        measureLayout.setText(assets.font(), line);
+        measureLayout.setText(assets.bodyFont(), line);
         return 124f + (392f - measureLayout.width) / 2f;
     }
 

@@ -18,6 +18,7 @@ import com.voidvvv.kz_auto_chess_n.entities.Unit;
 import com.voidvvv.kz_auto_chess_n.render.Assets;
 import com.voidvvv.kz_auto_chess_n.render.PlaceholderKeys;
 import com.voidvvv.kz_auto_chess_n.render.StarColors;
+import com.voidvvv.kz_auto_chess_n.render.UiKeys;
 import com.voidvvv.kz_auto_chess_n.render.board.UnitFramePainter;
 
 import java.util.ArrayList;
@@ -25,39 +26,55 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 抽屉信息区（UI 抽屉化批3；批前重构自 DrawerPanel 抽出）：标题板（棋子名）+ 立绘位（选中棋子 idle 帧 ×2，Q11）
- * + 描述框——两标签页内容区（Q5）：
+ * 抽屉信息区（UI 抽屉化批3 → 品质改造批7 三页签）：标题板（棋子名）+ 立绘位（选中棋子 idle 帧 ×2，Q11）
+ * + 描述框——<b>三标签页</b>内容区（批7：原「介绍」页按信息归属拆分）：
  * <ul>
- *   <li><b>「介绍」</b>：{@link UnitInfoText#detailLines} 折 12 列的<b>全量</b>行集，scene2d {@link ScrollPane}
- *       滚动（最长真实文案 23 行必须能滚到底——批3 硬验收，{@code DrawerTextCapacityTest}）；</li>
+ *   <li><b>「自身」</b>：棋子身份、基础属性、自身技能（{@link DrawerInfoText#selfLines}）——<b>不含</b>
+ *       种族/职业羁绊说明；GlyphLayout 实测换行 + ScrollPane 滚动（滚到底不截断）；</li>
+ *   <li><b>「羁绊」</b>：该棋子所属的种族/职业羁绊，各羁绊名 + <b>全部阈值档位</b>效果详情
+ *       （{@link DrawerInfoText#synergyLines}）；同样实测换行可滚动；</li>
  *   <li><b>「装备」</b>：选中棋子当前三件（武器 / 盔甲 / 饰品），每件带「卸下」钮——{@link UnequipItemCommand}
- *       经 commandManager（原 UnitDetailDialog 卸下按钮逻辑迁入——该弹窗批4 退役；Q6 仅备战期可写）。</li>
+ *       经 commandManager（Q6 仅备战期可写；批7 语义不变）。</li>
  * </ul>
  * 选中棋子经 {@link #setUnit} 绑定（文案按 id/星/累计花费指纹缓存；卸下按钮按装备 id 序列指纹重建——
- * Scene2d ClickListener 要求 down/up 命中同一实例）。坐标 = 抽屉局部。
+ * Scene2d ClickListener 要求 down/up 命中同一实例）。切页/未选中各有空态；切页时释放被隐藏滚动框的滚轮焦点。
+ * 坐标 = 抽屉局部。
+ *
+ * <p><b>字体角色</b>（2026-11-25 三段字体）：页签/槽位标签/卸下钮用 {@link Assets#uiFont()}（宋体），
+ * 描述滚动块用 {@link Assets#bodyFont()}（楷体）。
  */
 final class DrawerInfoSection extends Group {
+
+    /** 三页签（批7）：自身 / 羁绊 / 装备 */
+    static final int TAB_SELF = 0;
+    static final int TAB_SYNERGY = 1;
+    static final int TAB_EQUIP = 2;
 
     private static final float TAB_LABEL_X = 4f;
     private static final float ROW_LABEL_X = 2f;
     private static final float ROW_NAME_X = 28f;
     private static final float ROW_TEXT_PAD_X = 2f;
-    private static final String TAB_INFO_LABEL = "介绍";
+    private static final String TAB_SELF_LABEL = "自身";
+    private static final String TAB_SYNERGY_LABEL = "羁绊";
     private static final String TAB_EQUIP_LABEL = "装备";
     private static final String UNEQUIP_LABEL = "卸下";
-    private static final String EMPTY_SLOT_LABEL = "—";
+    private static final String EMPTY_SLOT_LABEL = "空";
 
     private final Assets assets;
     private final CommandManager commandManager;
     private final NinePatch buttonPatch;
     private final TitlePlate title;
     private final Portrait portrait;
+    /** 「自身」页滚动文字块（批7 前的「介绍」页） */
     private final DrawerTextBlock introBlock;
     private final ScrollPane introPane;
+    /** 「羁绊」页滚动文字块（批7 新增：种族/职业羁绊全档位详情） */
+    private final DrawerTextBlock synergyBlock;
+    private final ScrollPane synergyPane;
     /** 「装备」标签页内容：三行（武器/盔甲/饰品）+ 每件的卸下钮 */
     private final EquipTabPane equipTab;
-    /** 当前标签页（true = 介绍 / false = 装备） */
-    private boolean infoTabActive = true;
+    /** 当前标签页（批7 三态：自身 / 羁绊 / 装备） */
+    private int activeTab = TAB_SELF;
     private GamePhase phase = GamePhase.SHOPPING;
     // —— 文案缓存指纹（渲染段零分配） ——
     private int cachedUnitId = -1;
@@ -78,24 +95,42 @@ final class DrawerInfoSection extends Group {
         portrait = new Portrait(insetPatch);
         addActor(title);
         addActor(portrait);
-        // 描述框 = 内凹底 + 介绍滚动框（介绍页）/ 装备页（三行 + 卸下钮）——两页共用同一矩形，按标签切换可见
+        // 描述框 = 内凹底 + 三个标签页内容（自身 / 羁绊 / 装备）——三页共用同一矩形，按标签切换可见
         addActor(new DrawerSkin.PatchActor(insetPatch, pane));
-        introBlock = new DrawerTextBlock(assets, DrawerSkin.SMALL_TEXT_SCALE);
-        introPane = DrawerSkin.newTextScrollPane(introBlock);
+        NinePatch track = assets.uiPatch(UiKeys.SCROLL_TRACK.id());
+        NinePatch knob = assets.uiPatch(UiKeys.SCROLL_KNOB.id());
+        introBlock = new DrawerTextBlock(assets);
+        introPane = DrawerSkin.newTextScrollPane(introBlock, track, knob);
         introPane.setPosition(viewport.x(), viewport.y());
         introPane.setSize(viewport.width(), viewport.height());
+        DrawerSkin.manageWheelFocus(introPane);
         addActor(introPane);
+        synergyBlock = new DrawerTextBlock(assets);
+        synergyPane = DrawerSkin.newTextScrollPane(synergyBlock, track, knob);
+        synergyPane.setPosition(viewport.x(), viewport.y());
+        synergyPane.setSize(viewport.width(), viewport.height());
+        DrawerSkin.manageWheelFocus(synergyPane);
+        addActor(synergyPane);
+        // 初始空态（未选中）：两文字页先各就占位行（setUnit 的 null 早退不覆盖首帧内容）
+        DrawerSkin.setContent(introPane, introBlock, DrawerInfoText.noSelectionIntro(), viewport.width());
+        DrawerSkin.setContent(synergyPane, synergyBlock, DrawerInfoText.noSelectionSynergy(), viewport.width());
         equipTab = new EquipTabPane();
         addActor(equipTab);
-        addActor(new TabButton(true, tabActivePatch, tabInactivePatch));
-        addActor(new TabButton(false, tabActivePatch, tabInactivePatch));
-        syncTabVisibility(); // 两页互斥（须在 introPane / equipTab 均构造后）
+        addActor(new TabButton(TAB_SELF, TAB_SELF_LABEL, tabActivePatch, tabInactivePatch));
+        addActor(new TabButton(TAB_SYNERGY, TAB_SYNERGY_LABEL, tabActivePatch, tabInactivePatch));
+        addActor(new TabButton(TAB_EQUIP, TAB_EQUIP_LABEL, tabActivePatch, tabInactivePatch));
+        syncTabVisibility(); // 三页互斥（须在各页均构造后）
         setUnit(null, null);
     }
 
-    /** 当前标签页是否为「介绍」 */
+    /** 当前标签页是否为「自身」（批7 前的「介绍」页；保留旧查询名） */
     boolean isInfoTabActive() {
-        return infoTabActive;
+        return activeTab == TAB_SELF;
+    }
+
+    /** 当前标签页（TAB_SELF / TAB_SYNERGY / TAB_EQUIP） */
+    int activeTab() {
+        return activeTab;
     }
 
     /** 当前相位（卸下钮的写门控；DrawerPanel.refresh 每帧同步） */
@@ -106,7 +141,7 @@ final class DrawerInfoSection extends Group {
     /**
      * 绑定选中棋子（null = 未选中）：文案按指纹（id / 星 / 累计花费）变化才重建；卸下钮按装备 id 序列变化才重建。
      *
-     * @param data 文案数据源（介绍行集查技能 / 羁绊；unit 为 null 时可为 null）
+     * @param data 文案数据源（自身/羁绊行集查技能与羁绊；unit 为 null 时可为 null）
      */
     void setUnit(Unit unit, GameData data) {
         if (unit == null) {
@@ -115,6 +150,8 @@ final class DrawerInfoSection extends Group {
                 title.setText(DrawerInfoText.NO_SELECTION_TITLE);
                 portrait.setUnit(null);
                 DrawerSkin.setContent(introPane, introBlock, DrawerInfoText.noSelectionIntro(),
+                        DrawerGeometry.descriptionViewport().width());
+                DrawerSkin.setContent(synergyPane, synergyBlock, DrawerInfoText.noSelectionSynergy(),
                         DrawerGeometry.descriptionViewport().width());
                 equipTab.sync(null);
             }
@@ -129,15 +166,35 @@ final class DrawerInfoSection extends Group {
         cachedSpend = unit.getSpend();
         title.setText(DrawerInfoText.title(unit));
         portrait.setUnit(unit);
-        DrawerSkin.setContent(introPane, introBlock, DrawerInfoText.introLines(unit, data),
+        DrawerSkin.setContent(introPane, introBlock, DrawerInfoText.selfLines(unit, data),
+                DrawerGeometry.descriptionViewport().width());
+        List<String> synergyLines = DrawerInfoText.synergyLines(unit, data);
+        DrawerSkin.setContent(synergyPane, synergyBlock,
+                synergyLines.isEmpty() ? DrawerInfoText.noSynergyRegistered() : synergyLines,
                 DrawerGeometry.descriptionViewport().width());
         equipTab.sync(unit);
     }
 
-    /** 两页互斥可见（不可见 Actor 不参与命中） */
+    /**
+     * 三页互斥可见（不可见 Actor 不参与命中）；切页时释放被隐藏滚动框的滚轮焦点——
+     * 否则滚轮继续被不可见面板消费（批7 滚轮焦点纪律）。
+     */
     private void syncTabVisibility() {
-        introPane.setVisible(infoTabActive);
-        equipTab.setVisible(!infoTabActive);
+        if (activeTab != TAB_SELF) {
+            DrawerSkin.releaseWheelFocus(introPane);
+        }
+        if (activeTab != TAB_SYNERGY) {
+            DrawerSkin.releaseWheelFocus(synergyPane);
+        }
+        introPane.setVisible(activeTab == TAB_SELF);
+        synergyPane.setVisible(activeTab == TAB_SYNERGY);
+        equipTab.setVisible(activeTab == TAB_EQUIP);
+    }
+
+    /** 收起抽屉时的滚轮焦点收口（DrawerPanel.apply 全收起帧调用；错过 exit 事件的保险） */
+    void releaseWheelFocus() {
+        DrawerSkin.releaseWheelFocus(introPane);
+        DrawerSkin.releaseWheelFocus(synergyPane);
     }
 
     // —— 件 ——
@@ -157,7 +214,7 @@ final class DrawerInfoSection extends Group {
         @Override
         public void draw(Batch batch, float parentAlpha) {
             super.draw(batch, parentAlpha);
-            DrawerSkin.drawText(batch, assets.font(), text, rect.x() + DrawerGeometry.PADDING,
+            DrawerSkin.drawText(batch, assets.uiFont(), text, rect.x() + DrawerGeometry.PADDING,
                     DrawerSkin.centeredTextTop(rect.y(), rect.height(), DrawerSkin.TEXT_HEIGHT),
                     DrawerSkin.alphaOf(this, parentAlpha));
         }
@@ -240,9 +297,10 @@ final class DrawerInfoSection extends Group {
                 DrawerGeometry.Rect r = DrawerGeometry.equipTabRow(row);
                 Equipment item = equippedIn(slot);
                 float top = DrawerSkin.centeredTextTop(r.y(), r.height(), DrawerSkin.TEXT_HEIGHT);
-                DrawerSkin.drawText(batch, assets.font(), EquipmentInfoText.slotLabel(slot), r.x() + ROW_LABEL_X, top, alpha);
-                DrawerSkin.drawText(batch, assets.font(), item != null ? item.getTemplate().getName() : EMPTY_SLOT_LABEL,
-                        r.x() + ROW_NAME_X + ROW_TEXT_PAD_X, top, alpha);
+                DrawerSkin.drawText(batch, assets.uiFont(), EquipmentInfoText.slotLabel(slot), r.x() + ROW_LABEL_X, top, alpha);
+                DrawerSkin.drawText(batch, assets.uiFont(), item != null ? item.getTemplate().getName() : EMPTY_SLOT_LABEL,
+                        r.x() + ROW_NAME_X + ROW_TEXT_PAD_X,
+                        DrawerSkin.centeredTextTop(r.y(), r.height(), DrawerSkin.TEXT_HEIGHT), alpha);
             }
             super.draw(batch, parentAlpha); // 卸下钮
         }
@@ -282,39 +340,53 @@ final class DrawerInfoSection extends Group {
         public void draw(Batch batch, float parentAlpha) {
             float alpha = DrawerSkin.alphaOf(this, parentAlpha);
             DrawerSkin.drawPatch(batch, buttonPatch, getX(), getY(), getWidth(), getHeight(), alpha);
-            DrawerSkin.drawText(batch, assets.font(), UNEQUIP_LABEL, getX() + (getWidth() - 24f) / 2f,
+            DrawerSkin.drawText(batch, assets.uiFont(), UNEQUIP_LABEL, getX() + (getWidth() - 24f) / 2f,
                     DrawerSkin.centeredTextTop(getY(), getHeight(), DrawerSkin.TEXT_HEIGHT), alpha);
         }
     }
 
-    /** 标签页按钮（九宫格 32×30；点击切页） */
+    /** 标签页按钮（九宫格 32×20×3 竖排；点击切页并收滚轮焦点） */
     private final class TabButton extends Actor {
-        private final boolean infoTab;
+        private final int tab;
+        private final String label;
         private final NinePatch activePatch;
         private final NinePatch inactivePatch;
 
-        TabButton(boolean infoTab, NinePatch activePatch, NinePatch inactivePatch) {
-            this.infoTab = infoTab;
+        TabButton(int tab, String label, NinePatch activePatch, NinePatch inactivePatch) {
+            this.tab = tab;
+            this.label = label;
             this.activePatch = activePatch;
             this.inactivePatch = inactivePatch;
-            DrawerGeometry.Rect rect = infoTab ? DrawerGeometry.tabInfo() : DrawerGeometry.tabEquip();
+            DrawerGeometry.Rect rect = tabRect(tab);
             setPosition(rect.x(), rect.y());
             setSize(rect.width(), rect.height());
             addListener(new ClickListener() {
                 @Override
                 public void clicked(InputEvent event, float x, float y) {
-                    infoTabActive = infoTab;
+                    activeTab = tab;
                     syncTabVisibility();
                 }
             });
         }
 
+        private DrawerGeometry.Rect tabRect(int tab) {
+            switch (tab) {
+                case TAB_SELF:
+                default:
+                    return DrawerGeometry.tabSelf();
+                case TAB_SYNERGY:
+                    return DrawerGeometry.tabSynergy();
+                case TAB_EQUIP:
+                    return DrawerGeometry.tabEquip();
+            }
+        }
+
         @Override
         public void draw(Batch batch, float parentAlpha) {
             float alpha = DrawerSkin.alphaOf(this, parentAlpha);
-            DrawerSkin.drawPatch(batch, infoTab == infoTabActive ? activePatch : inactivePatch,
+            DrawerSkin.drawPatch(batch, tab == activeTab ? activePatch : inactivePatch,
                     getX(), getY(), getWidth(), getHeight(), alpha);
-            DrawerSkin.drawText(batch, assets.font(), infoTab ? TAB_INFO_LABEL : TAB_EQUIP_LABEL,
+            DrawerSkin.drawText(batch, assets.uiFont(), label,
                     getX() + TAB_LABEL_X, DrawerSkin.centeredTextTop(getY(), getHeight(), DrawerSkin.TEXT_HEIGHT), alpha);
         }
     }

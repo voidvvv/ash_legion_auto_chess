@@ -86,21 +86,29 @@ public final class RunEndPanel extends Group {
         batch.draw(assets.region(PlaceholderKeys.WHITE), 90f, 74f, 460f, 216f);
         batch.setColor(Color.WHITE);
         RunContext ctx = context.get();
-        assets.font().getData().setScale(2f);
-        assets.font().draw(batch, endTitleText(ctx.getRunState().getEndCause(), mode), 272f, 268f); // 4 字 ×24px 居中
-        assets.font().getData().setScale(1f);
+        assets.titleFont().draw(batch, endTitleText(ctx.getRunState().getEndCause(), mode), 0f, 270f,
+                com.voidvvv.kz_auto_chess_n.render.board.BoardGeometry.VIRTUAL_W,
+                com.badlogic.gdx.utils.Align.center, false); // 标题黑体 20px 居中
         int round = ctx.getRunState().getRound();
-        assets.font().draw(batch, "抵达第 " + round + "/" + ctx.totalRounds() + " 轮", 280f, 240f);
+        assets.uiFont().draw(batch, "抵达第 " + round + "/" + ctx.totalRounds() + " 轮", 0f, 242f,
+                com.voidvvv.kz_auto_chess_n.render.board.BoardGeometry.VIRTUAL_W,
+                com.badlogic.gdx.utils.Align.center, false);
         if (settlementLines != null) {
-            float y = 218f;
+            float y = 220f;
             for (String line : settlementLines) {
-                assets.font().draw(batch, line, 252f, y);
-                y -= 20f;
+                assets.uiFont().draw(batch, line, 0f, y,
+                        com.voidvvv.kz_auto_chess_n.render.board.BoardGeometry.VIRTUAL_W,
+                        com.badlogic.gdx.utils.Align.center, false);
+                y -= 16f;
             }
         } else if (fallbackMasteryLine(ctx.getRunState(), mode) != null) {
-            assets.font().draw(batch, fallbackMasteryLine(ctx.getRunState(), mode), 262f, 218f);
+            assets.uiFont().draw(batch, fallbackMasteryLine(ctx.getRunState(), mode), 0f, 220f,
+                    com.voidvvv.kz_auto_chess_n.render.board.BoardGeometry.VIRTUAL_W,
+                    com.badlogic.gdx.utils.Align.center, false);
         }
-        assets.font().draw(batch, "种子 " + ctx.getRunState().getSeed(), 285f, 126f);
+        assets.uiFont().draw(batch, "种子 " + ctx.getRunState().getSeed(), 0f, 128f,
+                com.voidvvv.kz_auto_chess_n.render.board.BoardGeometry.VIRTUAL_W,
+                com.badlogic.gdx.utils.Align.center, false);
     }
 
     /** 结算行缺省回退（纯函数；品质改造 §0.1/§0.2）：档案轨关闭的局（测试档 / 对拍）终局隐藏
@@ -140,29 +148,30 @@ public final class RunEndPanel extends Group {
         return mode.isSampleDuel() ? "按同种子重开" : "重新开始";
     }
 
-    /** 终局双钮共用壳 */
+    /** 终局双钮共用壳（原创四态按钮壳） */
     private final class EndButton extends Actor {
         private final String text;
+        private final ClickListener listener;
 
         EndButton(String text, float x, float y, final Runnable action) {
             this.text = text;
             setSize(150f, 32f);
             setPosition(x, y);
-            addListener(new ClickListener() {
+            this.listener = new ClickListener() {
                 @Override
                 public void clicked(InputEvent event, float x, float y) {
                     action.run();
                 }
-            });
+            };
+            addListener(listener);
         }
 
         @Override
         public void draw(Batch batch, float parentAlpha) {
-            Color old = batch.getColor();
-            batch.setColor(0.75f, 0.35f, 0.25f, parentAlpha);
-            batch.draw(assets.region(PlaceholderKeys.PANEL_9SLICE), getX(), getY(), getWidth(), getHeight());
-            batch.setColor(old);
-            assets.font().draw(batch, text, getX() + 75f - text.length() * 6f, getY() + 21f);
+            com.voidvvv.kz_auto_chess_n.render.ButtonArt.drawShell(batch, assets, listener,
+                    getX(), getY(), getWidth(), getHeight(), parentAlpha, false);
+            assets.uiFont().draw(batch, text, getX(), getY() + 21f, getWidth(),
+                    com.badlogic.gdx.utils.Align.center, false);
         }
     }
 }

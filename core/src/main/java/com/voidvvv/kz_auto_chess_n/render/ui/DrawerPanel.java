@@ -4,7 +4,9 @@ import com.badlogic.gdx.graphics.g2d.NinePatch;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.Group;
+import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.Touchable;
+import com.badlogic.gdx.scenes.scene2d.ui.ScrollPane;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import com.voidvvv.kz_auto_chess_n.command.CommandManager;
 import com.voidvvv.kz_auto_chess_n.command.PlacementTarget;
@@ -95,7 +97,7 @@ public final class DrawerPanel extends Group implements DrawerHitTest {
         body.addActor(info);
         body.addActor(strip);
         body.addActor(equip);
-        body.addActor(new DrawerSkin.CloseButton(assets.uiRegion(UiKeys.BTN_CLOSE.id()), listener));
+        body.addActor(new DrawerSkin.CloseButton(assets, listener));
         addActor(body);
 
         badge = new DrawerBadge(assets);
@@ -159,6 +161,8 @@ public final class DrawerPanel extends Group implements DrawerHitTest {
     /**
      * 按开合进度落位（BattleScreen 每帧调用；须在 transitionController.applyUiPose 之后）：主体 x 取整左滑、
      * 全收起即隐藏；角标随展开淡出；把手不动。让位淡色按 {@link DrawerSkin#resolveBodyAlpha} 合成。
+     * 全收起帧释放抽屉内滚动框的滚轮焦点（批7：关抽屉后滚轮不得继续误控旧面板——
+     * 隐藏的 Actor 收不到 exit 事件，须在此显式收口）。
      *
      * @param progress 0 = 收起、1 = 展开（越界钳制）
      */
@@ -167,6 +171,10 @@ public final class DrawerPanel extends Group implements DrawerHitTest {
         this.progress = p;
         body.setPosition(DrawerGeometry.bodyX(p), DrawerGeometry.DRAWER_Y);
         body.setVisible(p > 0f);
+        if (p <= 0f) {
+            info.releaseWheelFocus();
+            equip.releaseWheelFocus();
+        }
         body.getColor().a = DrawerSkin.resolveBodyAlpha(body.getColor().a, dimmed, dimApplied);
         dimApplied = dimmed;
         badge.setColor(1f, 1f, 1f, 1f - p);
@@ -212,6 +220,18 @@ public final class DrawerPanel extends Group implements DrawerHitTest {
         return equip.firstRow();
     }
 
+    /** 滚轮事件可能先于 Stage 的 enter/exit 分派，按事件当时的实际命中校验焦点。 */
+    public void syncWheelFocus(Stage stage, Actor hit) {
+        if (hit instanceof ScrollPane && hit.isDescendantOf(body) && ((ScrollPane) hit).getMaxY() > 0f) {
+            stage.setScrollFocus(hit);
+        } else {
+            Actor focus = stage.getScrollFocus();
+            if (focus instanceof ScrollPane && focus.isDescendantOf(body)) {
+                stage.setScrollFocus(null);
+            }
+        }
+    }
+
     // —— DrawerHitTest（屏幕坐标；头像格穿透后由 boardProcessor 回查） ——
 
     @Override
@@ -247,7 +267,8 @@ public final class DrawerPanel extends Group implements DrawerHitTest {
             return false;
         }
         toLocal(screenX, screenY);
-        if (!DrawerGeometry.equipSection().contains(touch.x, touch.y)) {
+        if (!DrawerGeometry.equipGrid().contains(touch.x, touch.y)
+                && !DrawerGeometry.equipScrollBar().contains(touch.x, touch.y)) {
             return false;
         }
         equip.scrollRows(steps, context.get().getPlayer().getInventory().size());

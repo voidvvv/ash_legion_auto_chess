@@ -67,8 +67,7 @@ class HoverPreviewCardTest {
         List<String> shop = HoverPreviewCard.shopCardLines(tpl("u1"), emptyData());
         assertThat(shop).isEqualTo(UnitInfoText.previewLines(tpl("u1"), emptyData(), 11));
 
-        // 卡内字号 0.75×12 = 9px 行高；cardHeightFor = 4 + n×9 + 4
-        assertThat(HoverPreviewCard.CARD_TEXT_SCALE).isEqualTo(0.75f);
+        // 卡内正文楷体 8.5px；cardHeightFor = 4 + n×9 + 4（9px 行距保住容量锚点）
         assertThat(HoverPreviewCard.LINE_HEIGHT).isEqualTo(9f);
         assertThat(HoverPreviewCard.cardHeightFor(1)).isEqualTo(17f);
         assertThat(HoverPreviewCard.cardHeightFor(27)).isEqualTo(251f); // 真实最坏组合（伏击豹 敌方标记）

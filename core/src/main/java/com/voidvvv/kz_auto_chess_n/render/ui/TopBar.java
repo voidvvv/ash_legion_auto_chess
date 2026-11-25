@@ -10,7 +10,6 @@ import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.voidvvv.kz_auto_chess_n.command.RunContext;
 import com.voidvvv.kz_auto_chess_n.config.GameBalance;
 import com.voidvvv.kz_auto_chess_n.render.Assets;
-import com.voidvvv.kz_auto_chess_n.render.PlaceholderKeys;
 import com.voidvvv.kz_auto_chess_n.render.board.BoardGeometry;
 
 /**
@@ -35,7 +34,7 @@ public final class TopBar extends Group {
     public TopBar(Assets assets, PauseListener pauseListener) {
         this.assets = assets;
         this.pauseListener = pauseListener;
-        this.label = new Label("", new Label.LabelStyle(assets.font(), Color.WHITE));
+        this.label = new Label("", new Label.LabelStyle(assets.uiFont(), Color.WHITE));
         addActor(label);
         setPosition(8f, BoardGeometry.VIRTUAL_H - 18f);
         Actor pause = new PauseButton();
@@ -72,25 +71,27 @@ public final class TopBar extends Group {
                 + "  等级 " + level + "（" + exp + "）";
     }
 
-    /** 暂停按钮（自绘，无 Skin——Q4=B） */
+    /** 暂停按钮（自绘，无 Skin——Q4=B；原创四态按钮壳） */
     private final class PauseButton extends Actor {
+        private final ClickListener listener;
+
         PauseButton() {
             setSize(48f, 22f);
-            addListener(new ClickListener() {
+            this.listener = new ClickListener() {
                 @Override
                 public void clicked(InputEvent event, float x, float y) {
                     pauseListener.onPauseRequested();
                 }
-            });
+            };
+            addListener(listener);
         }
 
         @Override
         public void draw(Batch batch, float parentAlpha) {
-            Color old = batch.getColor();
-            batch.setColor(0.35f, 0.4f, 0.5f, parentAlpha);
-            batch.draw(assets.region(PlaceholderKeys.PANEL_9SLICE), getX(), getY(), getWidth(), getHeight());
-            batch.setColor(old);
-            assets.font().draw(batch, "II", getX() + 19f, getY() + 15f);
+            com.voidvvv.kz_auto_chess_n.render.ButtonArt.drawShell(batch, assets, listener,
+                    getX(), getY(), getWidth(), getHeight(), parentAlpha, false);
+            assets.uiFont().draw(batch, "II", getX(), getY() + 15f, getWidth(),
+                    com.badlogic.gdx.utils.Align.center, false);
         }
     }
 }

@@ -14,7 +14,7 @@ import com.voidvvv.kz_auto_chess_n.save.MetaService;
 
 /**
  * 装载屏（render §2.1 双 Viewport 同参数）：占位图集已在 Main.create 同步生成完毕，
- * 此处首帧绘出提示后切主菜单（"首帧完成占位生成后切 MainMenu"）。字体经 Assets.font()
+ * 此处首帧绘出提示后切主菜单（"首帧完成占位生成后切 MainMenu"）。字体经 Assets.titleFont()/
  * 加载 Fusion Pixel（已入库）；缺文件回退内置默认时中文不渲染但不炸（计划 §5.3-6）。
  *
  * <p>品质改造 §0.1：启动参数解析结果一次性从启动层传入（{@code launchMode}）——测试档
@@ -69,8 +69,10 @@ public final class LoadingScreen implements Screen {
         viewport.apply();
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
-        assets.font().draw(batch, "余烬军团", 296f, BoardGeometry.VIRTUAL_H / 2f + 20f); // 4 字居中（lore 暂定名）
-        assets.font().draw(batch, "装载中……", 293f, BoardGeometry.VIRTUAL_H / 2f - 10f);
+        assets.titleFont().draw(batch, "余烬军团", 0f, BoardGeometry.VIRTUAL_H / 2f + 26f,
+                BoardGeometry.VIRTUAL_W, com.badlogic.gdx.utils.Align.center, false); // lore 暂定名
+        assets.uiFont().draw(batch, "装载中……", 0f, BoardGeometry.VIRTUAL_H / 2f - 10f,
+                BoardGeometry.VIRTUAL_W, com.badlogic.gdx.utils.Align.center, false);
         batch.end();
         framesDrawn++;
         if (framesDrawn >= 2) { // 首帧已上屏 → 装载完成（测试档直达测试局，其余进主菜单）

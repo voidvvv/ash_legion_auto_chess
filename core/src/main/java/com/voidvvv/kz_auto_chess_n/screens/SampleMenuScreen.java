@@ -3,7 +3,6 @@ package com.voidvvv.kz_auto_chess_n.screens;
 import com.badlogic.gdx.Game;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Screen;
-import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.Batch;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
@@ -13,7 +12,6 @@ import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.voidvvv.kz_auto_chess_n.data.GameData;
 import com.voidvvv.kz_auto_chess_n.render.Assets;
-import com.voidvvv.kz_auto_chess_n.render.PlaceholderKeys;
 import com.voidvvv.kz_auto_chess_n.render.board.BoardGeometry;
 import com.voidvvv.kz_auto_chess_n.save.MetaService;
 import com.voidvvv.kz_auto_chess_n.systems.PaiTestScript;
@@ -107,10 +105,10 @@ public final class SampleMenuScreen implements Screen {
     public void render(float delta) {
         ScreenUtils.clear(0.05f, 0.04f, 0.08f, 1f);
         stage.getBatch().begin();
-        assets.font().getData().setScale(2f);
-        assets.font().draw(stage.getBatch(), "测试样片", 276f, 336f); // 4 字 ×24px 居中
-        assets.font().getData().setScale(1f);
-        assets.font().draw(stage.getBatch(), "选对拍题与种子", 286f, 318f);
+        assets.titleFont().draw(stage.getBatch(), "测试样片", 0f, 340f,
+                BoardGeometry.VIRTUAL_W, com.badlogic.gdx.utils.Align.center, false);
+        assets.uiFont().draw(stage.getBatch(), "选对拍题与种子", 0f, 320f,
+                BoardGeometry.VIRTUAL_W, com.badlogic.gdx.utils.Align.center, false);
         stage.getBatch().end();
         stage.act(delta);
         stage.draw();
@@ -143,21 +141,23 @@ public final class SampleMenuScreen implements Screen {
         stage.dispose();
     }
 
-    /** 自绘菜单按钮壳（白 region tint + 内置字体；沿 MainMenuScreen.MenuButton 形制独立实现） */
+    /** 自绘菜单按钮壳（原创四态按钮壳 + 内置字体；沿 MainMenuScreen.MenuButton 形制独立实现） */
     private abstract class SampleButton extends Actor {
         private final float width;
         private final float height;
+        private final ClickListener listener;
 
         SampleButton(float width, float height) {
             this.width = width;
             this.height = height;
             setSize(width, height);
-            addListener(new ClickListener() {
+            this.listener = new ClickListener() {
                 @Override
                 public void clicked(InputEvent event, float x, float y) {
                     onClicked();
                 }
-            });
+            };
+            addListener(listener);
         }
 
         /** 每帧取文案（SeedButton 动态读共用 seed） */
@@ -168,11 +168,10 @@ public final class SampleMenuScreen implements Screen {
         @Override
         public void draw(Batch batch, float parentAlpha) {
             String text = labelText();
-            Color old = batch.getColor();
-            batch.setColor(0.75f, 0.35f, 0.25f, parentAlpha);
-            batch.draw(assets.region(PlaceholderKeys.PANEL_9SLICE), getX(), getY(), width, height);
-            batch.setColor(old);
-            assets.font().draw(batch, text, getX() + width / 2f - text.length() * 6f, getY() + 23f);
+            com.voidvvv.kz_auto_chess_n.render.ButtonArt.drawShell(batch, assets, listener,
+                    getX(), getY(), width, height, parentAlpha, false);
+            assets.uiFont().draw(batch, text, getX(), getY() + 23f, width,
+                    com.badlogic.gdx.utils.Align.center, false);
         }
     }
 

@@ -33,10 +33,8 @@ import java.util.function.Supplier;
  */
 public final class HoverPreviewCard extends Actor {
 
-    /** 卡内字号缩放（2026-11-21 整改：0.75×12 = 9px 整数刻度，信息密度换全量容纳；共用字体用后即还） */
-    static final float CARD_TEXT_SCALE = 0.75f;
-    /** 卡内行高 = 12 × 0.75（字号同步缩放，行距零富余的紧凑排版） */
-    static final float LINE_HEIGHT = 12f * CARD_TEXT_SCALE;
+    /** 卡内行高（正文楷体 8.5px；9px 行距保住既有容量锚点：27 行 ≤ 252） */
+    static final float LINE_HEIGHT = 9f;
     private static final float PADDING_X = 4f;
     private static final float PADDING_TOP = 4f;
     private static final float PADDING_BOTTOM = 4f;
@@ -162,12 +160,10 @@ public final class HoverPreviewCard extends Actor {
         batch.setColor(CARD_TINT.r, CARD_TINT.g, CARD_TINT.b, CARD_TINT.a * parentAlpha);
         batch.draw(assets.region(PlaceholderKeys.PANEL_9SLICE), drawX, drawY, drawW, drawH);
         batch.setColor(old);
-        assets.font().getData().setScale(CARD_TEXT_SCALE); // 卡内小号字（用后即还——共用字体纪律）
         float y = drawY + drawH - PADDING_TOP;
         for (int i = 0; i < lines.size() && y > drawY; i++) {
-            assets.font().draw(batch, lines.get(i), drawX + PADDING_X, y);
+            assets.bodyFont().draw(batch, lines.get(i), drawX + PADDING_X, y);
             y -= LINE_HEIGHT;
         }
-        assets.font().getData().setScale(1f);
     }
 }

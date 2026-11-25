@@ -41,6 +41,8 @@ public final class RunFlowSystem {
     private final MasteryCalculator masteryCalculator;
     /** RESULT 横幅已停留秒数（onBattleOver 归零；仅败局自动推进消费） */
     private float resultTimer;
+    /** 胜利战毕延迟已流逝秒数（tickBattleEnd 按逻辑步累积；仅 PLAYER_WIN 消费——窗口满才进 RESULT） */
+    private float victoryEndDelayElapsed;
 
     /** 注入式熟练度结算（Q5 裁决：纯函数 stub，Phase 6 接档案域换实现） */
     public RunFlowSystem(MasteryCalculator masteryCalculator) {
@@ -75,6 +77,7 @@ public final class RunFlowSystem {
             if (runState.getPhase() != GamePhase.SHOPPING) {
                 return false;
             }
+            victoryEndDelayElapsed = 0f; // 新战斗计时归零（防跨战残留——上局在延迟窗口内放弃的边界）
             BattleState state = battleSystem.startBattle(ctx.getPlayer(), runState.getEnemyWave(),
                     ctx.getGameData(), battleRng(ctx), runState.getIdIssuer(),
                     runState.getModifiers(), runState.getRound()); // 零棋子允许开战；D10 敌方档位随轮次截断
@@ -162,6 +165,7 @@ public final class RunFlowSystem {
             return;
         }
         resultTimer = 0f;
+        victoryEndDelayElapsed = 0f; // 战毕流转点归零（计时 idle 恒 0；见 tickBattleEnd）
         RunState runState = ctx.getRunState();
         runState.setPhase(GamePhase.RESULT);
         if (ctx.getBattleState().getOutcome() == BattleOutcome.PLAYER_WIN) {
@@ -178,6 +182,28 @@ public final class RunFlowSystem {
             runState.setPendingChest(chestSystem.buildDefeatOffer(runState.getRound()));
         }
         // 其余（零棋子败 / 第 3 败）：无败箱，横幅 3s/点击 → continueAfterDefeat 分岔
+    }
+
+    /**
+     * 战毕延迟观察（BattleScreen BATTLE 期每逻辑步 isOver 后调用，口径 #7）：胜局先定格战场
+     * {@link GameBalance#VICTORY_RESULT_DELAY_SECONDS}——死亡反馈（death 动画/淡出走 render 时钟）
+     * 与战场在窗口内持续展示，到时才委托 {@link #onBattleOver} 进 RESULT 弹奖励；
+     * 败局 / 超时 / 投降零延迟直达（原即时行为）。委托单点 {@link #onBattleOver}：
+     * 胜负判定与宝箱 roll 仍每战只发生一次（流转后相位门拦截，本方法与 onBattleOver 均不再生效）。
+     */
+    public void tickBattleEnd(RunContext ctx, float dt) {
+        if (ctx.getRunState().getPhase() != GamePhase.BATTLE
+                || ctx.getBattleState() == null || !ctx.getBattleState().isOver()) {
+            return; // 防御性门（调用方口径：BATTLE 期 isOver 后每逻辑步调用）
+        }
+        if (ctx.getBattleState().getOutcome() != BattleOutcome.PLAYER_WIN) {
+            onBattleOver(ctx); // 失败 / 超时：原即时流转（横幅即现）
+            return;
+        }
+        victoryEndDelayElapsed += dt;
+        if (victoryEndDelayElapsed >= GameBalance.VICTORY_RESULT_DELAY_SECONDS) {
+            onBattleOver(ctx); // 窗口满：胜局流转（横幅 + 胜箱此刻出现）
+        }
     }
 
     /** RESULT 横幅计时：仅败局自动推进（胜局必须 PickChest，无自动出口——口径 #9） */

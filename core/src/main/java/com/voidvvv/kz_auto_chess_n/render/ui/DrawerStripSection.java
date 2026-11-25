@@ -122,9 +122,18 @@ final class DrawerStripSection extends Group {
                 return;
             }
             DrawerSkin.drawPatch(batch, slotPatch, rect.x(), rect.y(), rect.width(), rect.height(), alpha);
-            UnitFramePainter.draw(batch, assets, unit.getTemplate().getId(), PlaceholderKeys.ANIM_IDLE, 0,
-                    rect.x() + (rect.width() - UNIT_FRAME) / 2f, rect.y() + (rect.height() - UNIT_FRAME) / 2f,
-                    UNIT_FRAME, false, alpha, StarColors.of(unit.getStar()));
+            // 原创头像优先（32×32，从单位 idle 图提取；缺素材回退单位帧 + 星级 tint 旧口径）
+            TextureRegion face = assets.regionOrNull("portrait_" + unit.getTemplate().getId());
+            if (face != null) {
+                batch.setColor(1f, 1f, 1f, alpha);
+                batch.draw(face, rect.x() + (rect.width() - UNIT_FRAME) / 2f,
+                        rect.y() + (rect.height() - UNIT_FRAME) / 2f, UNIT_FRAME, UNIT_FRAME);
+                batch.setColor(com.badlogic.gdx.graphics.Color.WHITE);
+            } else {
+                UnitFramePainter.draw(batch, assets, unit.getTemplate().getId(), PlaceholderKeys.ANIM_IDLE, 0,
+                        rect.x() + (rect.width() - UNIT_FRAME) / 2f, rect.y() + (rect.height() - UNIT_FRAME) / 2f,
+                        UNIT_FRAME, false, alpha, StarColors.of(unit.getStar()));
+            }
             if (highlight) {
                 DrawerSkin.drawPatch(batch, selectedPatch, rect.x(), rect.y(), rect.width(), rect.height(), alpha);
             }

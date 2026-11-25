@@ -5,7 +5,6 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Batch;
-import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.Stage;
@@ -15,7 +14,6 @@ import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.voidvvv.kz_auto_chess_n.data.GameData;
 import com.voidvvv.kz_auto_chess_n.render.Assets;
-import com.voidvvv.kz_auto_chess_n.render.PlaceholderKeys;
 import com.voidvvv.kz_auto_chess_n.render.board.BoardGeometry;
 import com.voidvvv.kz_auto_chess_n.save.MetaService;
 import com.voidvvv.kz_auto_chess_n.save.RunSnapshot;
@@ -91,10 +89,7 @@ public final class MainMenuScreen implements Screen {
         batch.setProjectionMatrix(stage.getCamera().combined);
         batch.begin();
         batch.draw(background, 0f, 0f, BoardGeometry.VIRTUAL_W, BoardGeometry.VIRTUAL_H);
-        BitmapFont font = assets.font();
-        font.getData().setScale(2f);
-        font.draw(batch, "余烬军团", 0f, 300f, BoardGeometry.VIRTUAL_W, Align.center, false);
-        font.getData().setScale(1f);
+        assets.titleFont().draw(batch, "余烬军团", 0f, 300f, BoardGeometry.VIRTUAL_W, Align.center, false);
         batch.end();
         stage.act(delta);
         stage.draw();
@@ -127,30 +122,30 @@ public final class MainMenuScreen implements Screen {
         stage.dispose();
     }
 
-    /** 自绘菜单按钮（白 region tint + 内置字体） */
+    /** 自绘菜单按钮（原创四态按钮壳 + 内置字体文案；悬停/按下态见 ButtonArt） */
     private abstract class MenuButton extends Actor {
         private final String text;
+        private final ClickListener listener;
 
         MenuButton(String text) {
             this.text = text;
             setSize(160f, 36f);
-            addListener(new ClickListener() {
+            this.listener = new ClickListener() {
                 @Override
                 public void clicked(InputEvent event, float x, float y) {
                     onClicked();
                 }
-            });
+            };
+            addListener(listener);
         }
 
         protected abstract void onClicked();
 
         @Override
         public void draw(Batch batch, float parentAlpha) {
-            float oldColor = batch.getPackedColor();
-            batch.setColor(0.75f, 0.35f, 0.25f, parentAlpha);
-            batch.draw(assets.region(PlaceholderKeys.PANEL_9SLICE), getX(), getY(), getWidth(), getHeight());
-            batch.setPackedColor(oldColor);
-            assets.font().draw(batch, text, getX() + 160f / 2f - text.length() * 6f, getY() + 23f);
+            com.voidvvv.kz_auto_chess_n.render.ButtonArt.drawShell(batch, assets, listener,
+                    getX(), getY(), getWidth(), getHeight(), parentAlpha, false);
+            assets.uiFont().draw(batch, text, getX(), getY() + 23f, getWidth(), Align.center, false);
         }
     }
 }

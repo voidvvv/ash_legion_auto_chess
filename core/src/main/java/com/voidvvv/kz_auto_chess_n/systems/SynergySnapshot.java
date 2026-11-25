@@ -4,6 +4,7 @@ import com.voidvvv.kz_auto_chess_n.data.EffectData;
 import com.voidvvv.kz_auto_chess_n.entities.StatModifierBlock;
 import com.voidvvv.kz_auto_chess_n.entities.StatModifierSource;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -62,21 +63,29 @@ public final class SynergySnapshot implements StatModifierSource {
         return actives.isEmpty();
     }
 
-    /** 达档羁绊条目：synergyId / 展示名 / 生效档位数 */
+    /** 达档羁绊条目：标识、展示名、档位与该档实际效果。 */
     public static final class ActiveSynergy {
         private final String synergyId;
         private final String name;
         private final int thresholdCount;
+        private final List<EffectData> effects;
 
         public ActiveSynergy(String synergyId, String name, int thresholdCount) {
+            this(synergyId, name, thresholdCount, Collections.<EffectData>emptyList());
+        }
+
+        public ActiveSynergy(String synergyId, String name, int thresholdCount, List<EffectData> effects) {
             this.synergyId = synergyId;
             this.name = name;
             this.thresholdCount = thresholdCount;
+            this.effects = Collections.unmodifiableList(new ArrayList<EffectData>(effects));
         }
 
         public String getSynergyId() { return synergyId; }
         public String getName() { return name; }
         public int getThresholdCount() { return thresholdCount; }
+        /** 该羁绊实际生效的档位效果，含开战时增幅。 */
+        public List<EffectData> getEffects() { return effects; }
 
         @Override
         public boolean equals(Object o) {

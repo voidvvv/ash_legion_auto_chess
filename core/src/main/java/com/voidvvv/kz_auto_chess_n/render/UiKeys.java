@@ -11,11 +11,12 @@ import java.util.Map;
  * UI 框架素材键集（UI 抽屉化批0；准绳 = 采购单 {@code assets_src/ui_redesign/ASSET_REQUIREMENTS.md}
  * §2.1 必需 / §2.2 加分，1:1 列）。纯 Java 常量表——headless 可测、零 Gdx。
  *
- * <p>每条 = id（= 文件名主干，{@code art/ui/{id}.png}）+ 1:1 源尺寸 + 九宫格切分线（左/右/上/下；0 = 该边不固定）。
+ * <p>每条 = id（= 文件名主干，generated_v2 交付后为 {@code art/generated_v2/ui/{id}.png}）+ 1:1 源尺寸 + 九宫格切分线（左/右/上/下；0 = 该边不固定）。
  * 切分线是 {@link Assets#uiPatch} 包 NinePatch 的唯一事实源；源尺寸既是 {@link PlaceholderArt}
  * 生成占位的画布尺寸，也是真图对账（{@code UiArtInventoryTest}）的预期值。
  *
- * <p>键集口径：必需 12（已交付）+ 加分 8（暂未交付——缺件走占位兜底，不影响功能）；
+ * <p>键集口径：必需 12（已交付）+ 加分 8（暂未交付——缺件走占位兜底，不影响功能）
+ * + 原创按钮态 6（generated_v2 新增，已随第二阶段交付）；
  * B02 {@code ui_btn_sell} 已裁定不采购（Q3：保留拖拽出售区），不入键集。旧通用件
  * {@link PlaceholderKeys#PANEL_9SLICE} 仍归既有面板，不在本表。
  *
@@ -115,6 +116,21 @@ public final class UiKeys {
     /** M12 标题板（棋子名字） */
     public static final Entry TITLE_PLATE = new Entry("ui_title_plate_9p", 48, 18, 8, 8, 6, 6);
 
+    // —— 原创按钮态（6；品质改造第二阶段：generated_v2 新增 key——通用文本按钮四态 + 关闭钮悬停/禁用） ——
+
+    /** 通用文本按钮·正常态（48×24，切分 8/8/8/8；文案由 BitmapFont 绘制） */
+    public static final Entry BUTTON_NORMAL = new Entry("ui_button_normal", 48, 24, 8, 8, 8, 8);
+    /** 通用文本按钮·悬停态 */
+    public static final Entry BUTTON_HOVER = new Entry("ui_button_hover", 48, 24, 8, 8, 8, 8);
+    /** 通用文本按钮·按下态 */
+    public static final Entry BUTTON_PRESSED = new Entry("ui_button_pressed", 48, 24, 8, 8, 8, 8);
+    /** 通用文本按钮·禁用态 */
+    public static final Entry BUTTON_DISABLED = new Entry("ui_button_disabled", 48, 24, 8, 8, 8, 8);
+    /** 关闭钮·悬停态（14×14，不拉伸） */
+    public static final Entry BTN_CLOSE_HOVER = new Entry("ui_btn_close_hover", 14, 14, 0, 0, 0, 0);
+    /** 关闭钮·禁用态（14×14，不拉伸） */
+    public static final Entry BTN_CLOSE_DISABLED = new Entry("ui_btn_close_disabled", 14, 14, 0, 0, 0, 0);
+
     // —— §2.2 加分（8；B02 ui_btn_sell 不采购、不计入） ——
 
     /** B01 装饰角花 */
@@ -144,7 +160,12 @@ public final class UiKeys {
             CORNER_ORNAMENT, SCROLL_ARROW, SLOT_HOVER, PREVIEW_BOARD, BTN_CLOSE_PRESSED,
             ICON_EQUIP_WEAPON, ICON_EQUIP_ARMOR, ICON_EQUIP_TRINKET));
 
-    /** 全键集 = 必需 + 加分（20；不可变） */
+    /** 原创按钮态 6 键（generated_v2 新增；不可变） */
+    public static final List<Entry> BUTTONS = Collections.unmodifiableList(Arrays.asList(
+            BUTTON_NORMAL, BUTTON_HOVER, BUTTON_PRESSED, BUTTON_DISABLED,
+            BTN_CLOSE_HOVER, BTN_CLOSE_DISABLED));
+
+    /** 全键集 = 必需 + 加分 + 按钮态（26；不可变） */
     public static final List<Entry> ALL;
 
     /** 全部 id（与 {@link #ALL} 同序；不可变——供 {@link PlaceholderKeys#enumerateFor} 逐 key 对账） */
@@ -155,6 +176,7 @@ public final class UiKeys {
     static {
         List<Entry> all = new ArrayList<Entry>(REQUIRED);
         all.addAll(BONUS);
+        all.addAll(BUTTONS);
         ALL = Collections.unmodifiableList(all);
         List<String> ids = new ArrayList<String>(all.size());
         Map<String, Entry> byId = new HashMap<String, Entry>();

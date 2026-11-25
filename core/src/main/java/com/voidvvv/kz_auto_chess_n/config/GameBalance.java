@@ -75,6 +75,9 @@ public final class GameBalance {
     public static final int DRAG_DEAD_ZONE_PX = 20;
     /** 战毕横幅停留秒数（到时自动回 SHOPPING，Q3） */
     public static final float RESULT_BANNER_SECONDS = 3f;
+    /** 胜利战毕节奏：最后敌人死亡后先定格战场展示死亡反馈，再进 RESULT 弹奖励（胜局专属延迟——
+     *  消费点 RunFlowSystem.tickBattleEnd；败局 / 超时保持即时流转）。×2 变速按逻辑时长同倍缩短 */
+    public static final float VICTORY_RESULT_DELAY_SECONDS = 1.5f;
     /** 战斗快进倍率（×2 变速档，只乘 accumulator 消费速率，Q2） */
     public static final float BATTLE_SPEED_FACTOR_FAST = 2f;
 

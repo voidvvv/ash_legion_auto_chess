@@ -7,9 +7,14 @@ import com.badlogic.gdx.graphics.g2d.NinePatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
+import com.badlogic.gdx.scenes.scene2d.InputListener;
+import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.Touchable;
 import com.badlogic.gdx.scenes.scene2d.ui.ScrollPane;
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
+import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable;
+import com.voidvvv.kz_auto_chess_n.render.Assets;
+import com.voidvvv.kz_auto_chess_n.render.UiKeys;
 
 import java.util.List;
 
@@ -23,11 +28,13 @@ import java.util.List;
  */
 final class DrawerSkin {
 
-    /** 描述类文字字号（Q8：层内 12px 原生字比其余 UI 大 25%——描述用 0.75×=9px 与悬停卡持平） */
-    static final float SMALL_TEXT_SCALE = HoverPreviewCard.CARD_TEXT_SCALE;
-    static final float SMALL_LINE_HEIGHT = 12f * SMALL_TEXT_SCALE;
-    /** 12px 原生字的行高 */
-    static final float TEXT_HEIGHT = 12f;
+    /**
+     * 描述类文字行高（正文楷体 8.5px 的实测行高 10px；抽屉滚动块 / 悬停卡 / tooltip 共用）。
+     * 字号本身由 {@link Assets#bodyFont()} 决定，绘制时不再二次 setScale。
+     */
+    static final float SMALL_LINE_HEIGHT = Assets.BODY_LINE_HEIGHT;
+    /** UI 标签/数值/按钮/页签字号（宋体逻辑 10px；标题黑体 20px 不在此列） */
+    static final float TEXT_HEIGHT = Assets.UI_FONT_SIZE;
     /** Q2 让位：从抽屉往外拖棋子时面板淡到三成 */
     static final float DIM_ALPHA = 0.3f;
 
@@ -105,34 +112,102 @@ final class DrawerSkin {
     }
 
     /**
-     * 滚动框换内容：文字块按行数撑高后<b>必须作废 ScrollPane 的布局缓存</b>——ScrollPane 只在自身失效时
+     * 滚动框换内容：文字块按实测换行撑高后<b>必须作废 ScrollPane 的布局缓存</b>——ScrollPane 只在自身失效时
      * 重算内容高度，否则沿用首次布局的旧高度（占位 1 行 = 17px），滚轮被消费却滚不动
      * （批3 探针实证：scrollY 恒 0；回归用例见 DrawerTextCapacityTest）。
+     * 换内容后立即重排，并从新内容顶部开始。
      */
-    static void setContent(ScrollPane pane, DrawerTextBlock block, List<String> lines, float width) {
-        block.setLines(lines, width);
+    static void setContent(ScrollPane pane, DrawerTextBlock block, List<String> paragraphs, float width) {
+        block.setParagraphs(paragraphs, width);
         pane.invalidate();
+        pane.validate();
+        pane.setScrollY(0f);
+        pane.updateVisualScroll();
+        if (pane.getMaxY() <= 0f) {
+            releaseWheelFocus(pane);
+        }
     }
 
     static void drawText(Batch batch, BitmapFont font, String text, float x, float top, float alpha) {
+        Color color = font.getColor();
+        float r = color.r, g = color.g, b = color.b, a = color.a;
         font.setColor(1f, 1f, 1f, alpha);
-        font.draw(batch, text, x, top); // y = 行顶，向下延伸
-        font.setColor(1f, 1f, 1f, 1f); // 用后即还（共用字体纪律）
+        try {
+            font.draw(batch, text, x, top);
+        } finally {
+            font.setColor(r, g, b, a);
+        }
     }
 
     /**
-     * 抽屉内文字滚动框（scene2d ScrollPane，程序化拼 Style——项目无 Skin JSON）：只纵向滚动、无惯性、无过滚、
-     * 无自绘滚动条、位移不平滑（逐像素对齐）；输入只走拖动与滚轮（滚轮在 uiStage 层被它消费，不进 boardProcessor）。
+     * 抽屉内文字滚动框（scene2d ScrollPane，程序化拼 Style——项目无 Skin JSON；品质改造批7 修正）：
+     * <ul>
+     *   <li><b>纵向 pan/拖动开启</b>：flickScroll 手势 + flingTime=0（可拖动但无惯性；旧 flickScroll(false) 关掉了
+     *       全部手势滚动，触屏/鼠标拖拽均不动）；</li>
+     *   <li><b>track/knob 开启</b>：纵向滚动条用现有原创素材（M07 轨 / M08 滑块 九宫格）自绘 + 可交互
+     *       （scrollBarTouch：拖滑块、点轨道翻页）；</li>
+     *   <li><b>关闭</b>：横滚、过滚、惯性、平滑位移（逐像素对齐）、滚动条淡出。</li>
+     * </ul>
+     * 滚轮经 {@link #manageWheelFocus} 分配 Stage scroll focus 后由本框消费（不进 boardProcessor）。
+     *
+     * @param track 纵向滚动条轨（M07 九宫格；null = 不画轨）
+     * @param knob  纵向滚动条滑块（M08 九宫格；null = 不画滑块）
      */
-    static ScrollPane newTextScrollPane(Actor content) {
-        ScrollPane pane = new ScrollPane(content, new ScrollPane.ScrollPaneStyle());
+    static ScrollPane newTextScrollPane(Actor content, NinePatch track, NinePatch knob) {
+        ScrollPane.ScrollPaneStyle style = new ScrollPane.ScrollPaneStyle();
+        if (track != null) {
+            NinePatchDrawable drawable = new NinePatchDrawable(track);
+            drawable.setMinWidth(DrawerTextBlock.SCROLLBAR_WIDTH);
+            style.vScroll = drawable;
+        }
+        if (knob != null) {
+            NinePatchDrawable drawable = new NinePatchDrawable(knob);
+            drawable.setMinWidth(DrawerTextBlock.SCROLLBAR_WIDTH);
+            style.vScrollKnob = drawable;
+        }
+        ScrollPane pane = new ScrollPane(content, style);
         pane.setSmoothScrolling(false);
-        pane.setFlickScroll(false);
+        pane.setFlickScroll(true); // 纵向 pan/拖动
+        pane.setFlingTime(0f); // 关惯性（拖到哪停到哪）
         pane.setOverscroll(false, false);
         pane.setFadeScrollBars(false);
-        pane.setScrollBarTouch(false);
+        pane.setScrollBarTouch(true); // track/knob 可交互
         pane.setScrollingDisabled(true, false); // 只纵向滚
         return pane;
+    }
+
+    /**
+     * 滚轮焦点纪律（品质改造批7）：鼠标<b>实际位于可见滚动框上</b>时接管 Stage scroll focus——
+     * enter 分配、exit 归还（仅当焦点仍在本框）。移开即还 null，滚轮落回 multiplexer 下层
+     * （boardProcessor 的头像条/装备格/棋盘路由），不再误控旧面板。
+     * 隐藏的 Actor 不参与命中（enter 不会来）；因隐藏/遮挡而错过 exit 的场合由持有方显式
+     * {@link #releaseWheelFocus} 收口（切页 / 收抽屉 / 模态）。
+     */
+    static void manageWheelFocus(final ScrollPane pane) {
+        pane.addListener(new InputListener() {
+            @Override
+            public void enter(InputEvent event, float x, float y, int pointer, Actor fromActor) {
+                Stage stage = pane.getStage();
+                if (pointer == -1 && stage != null && pane.isVisible() && pane.getMaxY() > 0f) {
+                    stage.setScrollFocus(pane);
+                }
+            }
+
+            @Override
+            public void exit(InputEvent event, float x, float y, int pointer, Actor toActor) {
+                if (pointer == -1) {
+                    releaseWheelFocus(pane);
+                }
+            }
+        });
+    }
+
+    /** 若 Stage 滚轮焦点在本框上则归还 null（移开/隐藏/切页/收起/模态时由持有方调用） */
+    static void releaseWheelFocus(ScrollPane pane) {
+        Stage stage = pane.getStage();
+        if (stage != null && stage.getScrollFocus() == pane) {
+            stage.setScrollFocus(null);
+        }
     }
 
     // —— 通用小件（无业务状态） ——
@@ -181,24 +256,34 @@ final class DrawerSkin {
 
     /** 关闭钮（采购单规格不拉伸，14×14；点击请求收起） */
     static final class CloseButton extends Actor {
-        private final TextureRegion region;
+        private final com.voidvvv.kz_auto_chess_n.render.Assets assets;
+        private final ClickListener listener;
 
-        CloseButton(TextureRegion region, final DrawerPanel.Listener listener) {
-            this.region = region;
+        CloseButton(com.voidvvv.kz_auto_chess_n.render.Assets assets, final DrawerPanel.Listener listener) {
+            this.assets = assets;
             DrawerGeometry.Rect rect = DrawerGeometry.closeButton();
             setPosition(rect.x(), rect.y());
             setSize(rect.width(), rect.height());
-            addListener(new ClickListener() {
+            this.listener = new ClickListener() {
                 @Override
                 public void clicked(InputEvent event, float x, float y) {
                     listener.onCloseRequested();
                 }
-            });
+            };
+            addListener(this.listener);
+        }
+
+        /** 四态取图：按下 &gt; 悬停 &gt; 正常（禁用态预留；14×14 不拉伸件，整图非九宫格） */
+        private TextureRegion stateRegion() {
+            String id = listener.isPressed() ? UiKeys.BTN_CLOSE_PRESSED.id()
+                    : listener.isOver() ? UiKeys.BTN_CLOSE_HOVER.id()
+                    : UiKeys.BTN_CLOSE.id();
+            return assets.uiRegion(id);
         }
 
         @Override
         public void draw(Batch batch, float parentAlpha) {
-            drawRegion(batch, region, getX(), getY(), getWidth(), getHeight(), alphaOf(this, parentAlpha));
+            drawRegion(batch, stateRegion(), getX(), getY(), getWidth(), getHeight(), alphaOf(this, parentAlpha));
         }
     }
 

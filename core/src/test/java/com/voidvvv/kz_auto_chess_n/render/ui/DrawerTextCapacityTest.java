@@ -156,18 +156,18 @@ class DrawerTextCapacityTest {
     }
 
     @Test
-    @DisplayName("内容高度公式：上留白 + 行数 × 行高 + 下留白（0 行 = 8；23 行 × 9 = 215；列宽 ≤ 视口净宽不横向滚动）")
+    @DisplayName("内容高度公式：上留白 + 行数 × 行高 + 下留白（0 行 = 8；23 行 × 10 = 238；列宽 ≤ 视口净宽不横向滚动）")
     void textBlockHeightFormula() {
-        assertThat(DrawerTextBlock.heightFor(0, 9f)).isEqualTo(8f);
-        assertThat(DrawerTextBlock.heightFor(6, 9f)).isEqualTo(62f);
-        assertThat(DrawerTextBlock.heightFor(23, 9f)).isEqualTo(215f);
+        assertThat(DrawerTextBlock.heightFor(0, 10f)).isEqualTo(8f);
+        assertThat(DrawerTextBlock.heightFor(6, 10f)).isEqualTo(68f);
+        assertThat(DrawerTextBlock.heightFor(23, 10f)).isEqualTo(238f);
         DrawerGeometry.Rect intro = DrawerGeometry.descriptionViewport();
         ScrollPane pane = new ScrollPane(content(23, DrawerSkin.SMALL_LINE_HEIGHT, intro.width()));
         pane.setSize(intro.width(), intro.height());
         pane.layout();
         assertThat(pane.getMaxX()).as("只纵向滚动（maxX 恒 0）").isZero();
-        // 12 列全角行 = 108px，自左留白 4 起至视口右缘 112 恰好收口（右缘留白由描述框内缩的 4px 承担）
-        assertThat(DrawerTextBlock.PAD_X + DrawerInfoText.DESC_MAX_COLUMNS * 9f).isLessThanOrEqualTo(intro.width());
+        // 12 列全角行 = 102px（楷体 8.5px），自左留白 4 起至视口右缘 112 收口
+        assertThat(DrawerTextBlock.PAD_X + DrawerInfoText.DESC_MAX_COLUMNS * 8.5f).isLessThanOrEqualTo(intro.width());
     }
 
     @Test
@@ -187,9 +187,10 @@ class DrawerTextCapacityTest {
 
         pane.invalidate(); // DrawerSkin.setContent 的做法
         pane.validate();
-        assertThat(pane.getMaxY()).isEqualTo(215f - viewport.height());
+        float expectedScroll = DrawerTextBlock.heightFor(23, DrawerSkin.SMALL_LINE_HEIGHT) - viewport.height();
+        assertThat(pane.getMaxY()).isEqualTo(expectedScroll);
         pane.setScrollY(999f);
         pane.layout();
-        assertThat(pane.getScrollY()).as("作废后可滚到底").isEqualTo(215f - viewport.height());
+        assertThat(pane.getScrollY()).as("作废后可滚到底").isEqualTo(expectedScroll);
     }
 }
