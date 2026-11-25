@@ -29,8 +29,7 @@ import java.util.function.Supplier;
  * 点击卡片入队 BuyUnit(slot)——查价不信任载荷（input §6.3）；灰置 = 表现层预校验
  * （金币不足/席满不立即合成/空槽/Lv.7 封顶），最终防线在 ShopSystem handler。
  *
- * <p>坐标为组内局部坐标（组定位 0,{@code BoardGeometry.SHOP_BAR_Y} 归 CP29 装配）。
- * 按钮宽 80：两钮收在 [472,636]——原稿 560+100=660 越出 640 虚拟宽 20px（T6 执行适配）。
+ * <p>按钮沿商店右侧单行排列，按钮与说明均位于羁绊面板下方。
  */
 public final class ShopBar extends Group {
 
@@ -38,8 +37,8 @@ public final class ShopBar extends Group {
     private static final float CARD_H = 56f;
     private static final float CARD_GAP = 8f;
     private static final float CARD_X0 = 12f;
-    private static final float BUTTON_X_REFRESH = 472f;
-    private static final float BUTTON_X_EXP = 556f;
+    private static final float ACTION_Y = 3f;
+    private static final float ACTION_H = 42f;
 
     private final CommandManager commandManager;
     private final Assets assets;
@@ -64,7 +63,7 @@ public final class ShopBar extends Group {
                 commandManager.addCommand(RefreshShopCommand.INSTANCE);
             }
         };
-        refreshButton.setBounds(BUTTON_X_REFRESH, 33f, 80f, 28f);
+        refreshButton.setBounds(472f, ACTION_Y, 51f, ACTION_H);
         addActor(refreshButton);
         Actor exp = new ActionButton("经验 4金") {
             @Override
@@ -72,14 +71,15 @@ public final class ShopBar extends Group {
                 commandManager.addCommand(BuyExpCommand.INSTANCE);
             }
         };
-        exp.setBounds(BUTTON_X_EXP, 33f, 80f, 28f);
+        exp.setBounds(526f, ACTION_Y, 51f, ACTION_H);
         addActor(exp);
-        lockButton = new ActionButton("锁店 · 下轮不刷新") {
+        lockButton = new ActionButton("锁店") {
             @Override protected void onClicked() {
                 commandManager.addCommand(ToggleShopLockCommand.INSTANCE);
             }
         };
-        lockButton.setBounds(BUTTON_X_REFRESH, 3f, 164f, 28f);
+        lockButton.setCaption("下轮不刷新");
+        lockButton.setBounds(580f, ACTION_Y, 56f, ACTION_H);
         addActor(lockButton);
     }
 
@@ -94,9 +94,10 @@ public final class ShopBar extends Group {
             affordable[i] = canBuy(ctx, i);
         }
         lockButton.setVisible(ctx.getShop().canToggleLock(ctx));
-        lockButton.setText(ctx.getShop().isLocked() ? "已锁店 · 点击取消" : "锁店 · 下轮不刷新");
-        String price = refreshPriceText(ctx.getRunState().getModifiers());
-        refreshButton.setText(ctx.getShop().isLocked() ? "解锁" + price : price);
+        boolean locked = ctx.getShop().isLocked();
+        lockButton.setText(locked ? "取消锁店" : "锁店");
+        refreshButton.setText(refreshPriceText(ctx.getRunState().getModifiers()));
+        refreshButton.setCaption(locked ? "同时解锁" : "");
     }
 
     /** 刷新钮价签文案（纯函数，JUnit 可测；口径同 ShopSystem.refreshCost——Lv.5 折扣实付下限 1 金） */
@@ -200,6 +201,7 @@ public final class ShopBar extends Group {
     /** 矩形动作按钮（刷新/买经验共用壳；原创四态按钮壳） */
     private abstract class ActionButton extends Actor {
         private String text;
+        private String caption = "";
         private final ClickListener listener;
 
         ActionButton(String text) {
@@ -221,12 +223,20 @@ public final class ShopBar extends Group {
             this.text = Objects.requireNonNull(text, "text 不能为 null");
         }
 
+        void setCaption(String caption) {
+            this.caption = caption;
+        }
+
         @Override
         public void draw(Batch batch, float parentAlpha) {
             com.voidvvv.kz_auto_chess_n.render.ButtonArt.drawShell(batch, assets, listener,
                     getX(), getY(), getWidth(), getHeight(), parentAlpha, false);
-            assets.uiFont().draw(batch, text, getX(), getY() + getHeight() / 2f + 6f, getWidth(),
-                    com.badlogic.gdx.utils.Align.center, false); // 居中（§5.3-7）
+            float labelY = getY() + getHeight() / 2f + (caption.isEmpty() ? 5f : 11f);
+            assets.uiFont().draw(batch, text, getX(), labelY, getWidth(), com.badlogic.gdx.utils.Align.center, false);
+            if (!caption.isEmpty()) {
+                assets.bodyFont().draw(batch, caption, getX(), labelY - 15f, getWidth(),
+                        com.badlogic.gdx.utils.Align.center, false);
+            }
         }
     }
 }
