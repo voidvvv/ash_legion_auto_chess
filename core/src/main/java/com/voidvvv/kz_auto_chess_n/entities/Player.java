@@ -69,7 +69,7 @@ public class Player {
      * 金币变动：支出传负数。防御性钳制不为负（命令层已校验，此处兜底）。
      */
     public void addGold(int amount) {
-        gold = Math.max(0, gold + amount);
+        gold = (int) Math.max(0L, Math.min(Integer.MAX_VALUE, (long) gold + amount));
     }
 
     public boolean canAfford(int cost) {

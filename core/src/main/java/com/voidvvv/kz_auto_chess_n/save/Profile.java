@@ -16,13 +16,21 @@ public final class Profile {
     private final int version;
     private final Map<String, HeroProgress> heroProgress;
     private final Set<String> completedScenes;
+    private final Set<String> practiceSceneGrants;
 
     public Profile(int version, Map<String, HeroProgress> heroProgress, Set<String> completedScenes) {
+        this(version, heroProgress, completedScenes, Collections.emptySet());
+    }
+
+    Profile(int version, Map<String, HeroProgress> heroProgress, Set<String> completedScenes,
+            Set<String> practiceSceneGrants) {
         this.version = version;
         this.heroProgress = Collections.unmodifiableMap(
                 new LinkedHashMap<String, HeroProgress>(heroProgress));
         this.completedScenes = Collections.unmodifiableSet(
                 new LinkedHashSet<String>(completedScenes));
+        this.practiceSceneGrants = Collections.unmodifiableSet(
+                new LinkedHashSet<String>(practiceSceneGrants));
     }
 
     /** 初始档案（无进度、无通关记录） */
@@ -35,13 +43,24 @@ public final class Profile {
     public int getVersion() { return version; }
     public Map<String, HeroProgress> getHeroProgress() { return heroProgress; }
     public Set<String> getCompletedScenes() { return completedScenes; }
+    public Set<String> getPracticeSceneGrants() { return practiceSceneGrants; }
+
+    Profile withPracticeSceneGrant(String sceneId, boolean granted) {
+        Set<String> next = new LinkedHashSet<>(practiceSceneGrants);
+        if (granted) {
+            next.add(sceneId);
+        } else {
+            next.remove(sceneId);
+        }
+        return new Profile(version, heroProgress, completedScenes, next);
+    }
 
     /** 替换式更新：写入/覆盖单英雄进度（返回新档案） */
     public Profile withHeroProgress(String heroId, HeroProgress progress) {
         LinkedHashMap<String, HeroProgress> next =
                 new LinkedHashMap<String, HeroProgress>(heroProgress);
         next.put(heroId, progress);
-        return new Profile(version, next, completedScenes);
+        return new Profile(version, next, completedScenes, practiceSceneGrants);
     }
 
     /** 替换式更新：登记通关场景（幂等；返回新档案） */
@@ -51,6 +70,6 @@ public final class Profile {
         }
         Set<String> next = new LinkedHashSet<String>(completedScenes);
         next.add(sceneId);
-        return new Profile(version, heroProgress, next);
+        return new Profile(version, heroProgress, next, practiceSceneGrants);
     }
 }

@@ -133,6 +133,8 @@ public final class BattleScreen implements Screen {
     private final MetaService metaService;
     /** 续玩快照（null = 新局；非 null 时 show() 走恢复路径，不发 StartRun） */
     private final RunSnapshot resumedSnapshot;
+    /** Zero follows the normal StartRun command. A positive value opens a new practice run. */
+    private final int practiceOpeningRound;
     /** resumedSnapshot != null 的派生缓存（恢复失败回退路径可置 false 保证 StartRun 仍发） */
     private boolean resumed;
     /** RUN_END 结算观察旗标（每局一次——裁决 D11） */
@@ -193,6 +195,12 @@ public final class BattleScreen implements Screen {
     private BattleScreen(Game game, Assets assets, GameData data, MetaService metaService,
                          long seed, String sceneId, String heroId, RunSnapshot resumedSnapshot,
                          RunMode mode, PaiTestScript.Topic sampleTopic) {
+        this(game, assets, data, metaService, seed, sceneId, heroId, resumedSnapshot, mode, sampleTopic, 0);
+    }
+
+    private BattleScreen(Game game, Assets assets, GameData data, MetaService metaService,
+                         long seed, String sceneId, String heroId, RunSnapshot resumedSnapshot,
+                         RunMode mode, PaiTestScript.Topic sampleTopic, int practiceOpeningRound) {
         this.game = game;
         this.assets = assets;
         this.audioScheduler = new AudioScheduler(assets.audioPlayer); // §1.2：播放出口 = Assets（持有并 dispose）
@@ -204,6 +212,7 @@ public final class BattleScreen implements Screen {
         this.selectedSceneId = sceneId;
         this.selectedHeroId = heroId;
         this.resumedSnapshot = resumedSnapshot;
+        this.practiceOpeningRound = practiceOpeningRound;
         this.resumed = resumedSnapshot != null;
         this.batch = new SpriteBatch();
         this.worldViewport = new FitViewport(BoardGeometry.VIRTUAL_W, BoardGeometry.VIRTUAL_H, worldCamera);
@@ -398,7 +407,11 @@ public final class BattleScreen implements Screen {
         shopSystem.registerHandlers(commandManager);      // BuyUnit/RefreshShop/BuyExp
         rosterSystem.registerHandlers(commandManager);    // MoveUnit/SellUnit
         equipmentSystem.registerHandlers(commandManager); // EquipItem/UnequipItem
-        if (!resumed && runContext.getRunState().getRound() == 1
+        if (practiceOpeningRound > 0) {
+            runContext.getRunState().setRound(practiceOpeningRound);
+            runContext.getRunState().markPractice();
+            runFlowSystem.startRun(runContext);
+        } else if (!resumed && runContext.getRunState().getRound() == 1
                 && !runContext.getRunState().isRunStarted()) {
             commandManager.addCommand(new StartRunCommand(
                     seed, runContext.getRunState().getSceneId(), selectedHeroId)); // 回放第 0 条记录（heroId 启用）
@@ -485,7 +498,9 @@ public final class BattleScreen implements Screen {
             runEndSettled = true;
             if (archiveWritesAllowed(mode)) {
                 ProfileService.Settlement settlement = metaService.settleRun(data, runContext);
-                runEndPanel.setSettlementLines(RunSettlementText.lines(settlement, data));
+                if (settlement != null) {
+                    runEndPanel.setSettlementLines(RunSettlementText.lines(settlement, data));
+                }
                 metaService.clearRunSnapshot(); // RUN_END 自动删档（快照轨终点）
             }
             // 测试档旁路（品质改造 §0.1 存档隔离）：不结算档案、不删档——含正式快照的档案原样保留；
@@ -693,8 +708,45 @@ public final class BattleScreen implements Screen {
         if (mode.isTestPeriod()) {
             return RunAssembler.assembleTestPeriod(data, shopSystem, runSeed);
         }
-        return RunAssembler.assembleNormal(data, shopSystem, runSeed, selectedSceneId, selectedHeroId,
+        RunContext fresh = RunAssembler.assembleNormal(data, shopSystem, runSeed, selectedSceneId, selectedHeroId,
                 metaService.resolveRunModifiers(selectedHeroId, data));
+        if (!ProfileService.isNaturallyUnlocked(metaService.getProfile(), data.getScene(fresh.getRunState().getSceneId()))) {
+            fresh.getRunState().markPractice();
+        }
+        return fresh;
+    }
+
+    RunContext practiceContext() {
+        return runContext;
+    }
+
+    String practiceBlockReason() {
+        String reason = PracticeRules.mutationBlock(runContext);
+        if (reason != null) return reason;
+        if (paused || dialogManager.isShowing() || transitionController.isInputBlocked()) {
+            return "请关闭弹窗并等待备战转场结束。";
+        }
+        if (Gdx.input.isTouched() || commandManager.hasPending()) {
+            return "请结束游戏内的操作后重试。";
+        }
+        return null;
+    }
+
+    boolean savePracticeChange() {
+        snapshotCurrent = true;
+        return metaService.saveRunSnapshot(runContext);
+    }
+
+    void preparePracticeWave(int round) {
+        runFlowSystem.preparePracticeWave(runContext, round);
+    }
+
+    boolean replaceWithPracticeRun(String sceneId, int round) {
+        BattleScreen next = new BattleScreen(game, assets, data, metaService, System.nanoTime(),
+                sceneId, runContext.getRunState().getHeroId(), null, RunMode.NORMAL, null, round);
+        game.setScreen(next); // hide writes the former snapshot before the new one replaces it
+        dispose();
+        return next.savePracticeChange();
     }
 
     /** RUN_END 重开：同英雄同场景新 seed + 清弹窗/残留命令/结算旗标 + 复入 startRun；
@@ -708,6 +760,7 @@ public final class BattleScreen implements Screen {
         dialogManager.clearAll();
         chestShown = false;
         runEndSettled = false; // 新局重新观察结算（裁决 D11）
+        runEndPanel.setSettlementLines(null);
         snapshotCurrent = false;
         runFlowSystem.restart(runContext);
         accumulator = 0f;
