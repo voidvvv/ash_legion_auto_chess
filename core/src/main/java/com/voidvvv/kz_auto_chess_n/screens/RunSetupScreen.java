@@ -51,7 +51,6 @@ public final class RunSetupScreen implements Screen {
 
     private final List<HeroData> heroes = new ArrayList<HeroData>();
     private final List<SceneData> scenes = new ArrayList<SceneData>();
-    private final List<String> unlockedSceneIds;
     private int selectedHero = -1;
     private int selectedScene = -1;
 
@@ -63,7 +62,6 @@ public final class RunSetupScreen implements Screen {
         this.stage = new Stage(new FitViewport(BoardGeometry.VIRTUAL_W, BoardGeometry.VIRTUAL_H));
         heroes.addAll(data.getHeroes().values());
         scenes.addAll(data.getScenes().values());
-        this.unlockedSceneIds = new ArrayList<String>(metaService.unlockedSceneIds(data));
         buildUi();
     }
 
@@ -94,7 +92,7 @@ public final class RunSetupScreen implements Screen {
     }
 
     private boolean canStartRun() {
-        return selectedHero >= 0 && selectedScene >= 0;
+        return selectedHero >= 0 && selectedScene >= 0 && isSceneUnlocked(selectedScene);
     }
 
     private float cardX(int index) {
@@ -103,7 +101,7 @@ public final class RunSetupScreen implements Screen {
     }
 
     private boolean isSceneUnlocked(int index) {
-        return unlockedSceneIds.contains(scenes.get(index).getId());
+        return metaService.isSceneUnlocked(scenes.get(index).getId(), data);
     }
 
     @Override

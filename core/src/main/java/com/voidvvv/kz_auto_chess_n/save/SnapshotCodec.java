@@ -107,7 +107,8 @@ public final class SnapshotCodec {
                 runState.getRound(), runState.getDefeatCountPerRound(), runState.isRoundIncomePaid(),
                 runState.getIdIssuer().peekNext(), player.getGold(),
                 player.getLevel(), player.getCurrentExp(),
-                units, benchIndex, grid, inventory, pool, shopSlots, wave, ctx.getShop().isLocked());
+                units, benchIndex, grid, inventory, pool, shopSlots, wave, ctx.getShop().isLocked(),
+                runState.isPractice());
     }
 
     /** 名单序（与 BattleSystem 派生序一致）：备战席入席序 + 部署扫描序 y↑x↑ */
@@ -206,6 +207,9 @@ public final class SnapshotCodec {
         if (s.isRoundIncomePaid()) {
             runState.markRoundIncomePaid();
         }
+        if (s.isPractice()) {
+            runState.markPractice();
+        }
         runState.markRunStarted();
         runState.setPhase(GamePhase.SHOPPING);
         List<WaveSpec> wave = new ArrayList<WaveSpec>();
@@ -238,6 +242,7 @@ public final class SnapshotCodec {
         sb.append(",\"round\":").append(s.getRound());
         sb.append(",\"defeatCountPerRound\":").append(s.getDefeatCountPerRound());
         if (s.isShopLocked()) sb.append(",\"shopLocked\":true");
+        if (s.isPractice()) sb.append(",\"practice\":true");
         if (s.isRoundIncomePaid()) {
             sb.append(",\"roundIncomePaid\":true");
         }
@@ -335,7 +340,7 @@ public final class SnapshotCodec {
             throw new DataValidationException("run_snapshot.json/version: 不支持的快照版本 " + version);
         }
         checkUnknownKeys(root, "version", "seed", "rngConsumedCount", "sceneId", "heroId", "round",
-                "defeatCountPerRound", "roundIncomePaid", "shopLocked", "idIssuerNext", "playerGold", "playerLevel",
+                "defeatCountPerRound", "roundIncomePaid", "shopLocked", "practice", "idIssuerNext", "playerGold", "playerLevel",
                 "playerExp", "units", "benchUnitIndex", "deploymentUnitIndex", "inventory",
                 "equipments", "shopSlotUnitIds", "enemyWave");
         long seed = requireLong(root, "seed");
@@ -352,6 +357,10 @@ public final class SnapshotCodec {
         }
         // 老 V2 档尚无基础战后补给，继续游戏时可领取当前轮的补给。
         JsonValue roundIncomePaid = root.get("roundIncomePaid");
+        JsonValue practice = root.get("practice");
+        if (practice != null && !practice.isBoolean()) {
+            throw new DataValidationException("run_snapshot.json/practice: 必须为布尔值");
+        }
         if (roundIncomePaid != null && !roundIncomePaid.isBoolean()) {
             throw new DataValidationException("run_snapshot.json/roundIncomePaid: 必须为布尔值");
         }
@@ -416,7 +425,7 @@ public final class SnapshotCodec {
                 roundIncomePaid != null && roundIncomePaid.asBoolean(),
                 idIssuerNext, playerGold, playerLevel, playerExp, units, benchUnitIndex,
                 deploymentUnitIndex, inventory, equipments, shopSlotUnitIds, enemyWave,
-                shopLocked != null && shopLocked.asBoolean());
+                shopLocked != null && shopLocked.asBoolean(), practice != null && practice.asBoolean());
     }
 
     private static List<Integer> readIntArray(JsonValue node) {

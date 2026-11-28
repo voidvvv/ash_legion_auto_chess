@@ -43,7 +43,18 @@ public final class ProfileCodec {
             first = false;
             sb.append('"').append(sceneId).append('"');
         }
-        sb.append("]}");
+        sb.append(']');
+        if (!profile.getPracticeSceneGrants().isEmpty()) {
+            sb.append(",\"practiceSceneGrants\":[");
+            first = true;
+            for (String sceneId : profile.getPracticeSceneGrants()) {
+                if (!first) sb.append(',');
+                sb.append('"').append(sceneId).append('"');
+                first = false;
+            }
+            sb.append(']');
+        }
+        sb.append('}');
         return sb.toString();
     }
 
@@ -52,7 +63,7 @@ public final class ProfileCodec {
         if (!root.isObject()) {
             throw new DataValidationException("profile.json: 根节点必须是对象");
         }
-        checkUnknownKeys(root, "version", "heroes", "completedScenes");
+        checkUnknownKeys(root, "version", "heroes", "completedScenes", "practiceSceneGrants");
         JsonValue versionNode = root.get("version");
         int version = versionNode == null || versionNode.isNull()
                 ? Profile.CURRENT_VERSION : requireInt(root, "version");
@@ -83,7 +94,20 @@ public final class ProfileCodec {
                 completed.add(s.asString());
             }
         }
-        return new Profile(version, heroes, completed);
+        LinkedHashSet<String> grants = new LinkedHashSet<>();
+        JsonValue grantsNode = root.get("practiceSceneGrants");
+        if (grantsNode != null) {
+            if (!grantsNode.isArray()) {
+                throw new DataValidationException("profile.json/practiceSceneGrants: 必须为数组");
+            }
+            for (JsonValue scene = grantsNode.child; scene != null; scene = scene.next) {
+                if (!scene.isString() || scene.asString().trim().isEmpty()) {
+                    throw new DataValidationException("profile.json/practiceSceneGrants: 元素必须为非空字符串");
+                }
+                grants.add(scene.asString());
+            }
+        }
+        return new Profile(version, heroes, completed, grants);
     }
 
     private static void checkUnknownKeys(JsonValue obj, String... allowed) {

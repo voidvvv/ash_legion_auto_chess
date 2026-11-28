@@ -4,6 +4,7 @@ import com.badlogic.gdx.files.FileHandle;
 import com.voidvvv.kz_auto_chess_n.command.RunContext;
 import com.voidvvv.kz_auto_chess_n.data.GameData;
 import com.voidvvv.kz_auto_chess_n.data.HeroData;
+import com.voidvvv.kz_auto_chess_n.data.SceneData;
 import com.voidvvv.kz_auto_chess_n.entities.RunModifiers;
 
 import java.util.Objects;
@@ -40,7 +41,18 @@ public final class MetaService {
     }
 
     public boolean isSceneUnlocked(String sceneId, GameData data) {
-        return unlockedSceneIds(data).contains(sceneId);
+        SceneData scene = data.getScenes().get(sceneId);
+        return scene != null && ProfileService.isSceneUnlocked(profile, scene);
+    }
+
+    /** Caller validates scene and permission. Publish only after the profile is written. */
+    public boolean savePracticeSceneGrant(String sceneId, boolean granted) {
+        Profile next = profile.withPracticeSceneGrant(sceneId, granted);
+        if (!profileStore.save(next)) {
+            return false;
+        }
+        profile = next;
+        return true;
     }
 
     /** 装配期局外修正（RunSetup 选定 heroId → BattleScreen.newContext 消费） */
@@ -55,6 +67,9 @@ public final class MetaService {
      */
     public ProfileService.Settlement settleRun(GameData data, RunContext ctx) {
         Objects.requireNonNull(ctx, "ctx 不能为 null");
+        if (ctx.getRunState().isPractice()) {
+            return null;
+        }
         ProfileService.Settlement settlement = ProfileService.settle(profile, data,
                 ctx.getRunState().getHeroId(), ctx.getRunState().getSceneId(),
                 ctx.getRunState().getEndCause(), ctx.getRunState().getRound(),
@@ -75,8 +90,8 @@ public final class MetaService {
         return snapshotStore.load(data);
     }
 
-    public void saveRunSnapshot(RunContext ctx) {
-        snapshotStore.save(SnapshotCodec.capture(ctx));
+    public boolean saveRunSnapshot(RunContext ctx) {
+        return snapshotStore.save(SnapshotCodec.capture(ctx));
     }
 
     public void clearRunSnapshot() {

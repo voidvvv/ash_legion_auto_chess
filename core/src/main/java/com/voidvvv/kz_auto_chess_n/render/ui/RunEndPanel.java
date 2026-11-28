@@ -115,6 +115,9 @@ public final class RunEndPanel extends Group {
      *  熟练度行（null = 不画）——不结算档案，回退行只会造成「有熟练度进账」的假信号。 */
     static String fallbackMasteryLine(com.voidvvv.kz_auto_chess_n.entities.RunState runState,
                                       RunMode mode) {
+        if (runState.isPractice()) {
+            return "练习远征 · 不结算档案";
+        }
         return mode.closesArchiveTrack() ? null : "熟练度 +" + runState.getMasteryAwarded();
     }
 

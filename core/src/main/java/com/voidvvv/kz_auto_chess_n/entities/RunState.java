@@ -31,6 +31,8 @@ public final class RunState {
     private int defeatCountPerRound;
     /** 本轮基础战后收入已入账，重试和读档均保留。 */
     private boolean roundIncomePaid;
+    /** A modified run can be resumed and played but is ineligible for profile settlement. */
+    private boolean practice;
     private List<WaveSpec> enemyWave = Collections.emptyList();
     /** StartRun 已执行标记（防重入；重开 = 新鲜 RunState 天然复位） */
     private boolean runStarted;
@@ -68,6 +70,7 @@ public final class RunState {
     public GamePhase getPhase() { return phase; }
     public int getDefeatCountPerRound() { return defeatCountPerRound; }
     public boolean isRoundIncomePaid() { return roundIncomePaid; }
+    public boolean isPractice() { return practice; }
     public List<WaveSpec> getEnemyWave() { return enemyWave; }
     public boolean isRunStarted() { return runStarted; }
     public ChestOffer getPendingChest() { return pendingChest; }
@@ -88,6 +91,20 @@ public final class RunState {
 
     public void markRoundIncomePaid() {
         roundIncomePaid = true;
+    }
+
+    public void markPractice() {
+        practice = true;
+    }
+
+    /** Forward preparation does not visit or settle the intervening waves. */
+    public void prepareLaterRound(int targetRound) {
+        if (targetRound <= round) {
+            throw new IllegalArgumentException("目标波次必须晚于当前波次");
+        }
+        setRound(targetRound);
+        defeatCountPerRound = 0;
+        roundIncomePaid = false;
     }
 
     /** 轮次复原（快照轨恢复唯一调用点；仅装配期，运行期推进走 advanceRound） */

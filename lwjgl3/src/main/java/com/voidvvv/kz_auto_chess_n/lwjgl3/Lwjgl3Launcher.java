@@ -8,13 +8,13 @@ import com.voidvvv.kz_auto_chess_n.config.GameBalance;
 /** Launches the desktop (LWJGL3) application. */
 public class Lwjgl3Launcher {
     public static void main(String[] args) {
-        if (StartupHelper.startNewJvmIfRequired()) return; // This handles macOS support and helps on Windows.
-        GameBalance.applyLaunchArgs(args); // 测试档入口：--test-gold=<n>（缺省关闭，正式口径开局 10 金）
-        createApplication();
+        launch(new Main(), args);
     }
 
-    private static Lwjgl3Application createApplication() {
-        return new Lwjgl3Application(new Main(), getDefaultConfiguration());
+    public static void launch(Main game, String[] args) {
+        if (StartupHelper.startNewJvmIfRequired()) return; // This handles macOS support and helps on Windows.
+        GameBalance.applyLaunchArgs(args); // 测试档入口：--test-gold=<n>（缺省关闭，正式口径开局 10 金）
+        new Lwjgl3Application(game, getDefaultConfiguration());
     }
 
     private static Lwjgl3ApplicationConfiguration getDefaultConfiguration() {

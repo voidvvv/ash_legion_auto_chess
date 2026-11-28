@@ -40,12 +40,20 @@ public final class ProfileService {
         Objects.requireNonNull(data, "data 不能为 null");
         Set<String> unlocked = new LinkedHashSet<String>();
         for (SceneData scene : data.getScenes().values()) {
-            if (scene.getUnlockAfter() == null
-                    || profile.getCompletedScenes().contains(scene.getUnlockAfter())) {
+            if (isSceneUnlocked(profile, scene)) {
                 unlocked.add(scene.getId());
             }
         }
         return Collections.unmodifiableSet(unlocked);
+    }
+
+    public static boolean isNaturallyUnlocked(Profile profile, SceneData scene) {
+        return scene.getUnlockAfter() == null
+                || profile.getCompletedScenes().contains(scene.getUnlockAfter());
+    }
+
+    static boolean isSceneUnlocked(Profile profile, SceneData scene) {
+        return isNaturallyUnlocked(profile, scene) || profile.getPracticeSceneGrants().contains(scene.getId());
     }
 
     /**

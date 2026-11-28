@@ -141,6 +141,19 @@ public final class RunFlowSystem {
         runState.addNotice("第 " + runState.getRound() + " 轮开始（商店免费刷新）");
     }
 
+    /** Forward practice travel keeps the player and never executes victory or defeat settlement. */
+    public void preparePracticeWave(RunContext ctx, int targetRound) {
+        RunState run = ctx.getRunState();
+        if (!run.isRunStarted() || run.getPhase() != GamePhase.SHOPPING
+                || run.getPendingChest() != null || ctx.getBattleState() != null
+                || ctx.getMode().closesArchiveTrack() || targetRound > ctx.totalRounds()) {
+            throw new IllegalArgumentException("只能在正常远征的备战阶段跳到有效波次");
+        }
+        run.prepareLaterRound(targetRound);
+        run.markPractice();
+        prepareNextRound(ctx);
+    }
+
     /**
      * 轮开始事件子集（Phase 2 口径）：正式 = generateEnemyWave(...)（RNG 消耗 = 杂兵数）；
      * 对拍（品质改造 §0.2）= {@link PaiTestScript} 固定敌阵按题按轮直取（0 RNG），表序 = 入场序。
@@ -254,6 +267,11 @@ public final class RunFlowSystem {
         }
         runState.advanceRound();
         runState.setDefeatCountPerRound(0); // 新轮机会清零（§5.1 关键区分：重试不清、新轮清）
+        prepareNextRound(ctx);
+    }
+
+    private void prepareNextRound(RunContext ctx) {
+        RunState runState = ctx.getRunState();
         runState.setPhase(GamePhase.SHOPPING);
         beginRound(ctx);
         if (ctx.getShop().isLocked()) {

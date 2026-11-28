@@ -1,0 +1,42 @@
+plugins {
+  id 'application'
+}
+
+application.mainClass = 'com.voidvvv.kz_auto_chess_n.gm.GmLauncher'
+
+dependencies {
+  implementation project(':core')
+  implementation project(':lwjgl3')
+  implementation "com.badlogicgames.gdx:gdx-backend-lwjgl3:$gdxVersion"
+  implementation "com.badlogicgames.gdx:gdx-lwjgl3-angle:$gdxVersion"
+  def imguiVersion = '1.89.0'
+  implementation "io.github.spair:imgui-java-binding:$imguiVersion"
+  for (platform in ['windows', 'linux', 'macos']) {
+    runtimeOnly "io.github.spair:imgui-java-natives-${platform}:$imguiVersion"
+  }
+  testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+  testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.11.4'
+}
+
+tasks.withType(JavaCompile).configureEach {
+  options.encoding = 'UTF-8'
+  if (JavaVersion.current().isJava9Compatible()) options.release.set(8)
+}
+
+test {
+  useJUnitPlatform()
+}
+
+processResources {
+  from(rootProject.file('assets/font/licenses/source-han-sans-LICENSE.txt')) { into 'gm' }
+}
+
+run {
+  workingDir = rootProject.file('assets')
+  if (System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('mac')) {
+    jvmArgs '-XstartOnFirstThread'
+  }
+  if (providers.gradleProperty('gmSaveDir').isPresent()) {
+    systemProperty 'ember.gm.saveDir', rootProject.file(providers.gradleProperty('gmSaveDir').get()).absolutePath
+  }
+}

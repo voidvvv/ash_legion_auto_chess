@@ -55,6 +55,10 @@ public final class CommandManager {
         commandQueue.clear();
     }
 
+    public boolean hasPending() {
+        return !commandQueue.isEmpty();
+    }
+
     public void registerHandler(Class<?> type, CommandHandler handler) {
         Objects.requireNonNull(type, "type 不能为 null");
         Objects.requireNonNull(handler, "handler 不能为 null");
