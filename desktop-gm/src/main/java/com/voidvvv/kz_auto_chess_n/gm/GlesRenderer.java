@@ -13,6 +13,7 @@ import static org.lwjgl.opengles.GLES20.*;
 
 /** Renders Dear ImGui's native draw lists on the GM window's private GLES context. */
 final class GlesRenderer implements AutoCloseable {
+    final GmIcons icons = new GmIcons();
     private static final String VERTEX = "#version 100\n"
             + "attribute vec2 position; attribute vec2 uv; attribute vec4 color;\n"
             + "uniform vec2 origin; uniform vec2 size; varying vec2 texCoord; varying vec4 tint;\n"
@@ -71,6 +72,7 @@ final class GlesRenderer implements AutoCloseable {
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width.get(), height.get(), 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
         atlas.setTexID(atlasTexture);
         atlas.clearTexData();
+        icons.create();
         int error = glGetError();
         if (error != GL_NO_ERROR) throw new IllegalStateException("Could not upload Dear ImGui font, GL error " + error);
         ImGui.getIO().setBackendRendererName("ember_imgui_gles2");
@@ -124,6 +126,7 @@ final class GlesRenderer implements AutoCloseable {
 
     @Override
     public void close() {
+        icons.close();
         glUseProgram(0);
         glDeleteTextures(atlasTexture);
         glDeleteBuffers(vertices);

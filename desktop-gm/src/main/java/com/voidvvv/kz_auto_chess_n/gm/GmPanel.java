@@ -22,9 +22,11 @@ import java.util.function.Supplier;
 
 /** Dear ImGui widgets and immutable views. All practice operations are posted through the attachment. */
 final class GmPanel {
+    private enum Page { PROGRESS, ROSTER, BAG }
     private static final String[] STARS = {"1 星", "2 星", "3 星"};
     private final PracticeAccess access;
     private final Attachment attachment;
+    private final GmEquipmentPanel equipment;
     private final Runnable detach;
     private final ImString gold = new ImString(32);
     private final ImString exp = new ImString(32);
@@ -40,21 +42,23 @@ final class GmPanel {
     private int targetIndex;
     private String templateId;
     private int slotIndex = -1;
+    private int selectedUnitId;
     private boolean onBoard;
-    private boolean rosterPage;
+    private Page page = Page.PROGRESS;
     private Runnable confirmedJump;
 
     GmPanel(PracticeAccess access, Consumer<Runnable> gameQueue, Runnable detach) {
         this.access = access;
         this.detach = detach;
         attachment = new Attachment(gameQueue, Runnable::run);
+        equipment = new GmEquipmentPanel(access, this::execute);
     }
 
     void close() {
         attachment.close();
     }
 
-    void draw(int width, int height) {
+    void draw(int width, int height, GmIcons icons) {
         refresh();
         ImGui.setNextWindowPos(0, 0);
         ImGui.setNextWindowSize(width, height);
@@ -71,11 +75,14 @@ final class GmPanel {
             ImGui.textUnformatted("正在读取当前远征…");
         } else {
             showRun(view.run);
-            if (pageButton("状态与跳转", !rosterPage)) rosterPage = false;
+            if (pageButton("状态与跳转", page == Page.PROGRESS)) page = Page.PROGRESS;
             ImGui.sameLine();
-            if (pageButton("备战阵容", rosterPage)) rosterPage = true;
+            if (pageButton("备战阵容", page == Page.ROSTER)) page = Page.ROSTER;
+            ImGui.sameLine();
+            if (pageButton("背包", page == Page.BAG)) page = Page.BAG;
             ImGui.separator();
-            if (rosterPage) showRoster(view.run);
+            if (page == Page.ROSTER) showRoster(view.run, icons);
+            else if (page == Page.BAG) equipment.drawBag(view.run, canEditRun(), icons);
             else showProgress(view);
         }
         ImGui.end();
@@ -152,7 +159,7 @@ final class GmPanel {
         }
     }
 
-    private void showRoster(RunView run) {
+    private void showRoster(RunView run, GmIcons icons) {
         if (run == null) return;
         ImGui.separatorText("备战席");
         cells(run.bench, run.bench.size(), false);
@@ -194,7 +201,11 @@ final class GmPanel {
             ImGui.textDisabled("备战席按顺序排列，请选第一个空位。");
         }
         ImGui.endDisabled();
-        ImGui.textWrapped("升降星保留装备。替换或移除会归还装备，没有金币返还。");
+        if (slot.occupied() && selectedUnitId == slot.unitId) {
+            equipment.drawSlots(run, slot, canEditRun(), icons);
+        } else if (slot.occupied()) {
+            ImGui.textDisabled("棋子已变化，请重新选择以编辑装备。");
+        }
     }
 
     private void cells(List<SlotView> slots, int columns, boolean board) {
@@ -211,6 +222,8 @@ final class GmPanel {
                     width, board ? 49 : 57)) {
                 onBoard = board;
                 slotIndex = i;
+                selectedUnitId = slot.unitId;
+                equipment.clearSlotChoices();
                 stars.set(slot.occupied() ? slot.star - 1 : 0);
                 templateId = slot.templateId;
             }
@@ -272,7 +285,7 @@ final class GmPanel {
         nextRefresh = now + 150_000_000L;
         refreshPending = true;
         attachment.submit(access::read, snapshot -> {
-            view = snapshot;
+            adopt(snapshot);
             refreshPending = false;
         });
     }
@@ -283,8 +296,17 @@ final class GmPanel {
             actionPending = false;
             status = result.message;
             successful = result.applied && result.saved;
-            view = access.read();
+            adopt(access.read());
         });
+    }
+
+    private void adopt(View snapshot) {
+        if (view == null || snapshot.run == null || !snapshot.run.sameExpedition(view.run)) {
+            slotIndex = -1;
+            selectedUnitId = 0;
+            equipment.reset();
+        }
+        view = snapshot;
     }
 
     private void integer(ImString input, String label, IntConsumer action) {

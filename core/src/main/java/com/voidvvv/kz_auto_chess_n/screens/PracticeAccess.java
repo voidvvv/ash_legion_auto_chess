@@ -5,9 +5,12 @@ import com.voidvvv.kz_auto_chess_n.command.PlacementTarget;
 import com.voidvvv.kz_auto_chess_n.command.RunContext;
 import com.voidvvv.kz_auto_chess_n.config.GameBalance;
 import com.voidvvv.kz_auto_chess_n.data.GameData;
+import com.voidvvv.kz_auto_chess_n.data.EquipmentData;
+import com.voidvvv.kz_auto_chess_n.data.EquipmentSlot;
 import com.voidvvv.kz_auto_chess_n.data.SceneData;
 import com.voidvvv.kz_auto_chess_n.data.UnitData;
 import com.voidvvv.kz_auto_chess_n.entities.GamePhase;
+import com.voidvvv.kz_auto_chess_n.entities.Equipment;
 import com.voidvvv.kz_auto_chess_n.entities.Player;
 import com.voidvvv.kz_auto_chess_n.entities.RunState;
 import com.voidvvv.kz_auto_chess_n.entities.Unit;
@@ -16,10 +19,13 @@ import com.voidvvv.kz_auto_chess_n.save.MetaService;
 import com.voidvvv.kz_auto_chess_n.save.Profile;
 import com.voidvvv.kz_auto_chess_n.save.ProfileService;
 import com.voidvvv.kz_auto_chess_n.systems.RosterSystem;
+import com.voidvvv.kz_auto_chess_n.systems.EquipmentSystem.InventoryEdit;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Supplier;
 
 /** Narrow practice-session boundary. Call on the game thread between frames. Views may cross threads. */
@@ -42,7 +48,7 @@ public final class PracticeAccess {
         }
         BattleScreen screen = battleScreen();
         RunContext ctx = screen == null ? null : screen.practiceContext();
-        return new View(scenes, ctx == null ? null : new RunView(ctx),
+        return new View(scenes, ctx == null ? null : new RunView(ctx, screen.practiceVisit),
                 screen == null ? "请先开始或继续远征。" : screen.practiceBlockReason());
     }
 
@@ -103,6 +109,40 @@ public final class PracticeAccess {
         return Result.applied(message, screen.savePracticeChange());
     }
 
+    public Result editInventory(RunView expected, InventoryEdit edit, ItemView item, String templateId) {
+        BattleScreen screen = battleScreen();
+        String reason = checkRun(screen, expected);
+        if (reason != null) return Result.rejected(reason);
+        int index = expected.inventory.indexOf(item);
+        if (edit != InventoryEdit.ADD && index < 0) return Result.rejected("请选择当前背包中的装备。");
+        String invalid = screen.editPracticeInventory(expected.inventoryRevision, edit, index,
+                item == null ? 0 : item.id, templateId);
+        if (invalid != null) return Result.rejected(invalid);
+        String message = edit == InventoryEdit.ADD ? "装备已入包。"
+                : edit == InventoryEdit.REPLACE ? "已替换所选背包装备。" : "已移除所选背包装备。";
+        return Result.applied(message, screen.savePracticeChange());
+    }
+
+    public Result editEquipmentSlot(RunView expected, SlotView unit, EquipmentSlot slot, ItemView incoming) {
+        BattleScreen screen = battleScreen();
+        String reason = checkRun(screen, expected);
+        if (reason != null) return Result.rejected(reason);
+        if (unit == null || !unit.occupied()
+                || (!expected.bench.contains(unit) && !expected.deployment.contains(unit))) {
+            return Result.rejected("请选择当前远征中的己方棋子。");
+        }
+        if (incoming != null && !expected.inventory.contains(incoming)) {
+            return Result.rejected("请选择当前背包中的装备。");
+        }
+        ItemView outgoing = unit.equipped.get(slot);
+        String invalid = screen.editPracticeSlot(expected.inventoryRevision, unit.target, unit.unitId,
+                slot, outgoing == null ? 0 : outgoing.id, incoming == null ? 0 : incoming.id);
+        if (invalid != null) return Result.rejected(invalid);
+        String message = incoming == null ? "已卸下装备并归还背包。"
+                : outgoing == null ? "已装配装备。" : "已换装，原装备已归还背包。";
+        return Result.applied(message, screen.savePracticeChange());
+    }
+
     public Result jump(RunView expected, String sceneId, int round) {
         BattleScreen screen = battleScreen();
         String reason = checkRun(screen, expected);
@@ -135,7 +175,8 @@ public final class PracticeAccess {
         String reason = screen.practiceBlockReason();
         if (reason != null) return reason;
         RunState run = screen.practiceContext().getRunState();
-        if (run.getSeed() != expected.seed || !run.getSceneId().equals(expected.sceneId)
+        if (screen.practiceVisit != expected.visit || run.getSeed() != expected.seed
+                || !run.getSceneId().equals(expected.sceneId)
                 || run.getRound() != expected.round) {
             return "当前远征或波次已变化，请核对后重试。";
         }
@@ -178,6 +219,8 @@ public final class PracticeAccess {
 
     public static final class RunView {
         private final long seed;
+        private final Object visit;
+        private final long inventoryRevision;
         public final String sceneId;
         public final int round;
         public final int totalRounds;
@@ -199,11 +242,15 @@ public final class PracticeAccess {
         public final List<SlotView> deployment;
         public final List<TemplateView> templates;
         public final int boardColumns;
+        public final List<ItemView> inventory;
+        public final List<EquipmentTemplateView> equipmentTemplates;
 
-        private RunView(RunContext ctx) {
+        private RunView(RunContext ctx, Object visit) {
             RunState run = ctx.getRunState();
             Player player = ctx.getPlayer();
             seed = run.getSeed();
+            this.visit = visit;
+            inventoryRevision = player.getInventoryRevision();
             sceneId = run.getSceneId();
             round = run.getRound();
             totalRounds = ctx.totalRounds();
@@ -246,6 +293,18 @@ public final class PracticeAccess {
                 if (RosterSystem.isPracticeTemplate(ctx, template)) choices.add(new TemplateView(template));
             }
             templates = Collections.unmodifiableList(choices);
+            List<ItemView> bag = new ArrayList<>();
+            for (Equipment item : player.getInventory()) bag.add(new ItemView(item));
+            inventory = Collections.unmodifiableList(bag);
+            List<EquipmentTemplateView> itemChoices = new ArrayList<>();
+            for (EquipmentData template : ctx.getGameData().getEquipments().values()) {
+                itemChoices.add(new EquipmentTemplateView(template));
+            }
+            equipmentTemplates = Collections.unmodifiableList(itemChoices);
+        }
+
+        public boolean sameExpedition(RunView other) {
+            return other != null && visit == other.visit && seed == other.seed && sceneId.equals(other.sceneId);
         }
     }
 
@@ -257,6 +316,7 @@ public final class PracticeAccess {
         public final String templateId;
         public final int star;
         public final int equipment;
+        public final Map<EquipmentSlot, ItemView> equipped;
         public final boolean canAdd;
 
         private SlotView(PlacementTarget target, Unit unit, boolean canAdd) {
@@ -272,11 +332,40 @@ public final class PracticeAccess {
             templateId = unit == null ? "" : unit.getTemplate().getId();
             star = unit == null ? 0 : unit.getStar();
             equipment = unit == null ? 0 : unit.getEquipped().size();
+            Map<EquipmentSlot, ItemView> slots = new EnumMap<>(EquipmentSlot.class);
+            if (unit != null) {
+                for (Equipment item : unit.getEquipped()) {
+                    slots.put(item.getTemplate().getSlot(), new ItemView(item));
+                }
+            }
+            equipped = Collections.unmodifiableMap(slots);
             this.canAdd = canAdd;
         }
 
         public boolean occupied() {
             return unitId != 0;
+        }
+    }
+
+    public static final class ItemView {
+        public final int id;
+        public final EquipmentTemplateView template;
+
+        private ItemView(Equipment item) {
+            id = item.getId();
+            template = new EquipmentTemplateView(item.getTemplate());
+        }
+    }
+
+    public static final class EquipmentTemplateView {
+        public final String id;
+        public final String name;
+        public final EquipmentSlot slot;
+
+        private EquipmentTemplateView(EquipmentData template) {
+            id = template.getId();
+            name = template.getName();
+            slot = template.getSlot();
         }
     }
 

@@ -196,9 +196,16 @@ public class Player {
         return Collections.unmodifiableList(inventory);
     }
 
+    private long inventoryRevision;
+
+    public long getInventoryRevision() {
+        return inventoryRevision;
+    }
+
     /** 入包（背包无上限——实现口径 #16） */
     public void addToInventory(Equipment item) {
         inventory.add(Objects.requireNonNull(item, "item 不能为 null"));
+        inventoryRevision++;
     }
 
     /** 出包：不在包抛 IllegalArgumentException */
@@ -206,6 +213,13 @@ public class Player {
         if (!inventory.remove(item)) {
             throw new IllegalArgumentException("装备不在背包: " + (item == null ? "null" : item.getId()));
         }
+        inventoryRevision++;
+    }
+
+    /** Replace an item in the compact inventory without moving its neighbors. */
+    public void replaceInventoryItem(int index, Equipment item) {
+        inventory.set(index, Objects.requireNonNull(item, "item 不能为 null"));
+        inventoryRevision++;
     }
 
     /** 背包按 id 查装备；未找到返回 null */

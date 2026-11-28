@@ -90,6 +90,7 @@ public final class BattleScreen implements Screen {
     private final ShopSystem shopSystem = new ShopSystem();
     private final RosterSystem rosterSystem = new RosterSystem();
     private final EquipmentSystem equipmentSystem = new EquipmentSystem();
+    final Object practiceVisit = new Object();
     private final EquipPendingState equipPending = new EquipPendingState();
     private RunContext runContext;
 
@@ -741,6 +742,16 @@ public final class BattleScreen implements Screen {
     String editPracticeRoster(PlacementTarget target, int expectedId,
                               int expectedStar, RosterSystem.Edit edit, String templateId, int star) {
         return rosterSystem.editPractice(runContext, target, expectedId, expectedStar, edit, templateId, star);
+    }
+
+    String editPracticeInventory(long revision, EquipmentSystem.InventoryEdit edit, int index,
+                                 int itemId, String templateId) {
+        return equipmentSystem.editPracticeInventory(runContext, revision, edit, index, itemId, templateId);
+    }
+
+    String editPracticeSlot(long revision, PlacementTarget target, int unitId,
+                            com.voidvvv.kz_auto_chess_n.data.EquipmentSlot slot, int expectedId, int incomingId) {
+        return equipmentSystem.editPracticeSlot(runContext, revision, target, unitId, slot, expectedId, incomingId);
     }
 
     void preparePracticeWave(int round) {

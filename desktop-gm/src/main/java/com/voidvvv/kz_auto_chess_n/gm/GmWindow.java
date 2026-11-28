@@ -102,7 +102,7 @@ final class GmWindow implements AutoCloseable {
                 io.setDisplaySize(width, height);
                 io.setDisplayFramebufferScale((float) fbWidth / width, (float) fbHeight / height);
                 ImGui.newFrame();
-                panel.draw(width, height);
+                panel.draw(width, height, renderer.icons);
                 ImGui.render();
                 renderer.draw(ImGui.getDrawData(), fbWidth, fbHeight);
                 glfwSwapBuffers(handle);
