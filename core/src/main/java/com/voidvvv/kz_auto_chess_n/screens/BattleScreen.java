@@ -57,6 +57,7 @@ import com.voidvvv.kz_auto_chess_n.systems.BattleSystem;
 import com.voidvvv.kz_auto_chess_n.systems.EquipmentSystem;
 import com.voidvvv.kz_auto_chess_n.systems.PaiTestScript;
 import com.voidvvv.kz_auto_chess_n.systems.RosterSystem;
+import com.voidvvv.kz_auto_chess_n.command.PlacementTarget;
 import com.voidvvv.kz_auto_chess_n.systems.RunFlowSystem;
 import com.voidvvv.kz_auto_chess_n.systems.ShopSystem;
 
@@ -735,6 +736,11 @@ public final class BattleScreen implements Screen {
     boolean savePracticeChange() {
         snapshotCurrent = true;
         return metaService.saveRunSnapshot(runContext);
+    }
+
+    String editPracticeRoster(PlacementTarget target, int expectedId,
+                              int expectedStar, RosterSystem.Edit edit, String templateId, int star) {
+        return rosterSystem.editPractice(runContext, target, expectedId, expectedStar, edit, templateId, star);
     }
 
     void preparePracticeWave(int round) {

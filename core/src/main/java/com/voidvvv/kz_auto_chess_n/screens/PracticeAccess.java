@@ -1,17 +1,21 @@
 package com.voidvvv.kz_auto_chess_n.screens;
 
 import com.badlogic.gdx.Screen;
+import com.voidvvv.kz_auto_chess_n.command.PlacementTarget;
 import com.voidvvv.kz_auto_chess_n.command.RunContext;
 import com.voidvvv.kz_auto_chess_n.config.GameBalance;
 import com.voidvvv.kz_auto_chess_n.data.GameData;
 import com.voidvvv.kz_auto_chess_n.data.SceneData;
+import com.voidvvv.kz_auto_chess_n.data.UnitData;
 import com.voidvvv.kz_auto_chess_n.entities.GamePhase;
 import com.voidvvv.kz_auto_chess_n.entities.Player;
 import com.voidvvv.kz_auto_chess_n.entities.RunState;
+import com.voidvvv.kz_auto_chess_n.entities.Unit;
 import com.voidvvv.kz_auto_chess_n.entities.WaveSpec;
 import com.voidvvv.kz_auto_chess_n.save.MetaService;
 import com.voidvvv.kz_auto_chess_n.save.Profile;
 import com.voidvvv.kz_auto_chess_n.save.ProfileService;
+import com.voidvvv.kz_auto_chess_n.systems.RosterSystem;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -79,6 +83,26 @@ public final class PracticeAccess {
         return Result.applied("已调整经验 " + (delta > 0 ? "+" : "") + delta + "。", screen.savePracticeChange());
     }
 
+    public Result editRoster(RunView expected, SlotView slot, RosterSystem.Edit edit, String templateId, int star) {
+        BattleScreen screen = battleScreen();
+        String reason = checkRun(screen, expected);
+        if (reason != null) return Result.rejected(reason);
+        if (slot == null) return Result.rejected("请选择备战席或己方格。");
+        if (!expected.bench.contains(slot) && !expected.deployment.contains(slot)) {
+            return Result.rejected("该位置不属于当前读数，请重新选择。");
+        }
+        String invalid = screen.editPracticeRoster(slot.target, slot.unitId, slot.star, edit, templateId, star);
+        if (invalid != null) return Result.rejected(invalid);
+        String message;
+        switch (edit) {
+            case ADD: message = "已新增棋子。"; break;
+            case REPLACE: message = "已替换棋子，原装备已归还背包。"; break;
+            case REMOVE: message = "已移除棋子，原装备已归还背包。"; break;
+            default: message = "星级已设为 " + star + "，装备保留。";
+        }
+        return Result.applied(message, screen.savePracticeChange());
+    }
+
     public Result jump(RunView expected, String sceneId, int round) {
         BattleScreen screen = battleScreen();
         String reason = checkRun(screen, expected);
@@ -111,7 +135,8 @@ public final class PracticeAccess {
         String reason = screen.practiceBlockReason();
         if (reason != null) return reason;
         RunState run = screen.practiceContext().getRunState();
-        if (run.getSeed() != expected.seed || run.getRound() != expected.round) {
+        if (run.getSeed() != expected.seed || !run.getSceneId().equals(expected.sceneId)
+                || run.getRound() != expected.round) {
             return "当前远征或波次已变化，请核对后重试。";
         }
         return null;
@@ -170,6 +195,10 @@ public final class PracticeAccess {
         public final boolean chestPending;
         public final boolean incomePaid;
         public final String enemies;
+        public final List<SlotView> bench;
+        public final List<SlotView> deployment;
+        public final List<TemplateView> templates;
+        public final int boardColumns;
 
         private RunView(RunContext ctx) {
             RunState run = ctx.getRunState();
@@ -196,6 +225,68 @@ public final class PracticeAccess {
                 names.add(enemy.getTemplate().getName());
             }
             enemies = String.join("、", names);
+            List<SlotView> benchSlots = new ArrayList<>();
+            List<Unit> benchUnits = player.getBench();
+            for (int i = 0; i < GameBalance.BENCH_SIZE; i++) {
+                Unit unit = i < benchUnits.size() ? benchUnits.get(i) : null;
+                benchSlots.add(new SlotView(new PlacementTarget.Bench(i), unit, i == benchUnits.size()));
+            }
+            bench = Collections.unmodifiableList(benchSlots);
+            List<SlotView> grid = new ArrayList<>();
+            boardColumns = GameBalance.BOARD_COLS;
+            for (int y = 4; y <= 6; y++) {
+                for (int x = 0; x < boardColumns; x++) {
+                    Unit unit = player.deployedAt(x, y);
+                    grid.add(new SlotView(new PlacementTarget.Cell(x, y), unit, unit == null));
+                }
+            }
+            deployment = Collections.unmodifiableList(grid);
+            List<TemplateView> choices = new ArrayList<>();
+            for (UnitData template : ctx.getGameData().getUnits().values()) {
+                if (RosterSystem.isPracticeTemplate(ctx, template)) choices.add(new TemplateView(template));
+            }
+            templates = Collections.unmodifiableList(choices);
+        }
+    }
+
+    public static final class SlotView {
+        private final PlacementTarget target;
+        public final String position;
+        public final int unitId;
+        public final String name;
+        public final String templateId;
+        public final int star;
+        public final int equipment;
+        public final boolean canAdd;
+
+        private SlotView(PlacementTarget target, Unit unit, boolean canAdd) {
+            this.target = target;
+            if (target instanceof PlacementTarget.Bench) {
+                position = Integer.toString(((PlacementTarget.Bench) target).slotIndex + 1);
+            } else {
+                PlacementTarget.Cell cell = (PlacementTarget.Cell) target;
+                position = "(" + cell.gridX + ", " + cell.gridY + ")";
+            }
+            unitId = unit == null ? 0 : unit.getId();
+            name = unit == null ? "" : unit.getTemplate().getName();
+            templateId = unit == null ? "" : unit.getTemplate().getId();
+            star = unit == null ? 0 : unit.getStar();
+            equipment = unit == null ? 0 : unit.getEquipped().size();
+            this.canAdd = canAdd;
+        }
+
+        public boolean occupied() {
+            return unitId != 0;
+        }
+    }
+
+    public static final class TemplateView {
+        public final String id;
+        public final String name;
+
+        private TemplateView(UnitData template) {
+            id = template.getId();
+            name = template.getName();
         }
     }
 

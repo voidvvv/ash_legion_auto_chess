@@ -33,15 +33,12 @@ public final class Unit {
     }
 
     public Unit(int id, UnitData template, int star, int spend) {
-        if (star < 1 || star > 3) {
-            throw new IllegalArgumentException("星级必须在 1~3（3 合 1 上限 3 星），实际=" + star);
-        }
         if (spend < 0) {
             throw new IllegalArgumentException("累计花费必须 ≥ 0，实际=" + spend);
         }
         this.id = id;
         this.template = Objects.requireNonNull(template, "template 不能为 null");
-        this.star = star;
+        setStar(star);
         this.spend = spend;
     }
 
@@ -73,6 +70,14 @@ public final class Unit {
             throw new IllegalStateException("3 星上限，不可再合: " + template.getId());
         }
         star++;
+    }
+
+    /** Practice roster editing preserves identity, spend and equipment. */
+    public void setStar(int star) {
+        if (star < 1 || star > 3) {
+            throw new IllegalArgumentException("星级必须在 1~3（3 合 1 上限 3 星），实际=" + star);
+        }
+        this.star = star;
     }
 
     /** 累计花费累加（买入花费 / 合并折叠，增量 ≥ 0） */

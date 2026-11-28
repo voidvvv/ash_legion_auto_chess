@@ -5,13 +5,8 @@ import com.badlogic.gdx.Input;
 import com.badlogic.gdx.files.FileHandle;
 import com.voidvvv.kz_auto_chess_n.Main;
 
-import javax.swing.SwingUtilities;
-import java.lang.reflect.InvocationTargetException;
-
 final class GmGame extends Main {
-    private GmPanel panel; // EDT only
-    private volatile boolean stopping;
-    private boolean usedHotkey;
+    private GmWindow window;
 
     GmGame(FileHandle directory) {
         super(directory);
@@ -19,39 +14,45 @@ final class GmGame extends Main {
 
     @Override
     public void render() {
+        detachClosedWindow();
         if (Gdx.input.isKeyJustPressed(Input.Keys.F10)) {
-            usedHotkey = true;
-            SwingUtilities.invokeLater(this::toggle);
+            if (window != null) {
+                detach();
+            } else {
+                try {
+                    window = GmWindow.open(practiceAccess(), this::detachClosedWindow);
+                } catch (RuntimeException | LinkageError ex) {
+                    Gdx.app.error("GM", "Could not mount Dear ImGui. The game can continue.", ex);
+                }
+            }
         }
         super.render();
+        if (window != null) {
+            try {
+                window.draw();
+            } catch (RuntimeException | LinkageError ex) {
+                Gdx.app.error("GM", "Dear ImGui rendering stopped. The game can continue.", ex);
+                detach();
+            }
+        }
     }
 
-    private void toggle() {
-        if (stopping) return;
-        if (panel != null) {
-            detach();
-            return;
-        }
-        panel = new GmPanel(practiceAccess(), Gdx.app::postRunnable, this::detach);
-        panel.open();
+    private void detachClosedWindow() {
+        if (window != null && window.shouldClose()) detach();
     }
 
     private void detach() {
-        if (panel != null) {
-            panel.close();
-            panel = null;
+        if (window != null) {
+            GmWindow detached = window;
+            window = null;
+            detached.close();
         }
     }
 
     @Override
     public void dispose() {
-        stopping = true;
         try {
-            if (usedHotkey) SwingUtilities.invokeAndWait(this::detach);
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-        } catch (InvocationTargetException ex) {
-            Gdx.app.error("GM", "Could not dispose the practice window", ex.getCause());
+            detach();
         } finally {
             super.dispose();
         }

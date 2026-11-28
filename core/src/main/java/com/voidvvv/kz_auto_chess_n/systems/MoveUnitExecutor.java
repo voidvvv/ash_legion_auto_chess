@@ -62,7 +62,7 @@ public final class MoveUnitExecutor {
 
     private boolean moveToCell(Player player, Unit unit, int sourceSlot, int fromX, int fromY,
                                PlacementTarget.Cell cell) {
-        if (cell.gridX < 0 || cell.gridX >= GameBalance.BOARD_COLS || cell.gridY < 4 || cell.gridY > 6) {
+        if (!isPlayerCell(cell)) {
             return false;
         }
         Unit occupant = player.deployedAt(cell.gridX, cell.gridY);
@@ -92,11 +92,19 @@ public final class MoveUnitExecutor {
         return true;
     }
 
+    static boolean isPlayerCell(PlacementTarget.Cell cell) {
+        return cell.gridX >= 0 && cell.gridX < GameBalance.BOARD_COLS && cell.gridY >= 4 && cell.gridY <= 6;
+    }
+
+    static boolean isBenchSlot(PlacementTarget.Bench bench) {
+        return bench.slotIndex >= 0 && bench.slotIndex < GameBalance.BENCH_SIZE;
+    }
+
     // —— 落席（含换位） ——
 
     private boolean moveToBench(Player player, Unit unit, int sourceSlot, int fromX, int fromY,
                                 PlacementTarget.Bench bench) {
-        if (bench.slotIndex < 0 || bench.slotIndex >= GameBalance.BENCH_SIZE) {
+        if (!isBenchSlot(bench)) {
             return false;
         }
         if (sourceSlot >= 0) { // bench→bench：remove + insert（换位）
