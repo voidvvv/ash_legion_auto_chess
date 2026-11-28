@@ -312,6 +312,10 @@ class BoardInputProcessorTest {
         assertThat(candidate.kind()).isEqualTo(HoverCandidate.Kind.ENEMY_PREVIEW);
         assertThat(candidate.isEnemy()).isTrue();
         assertThat(candidate.template()).isSameAs(ghostA);
+        assertThat(processor.touchDown(ghostCell[0], ghostCell[1], 1, 0)).isTrue();
+        assertThat(processor.getHoverCandidate().template()).isSameAs(ghostA);
+        assertThat(processor.touchUp(ghostCell[0], ghostCell[1], 1, 0)).isTrue();
+        assertThat(processor.getHoverCandidate().isNone()).isTrue();
 
         int[] otherCell = BoardGeometry.cellCenter(4, 0);
         processor.mouseMoved(otherCell[0], otherCell[1]);

@@ -17,6 +17,7 @@ import com.voidvvv.kz_auto_chess_n.input.BoardInputProcessor;
 import com.voidvvv.kz_auto_chess_n.render.Assets;
 import com.voidvvv.kz_auto_chess_n.render.EventInbox;
 import com.voidvvv.kz_auto_chess_n.render.FloatTextFormat;
+import com.voidvvv.kz_auto_chess_n.systems.BattleAttribution;
 import com.voidvvv.kz_auto_chess_n.render.PlaceholderKeys;
 import com.voidvvv.kz_auto_chess_n.render.StarColors;
 import com.voidvvv.kz_auto_chess_n.systems.ThreatPredictor;
@@ -114,6 +115,7 @@ public final class BattleRenderer {
     private final List<FloatingText> floats = new ArrayList<FloatingText>();
     /** 同帧飘字错位槽位（render §5.2：同目标同帧多段错位堆叠） */
     private int floatSlot;
+    private boolean showedControl;
     /** 引导文案排版缓存（懒建一次，零稳态分配） */
     private GlyphLayout hintLayout;
     /** 战前预判缓存（零稳态分配）：敌阵引用或部署指纹变化才重算（§1.1） */
@@ -167,6 +169,7 @@ public final class BattleRenderer {
         if (current == trackedBattle) {
             return;
         }
+        showedControl = false;
         unitViews.clear();
         viewList.clear();
         floats.clear(); // 池中空闲实例保留复用
@@ -637,6 +640,18 @@ public final class BattleRenderer {
                     attacker.anim().onEvent(CombatEvent.Type.HIT); // 近战即时：出手即命中
                 }
                 onDamaged(event, event.getSkillId(), renderClock);
+                break;
+            case STATUS_APPLIED:
+                if (showedControl) break;
+                String label = BattleAttribution.controlName(trackedBattle, event);
+                UnitView controlled = unitViews.get(event.getTargetId());
+                if (label != null && controlled != null) {
+                    FloatingText text = floatPool.obtain();
+                    text.spawn(label, com.badlogic.gdx.graphics.Color.CYAN, 1.1f,
+                            controlled.virtualX(renderClock), controlled.virtualY(renderClock) + 16f);
+                    floats.add(text);
+                    showedControl = true;
+                }
                 break;
             case HEALED:
             case SHIELDED:

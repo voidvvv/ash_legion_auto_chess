@@ -122,7 +122,7 @@ public final class UnitInfoText {
     }
 
     /** 状态短名（BASIC_ATTACK_STATUS 附带载荷等）；未登记状态回退词表名 */
-    private static String statusLabel(StatusType status) {
+    static String statusLabel(StatusType status) {
         if (status == null) {
             return "状态";
         }
@@ -175,6 +175,13 @@ public final class UnitInfoText {
      * @param maxColumns 行宽上限（列；≤0 = 不折行）
      */
     public static List<String> previewLines(UnitData template, GameData data, int maxColumns) {
+        List<String> lines = previewStatsAndSkill(template, data, maxColumns);
+        appendSynergyPreview(lines, findSynergy(data, SynergySource.RACE, template.getRace()), maxColumns);
+        appendSynergyPreview(lines, findSynergy(data, SynergySource.CLASS, template.getUnitClass()), maxColumns);
+        return lines;
+    }
+
+    static List<String> previewStatsAndSkill(UnitData template, GameData data, int maxColumns) {
         List<String> lines = new ArrayList<String>();
         BaseStats stats = template.getBaseStats();
         addWrapped(lines, template.getName() + " " + template.getCost() + "费", maxColumns);
@@ -186,8 +193,6 @@ public final class UnitInfoText {
             addWrapped(lines, "技能 " + skill.getName(), maxColumns);
             addWrapped(lines, skill.getDesc(), maxColumns);
         }
-        appendSynergyPreview(lines, findSynergy(data, SynergySource.RACE, template.getRace()), maxColumns);
-        appendSynergyPreview(lines, findSynergy(data, SynergySource.CLASS, template.getUnitClass()), maxColumns);
         return lines;
     }
 

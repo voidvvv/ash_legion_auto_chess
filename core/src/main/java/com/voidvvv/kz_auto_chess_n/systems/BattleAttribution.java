@@ -118,7 +118,7 @@ public final class BattleAttribution {
                                           List<Candidate> out) {
         List<CombatEvent> events = state.getEvents();
         List<KeyHit> keyHits = collectKeyHits(state, events);
-        Set<String> castedSkillNames = castedKeyedSkillNames(events, data, state);
+        Set<String> castedSkillIds = castedKeyedSkillIds(events, state);
 
         if (surrendered) { // ① 主动认输
             out.add(new Candidate(Rank.SURRENDER, "本场主动认输，下次开战前可先检查敌方危险格。", 0, 0f, 0));
@@ -148,8 +148,8 @@ public final class BattleAttribution {
             out.add(other);
             return;
         }
-        if (!castedSkillNames.isEmpty()) { // ⑦ 已确认施法但无对应正扣血
-            String skillName = smallestName(castedSkillNames, data);
+        if (!castedSkillIds.isEmpty()) { // ⑦ 已确认施法但无对应正扣血
+            String skillName = smallestName(castedSkillIds, data);
             out.add(new Candidate(Rank.CAST_WITHOUT_DAMAGE,
                     skillName + "施放后未扣血，下次可先试用相同站位。", 0, 0f, 0));
             return;
@@ -162,8 +162,22 @@ public final class BattleAttribution {
         out.add(new Candidate(Rank.GENERIC, genericSentence(state), 0, 0f, 0)); // ⑨ 通用结果
     }
 
-    /** 通用结果（§1.4 末行）：零存活出局 / 其它负局 / 胜局沿用站位 */
+    /** 普通战场优先报告首次异侧控制，其次首次阵亡；没有可核事件时沿用结果摘要。 */
     private static String genericSentence(BattleState state) {
+        CombatEvent firstDeath = null;
+        for (CombatEvent event : state.getEvents()) {
+            String status = controlName(state, event);
+            if (status != null) {
+                BattleUnit source = state.getUnitById(event.getSourceId());
+                BattleUnit target = state.getUnitById(event.getTargetId());
+                return sideName(source) + "对" + sideName(target) + "施加" + status + "。";
+            }
+            if (firstDeath == null && event.getType() == CombatEvent.Type.UNIT_DIED
+                    && state.getUnitById(event.getSourceId()) != null) {
+                firstDeath = event;
+            }
+        }
+        if (firstDeath != null) return sideName(state.getUnitById(firstDeath.getSourceId())) + "最先阵亡。";
         int survivors = state.aliveCount(Side.PLAYER);
         int deployed = deployedCount(state);
         if (state.getOutcome() == BattleOutcome.PLAYER_WIN) {
@@ -173,6 +187,23 @@ public final class BattleAttribution {
             return "己方上阵" + deployed + "枚全数出局，下次让耐打的棋子先接敌。";
         }
         return "本场战败，下次先把耐打的棋子放到敌人接近的一侧。";
+    }
+
+    /** 只依据状态落地事件。来源可为技能或羁绊，不据此推断成因。 */
+    public static String controlName(BattleState state, CombatEvent event) {
+        if (event.getType() != CombatEvent.Type.STATUS_APPLIED) return null;
+        BattleUnit source = state.getUnitById(event.getSourceId());
+        BattleUnit target = state.getUnitById(event.getTargetId());
+        if (source == null || target == null || source.getSide() == target.getSide()) return null;
+        switch (event.getStatusType()) {
+            case STUN: return "眩晕";
+            case SLOW: return "减速";
+            default: return null;
+        }
+    }
+
+    private static String sideName(BattleUnit unit) {
+        return (unit.getSide() == Side.PLAYER ? "己方" : "敌方") + unit.getTemplate().getName();
     }
 
     /** 上阵棋子数（开局部署名单 = 玩家侧单位总数，含亡者——列表终身持有） */
@@ -188,16 +219,17 @@ public final class BattleAttribution {
 
     // —— 关键命中收集（§1.4 识别口径） ——
 
-    private static Set<String> castedKeyedSkillNames(List<CombatEvent> events, GameData data,
-                                                     BattleState state) {
-        Set<String> names = new HashSet<String>();
+    private static Set<String> castedKeyedSkillIds(List<CombatEvent> events, BattleState state) {
+        Set<String> ids = new HashSet<String>();
         for (CombatEvent event : events) {
-            if (event.getType() == CombatEvent.Type.CAST
-                    && ThreatPredictor.isKeyedEnemySkill(event.getSkillId())) {
-                names.add(skillName(data, event.getSkillId()));
+            if (event.getType() != CombatEvent.Type.CAST) continue;
+            BattleUnit caster = state.getUnitById(event.getSourceId());
+            if (caster != null && caster.getSide() == Side.ENEMY
+                    && topicEnemyOf(caster.getTemplate().getId(), event.getSkillId())) {
+                ids.add(event.getSkillId());
             }
         }
-        return names;
+        return ids;
     }
 
     /** 集合中最短名（⑦ 文案点名兜底；集合通常单元素） */
@@ -301,7 +333,7 @@ public final class BattleAttribution {
         BattleUnit target = state.getUnitById(event.getTargetId());
         return source != null && source.getSide() == Side.ENEMY
                 && target != null && target.getSide() == Side.PLAYER
-                && topicEnemyOf(source.getTemplate().getId(), source.getTemplate().getSkillId());
+                && topicEnemyOf(source.getTemplate().getId(), event.getSkillId());
     }
 
     /** 来源模板 + 技能是否构成题目二元组（§1.1/§1.4 同一口径） */

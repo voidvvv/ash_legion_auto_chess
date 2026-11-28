@@ -223,10 +223,10 @@ class BoardGeometryTest {
     }
 
     @Test
-    @DisplayName("商店悬停卡锚点：与 ⑤ 羁绊面板同位、右缘不出虚拟宽、下缘不压 ⑧ 商店栏（⑦ 瞬态覆盖）")
+    @DisplayName("商店悬停卡锚点：与羁绊面板同列、右缘不出虚拟宽、下缘不压 ⑧ 商店栏（⑦ 瞬态覆盖）")
     void shopHoverAnchorMatchesSynergyZone() {
         assertThat(BoardGeometry.SHOP_HOVER_X).isEqualTo(BoardGeometry.SYNERGY_X);
-        assertThat(BoardGeometry.SHOP_HOVER_Y).isEqualTo(BoardGeometry.SYNERGY_Y);
+        assertThat(BoardGeometry.SHOP_HOVER_Y).isGreaterThanOrEqualTo(BoardGeometry.SHOP_BAR_H);
         assertThat(BoardGeometry.SHOP_HOVER_W).isEqualTo(BoardGeometry.SYNERGY_W);
         assertThat(BoardGeometry.SHOP_HOVER_X + BoardGeometry.SHOP_HOVER_W)
                 .isLessThanOrEqualTo(BoardGeometry.VIRTUAL_W);

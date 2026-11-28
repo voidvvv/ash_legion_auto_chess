@@ -8,6 +8,8 @@ import com.badlogic.gdx.scenes.scene2d.Group;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.InputListener;
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
+import com.voidvvv.kz_auto_chess_n.systems.ShopSystem;
+import com.voidvvv.kz_auto_chess_n.command.ToggleShopLockCommand;
 import com.voidvvv.kz_auto_chess_n.command.BuyExpCommand;
 import com.voidvvv.kz_auto_chess_n.command.BuyUnitCommand;
 import com.voidvvv.kz_auto_chess_n.command.CommandManager;
@@ -15,7 +17,6 @@ import com.voidvvv.kz_auto_chess_n.command.RefreshShopCommand;
 import com.voidvvv.kz_auto_chess_n.command.RunContext;
 import com.voidvvv.kz_auto_chess_n.config.GameBalance;
 import com.voidvvv.kz_auto_chess_n.data.UnitData;
-import com.voidvvv.kz_auto_chess_n.entities.Unit;
 import com.voidvvv.kz_auto_chess_n.render.Assets;
 import com.voidvvv.kz_auto_chess_n.render.PlaceholderKeys;
 import com.voidvvv.kz_auto_chess_n.render.StarColors;
@@ -28,8 +29,7 @@ import java.util.function.Supplier;
  * 点击卡片入队 BuyUnit(slot)——查价不信任载荷（input §6.3）；灰置 = 表现层预校验
  * （金币不足/席满不立即合成/空槽/Lv.7 封顶），最终防线在 ShopSystem handler。
  *
- * <p>坐标为组内局部坐标（组定位 0,{@code BoardGeometry.SHOP_BAR_Y} 归 CP29 装配）。
- * 按钮宽 80：两钮收在 [472,636]——原稿 560+100=660 越出 640 虚拟宽 20px（T6 执行适配）。
+ * <p>按钮沿商店右侧单行排列，按钮与说明均位于羁绊面板下方。
  */
 public final class ShopBar extends Group {
 
@@ -37,8 +37,8 @@ public final class ShopBar extends Group {
     private static final float CARD_H = 56f;
     private static final float CARD_GAP = 8f;
     private static final float CARD_X0 = 12f;
-    private static final float BUTTON_X_REFRESH = 472f;
-    private static final float BUTTON_X_EXP = 556f;
+    private static final float ACTION_Y = 3f;
+    private static final float ACTION_H = 42f;
 
     private final CommandManager commandManager;
     private final Assets assets;
@@ -47,7 +47,8 @@ public final class ShopBar extends Group {
     /** 悬停中的商店槽位（Phase 5.1 R1：ShopCard enter/exit 维护；-1 = 无；原始暴露，归一见 HoverPreviewCard） */
     private int hoveredSlot = -1;
     /** 刷新钮持有引用（Phase 6：价签每帧按局外折扣刷新——裁决 D4） */
-    private ActionButton refreshButton;
+    private final ActionButton refreshButton;
+    private final ActionButton lockButton;
 
     public ShopBar(CommandManager commandManager, Assets assets, Supplier<RunContext> context) {
         this.commandManager = commandManager;
@@ -62,7 +63,7 @@ public final class ShopBar extends Group {
                 commandManager.addCommand(RefreshShopCommand.INSTANCE);
             }
         };
-        refreshButton.setPosition(BUTTON_X_REFRESH, 14f);
+        refreshButton.setBounds(472f, ACTION_Y, 51f, ACTION_H);
         addActor(refreshButton);
         Actor exp = new ActionButton("经验 4金") {
             @Override
@@ -70,8 +71,16 @@ public final class ShopBar extends Group {
                 commandManager.addCommand(BuyExpCommand.INSTANCE);
             }
         };
-        exp.setPosition(BUTTON_X_EXP, 14f);
+        exp.setBounds(526f, ACTION_Y, 51f, ACTION_H);
         addActor(exp);
+        lockButton = new ActionButton("锁店") {
+            @Override protected void onClicked() {
+                commandManager.addCommand(ToggleShopLockCommand.INSTANCE);
+            }
+        };
+        lockButton.setCaption("下轮不刷新");
+        lockButton.setBounds(580f, ACTION_Y, 56f, ACTION_H);
+        addActor(lockButton);
     }
 
     /** 悬停中的商店槽位（R1）；无悬停 = -1（空槽/非 SHOPPING 的归一在 HoverPreviewCard.refresh） */
@@ -84,7 +93,11 @@ public final class ShopBar extends Group {
         for (int i = 0; i < affordable.length; i++) {
             affordable[i] = canBuy(ctx, i);
         }
+        lockButton.setVisible(ctx.getShop().canToggleLock(ctx));
+        boolean locked = ctx.getShop().isLocked();
+        lockButton.setText(locked ? "取消锁店" : "锁店");
         refreshButton.setText(refreshPriceText(ctx.getRunState().getModifiers()));
+        refreshButton.setCaption(locked ? "同时解锁" : "");
     }
 
     /** 刷新钮价签文案（纯函数，JUnit 可测；口径同 ShopSystem.refreshCost——Lv.5 折扣实付下限 1 金） */
@@ -106,18 +119,7 @@ public final class ShopBar extends Group {
     }
 
     private static int countSameTemplateStar1(RunContext ctx, String templateId) {
-        int count = 0;
-        for (Unit unit : ctx.getPlayer().getBench()) {
-            if (unit.getTemplate().getId().equals(templateId) && unit.getStar() == 1) {
-                count++;
-            }
-        }
-        for (Unit unit : ctx.getPlayer().getDeployedUnits()) {
-            if (unit.getTemplate().getId().equals(templateId) && unit.getStar() == 1) {
-                count++;
-            }
-        }
-        return count;
+        return ShopSystem.countSameTemplateStar(ctx.getPlayer(), templateId, 1);
     }
 
     /** 商店卡（占位帧 + 费价 + 灰置态） */
@@ -129,9 +131,25 @@ public final class ShopBar extends Group {
             setSize(CARD_W, CARD_H);
             setPosition(CARD_X0 + slot * (CARD_W + CARD_GAP), 4f);
             addListener(new ClickListener() {
+                private long pressedAt;
+                @Override
+                public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
+                    pressedAt = com.badlogic.gdx.utils.TimeUtils.nanoTime();
+                    hoveredSlot = slot;
+                    return super.touchDown(event, x, y, pointer, button);
+                }
+                @Override
+                public void touchUp(InputEvent event, float x, float y, int pointer, int button) {
+                    super.touchUp(event, x, y, pointer, button);
+                    if (hoveredSlot == slot && heldForPreview()) hoveredSlot = -1;
+                }
                 @Override
                 public void clicked(InputEvent event, float x, float y) {
-                    commandManager.addCommand(new BuyUnitCommand(slot));
+                    if (!heldForPreview()) commandManager.addCommand(new BuyUnitCommand(slot));
+                }
+                private boolean heldForPreview() {
+                    return com.badlogic.gdx.utils.TimeUtils.timeSinceNanos(pressedAt)
+                            >= HoverStateMachine.DELAY_SECONDS * 1_000_000_000L;
                 }
             });
             addListener(new InputListener() { // R1 悬停槽位轨迹（Scene2D enter/exit）
@@ -172,7 +190,10 @@ public final class ShopBar extends Group {
                         getX() + 4f, getY() + 18f, 32f, 32f);
             }
             batch.setColor(old);
-            assets.uiFont().draw(batch, template.getCost() + "金", getX() + 44f, getY() + 44f);
+            int copies = countSameTemplateStar1(ctx, template.getId());
+            assets.bodyFont().draw(batch, template.getCost() + "金 " + copies + "/3", getX() + 39f, getY() + 51f);
+            assets.bodyFont().draw(batch, template.getRace(), getX() + 41f, getY() + 39f);
+            assets.bodyFont().draw(batch, template.getUnitClass(), getX() + 41f, getY() + 27f);
             assets.uiFont().draw(batch, template.getName(), getX() + 6f, getY() + 13f);
         }
     }
@@ -180,6 +201,7 @@ public final class ShopBar extends Group {
     /** 矩形动作按钮（刷新/买经验共用壳；原创四态按钮壳） */
     private abstract class ActionButton extends Actor {
         private String text;
+        private String caption = "";
         private final ClickListener listener;
 
         ActionButton(String text) {
@@ -201,12 +223,20 @@ public final class ShopBar extends Group {
             this.text = Objects.requireNonNull(text, "text 不能为 null");
         }
 
+        void setCaption(String caption) {
+            this.caption = caption;
+        }
+
         @Override
         public void draw(Batch batch, float parentAlpha) {
             com.voidvvv.kz_auto_chess_n.render.ButtonArt.drawShell(batch, assets, listener,
                     getX(), getY(), getWidth(), getHeight(), parentAlpha, false);
-            assets.uiFont().draw(batch, text, getX(), getY() + 22f, getWidth(),
-                    com.badlogic.gdx.utils.Align.center, false); // 居中（§5.3-7）
+            float labelY = getY() + getHeight() / 2f + (caption.isEmpty() ? 5f : 11f);
+            assets.uiFont().draw(batch, text, getX(), labelY, getWidth(), com.badlogic.gdx.utils.Align.center, false);
+            if (!caption.isEmpty()) {
+                assets.bodyFont().draw(batch, caption, getX(), labelY - 15f, getWidth(),
+                        com.badlogic.gdx.utils.Align.center, false);
+            }
         }
     }
 }

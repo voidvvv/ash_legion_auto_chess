@@ -146,6 +146,22 @@ class ShopBarLogicTest {
         assertThat(ctx.getShop().slotAt(0)).isNotNull();
     }
 
+    @Test
+    void actionButtonsRemainBelowSynergyPanelWithIndependentHitAreas() {
+        ShopBar bar = new ShopBar(new com.voidvvv.kz_auto_chess_n.command.CommandManager(), null, () -> context(10));
+        float previousRight = 0f;
+        for (int i = GameBalance.SHOP_SLOTS; i < bar.getChildren().size; i++) {
+            com.badlogic.gdx.scenes.scene2d.Actor button = bar.getChildren().get(i);
+            assertThat(button.getY()).isGreaterThanOrEqualTo(0f);
+            assertThat(button.getTop()).isLessThan((float) com.voidvvv.kz_auto_chess_n.render.board.BoardGeometry.SYNERGY_Y);
+            assertThat(button.getX()).isGreaterThan(previousRight);
+            assertThat(button.getRight()).isLessThanOrEqualTo(640f);
+            assertThat(bar.hit(button.getX() + button.getWidth() / 2f, button.getY() + button.getHeight() / 2f, true))
+                    .isSameAs(button);
+            previousRight = button.getRight();
+        }
+    }
+
     // —— Phase 6：动态价签（CP9——Lv.5 折扣实付下限 1 金，裁决 D4） ——
 
     @Test

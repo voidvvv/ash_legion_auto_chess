@@ -29,6 +29,8 @@ public final class RunState {
     private GamePhase phase = GamePhase.SHOPPING;
     /** 本轮已战败次数（3 次机会制，GDD §2.2；判负瞬间 +1、新轮进入清零、入快照——D10 续玩不重置） */
     private int defeatCountPerRound;
+    /** 本轮基础战后收入已入账，重试和读档均保留。 */
+    private boolean roundIncomePaid;
     private List<WaveSpec> enemyWave = Collections.emptyList();
     /** StartRun 已执行标记（防重入；重开 = 新鲜 RunState 天然复位） */
     private boolean runStarted;
@@ -65,6 +67,7 @@ public final class RunState {
     public int getRound() { return round; }
     public GamePhase getPhase() { return phase; }
     public int getDefeatCountPerRound() { return defeatCountPerRound; }
+    public boolean isRoundIncomePaid() { return roundIncomePaid; }
     public List<WaveSpec> getEnemyWave() { return enemyWave; }
     public boolean isRunStarted() { return runStarted; }
     public ChestOffer getPendingChest() { return pendingChest; }
@@ -80,6 +83,11 @@ public final class RunState {
 
     public void advanceRound() {
         round++;
+        roundIncomePaid = false;
+    }
+
+    public void markRoundIncomePaid() {
+        roundIncomePaid = true;
     }
 
     /** 轮次复原（快照轨恢复唯一调用点；仅装配期，运行期推进走 advanceRound） */

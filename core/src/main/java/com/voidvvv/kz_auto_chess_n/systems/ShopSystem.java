@@ -1,5 +1,6 @@
 package com.voidvvv.kz_auto_chess_n.systems;
 
+import com.voidvvv.kz_auto_chess_n.command.ToggleShopLockCommand;
 import com.voidvvv.kz_auto_chess_n.command.BuyExpCommand;
 import com.voidvvv.kz_auto_chess_n.command.BuyUnitCommand;
 import com.voidvvv.kz_auto_chess_n.command.CommandManager;
@@ -39,11 +40,34 @@ public final class ShopSystem {
     /** 对拍付费序号（品质改造 §0.2，0-based：0 = ①）：新轮免费补货归零、成功付费 +1；
      *  正式分支不消费。随上下文生命周期重建（重开即新商店——同轮重试自然保留）。 */
     private int paidRefreshIndex;
+    private boolean locked;
     /** 本帧升星星级（品质改造 §1.2：音频消费者；级联合成同帧只播一次、保留最高星级——drain 后清空） */
     private final java.util.List<Integer> frameUpgrades = new java.util.ArrayList<Integer>();
 
+    public boolean isLocked() { return locked; }
+
+    public void restoreLock(boolean value) { locked = value; }
+
+    public boolean canToggleLock(RunContext ctx) {
+        return ctx.getRunState().getPhase() == GamePhase.SHOPPING && !ctx.getMode().isSampleDuel()
+                && ctx.getRunState().getRound() < ctx.totalRounds() && (locked || hasStock());
+    }
+
+    private boolean hasStock() {
+        for (UnitData slot : slots) {
+            if (slot != null) return true;
+        }
+        return false;
+    }
+
     /** 注册经营命令 handler（input §6.1：handler 由所属 system 注册） */
     public void registerHandlers(CommandManager manager) {
+        manager.registerHandler(ToggleShopLockCommand.class, (cmd, ctx) -> {
+            if (!canToggleLock(ctx)) return false;
+            locked = !locked;
+            ctx.getRunState().addNotice(locked ? "已锁店：下一轮沿用剩余棋子" : "取消锁店：下一轮免费刷新");
+            return true;
+        });
         manager.registerHandler(BuyUnitCommand.class, (cmd, ctx) -> {
             if (ctx.getRunState().getPhase() != GamePhase.SHOPPING) {
                 return false;
@@ -85,6 +109,7 @@ public final class ShopSystem {
      * @param paidRefresh false = 新轮免费补货；true = 付费刷新（已扣款）
      */
     public void replenish(RunContext ctx, boolean paidRefresh) {
+        locked = false;
         if (!ctx.getMode().isSampleDuel()) {
             reroll(ctx.getRunState().getRound(), ctx.getGameData(), ctx.getRng(),
                     ctx.getRunState().getModifiers()); // 正式口径不变（含启动参数起始金外的随机页）
@@ -142,7 +167,11 @@ public final class ShopSystem {
     public void reroll(int round, GameData data, RandomGenerator rng, RunModifiers modifiers) {
         float[] probabilities = GameBalance.shopTierProbabilities(round);
         int bonusPp = Math.max(0, modifiers.getRareShopBonusPp());
-        if (bonusPp > 0 && probabilities[2] > 0f) {
+        List<List<UnitData>> pools = new ArrayList<List<UnitData>>(3);
+        for (int cost = 1; cost <= 3; cost++) {
+            pools.add(allowedPool(tierPool(data, cost), modifiers));
+        }
+        if (bonusPp > 0 && probabilities[2] > 0f && !pools.get(2).isEmpty()) {
             probabilities[2] = Math.min(100f, probabilities[2] + bonusPp);
             probabilities[0] = Math.max(0f, probabilities[0] - bonusPp);
         }
@@ -150,11 +179,25 @@ public final class ShopSystem {
                 Math.round(probabilities[0] * GameBalance.PROBABILITY_WEIGHT_SCALE),
                 Math.round(probabilities[1] * GameBalance.PROBABILITY_WEIGHT_SCALE),
                 Math.round(probabilities[2] * GameBalance.PROBABILITY_WEIGHT_SCALE)};
+        boolean eligible = false;
+        for (int i = 0; i < tierWeights.length; i++) {
+            if (pools.get(i).isEmpty()) tierWeights[i] = 0;
+            eligible |= tierWeights[i] > 0;
+        }
+        // 无当轮合法费阶时仍消费原有两次抽取，不提前解锁高费卡。
+        if (!eligible) {
+            Arrays.fill(slots, null);
+            for (int i = 0; i < slots.length; i++) {
+                rng.nextFloat();
+                rng.nextFloat();
+            }
+            return;
+        }
         for (int i = 0; i < slots.length; i++) {
             int tier = rng.weightedPick(tierWeights);                          // RNG #1（费阶 0/1/2 → cost 1/2/3）
-            List<UnitData> pool = allowedPool(tierPool(data, tier + 1), modifiers);
-            int pick = rng.weightedPick(uniform(pool.size()));                 // RNG #2（池空也消耗）
-            slots[i] = pool.isEmpty() ? null : pool.get(pick);
+            List<UnitData> pool = pools.get(tier);
+            int pick = rng.weightedPick(uniform(pool.size()));                 // RNG #2
+            slots[i] = pool.get(pick);
         }
     }
 
@@ -269,7 +312,32 @@ public final class ShopSystem {
         return roster;
     }
 
-    private static int countSameTemplateStar(Player player, String templateId, int star) {
+    /** 购入同名后被合成移出棋盘的数量；保留顺序同 mergeCascade，满席购买不入席。 */
+    public static int deployedLostOnPurchase(Player player, UnitData card) {
+        int[] bench = new int[4];
+        int[] board = new int[4];
+        for (Unit u : player.getBench()) {
+            if (u.getTemplate().equals(card)) bench[u.getStar()]++;
+        }
+        for (Unit u : player.getDeployedUnits()) {
+            if (u.getTemplate().equals(card)) board[u.getStar()]++;
+        }
+        boolean full = player.getBench().size() == GameBalance.BENCH_SIZE;
+        if (!full) bench[1]++;
+        int lost = 0;
+        for (int star = 1; star <= 2; star++) {
+            // 满席购买的第三枚临时并入，已有两枚按席→板选保留者。
+            int required = full && star == 1 ? 2 : 3;
+            if (bench[star] + board[star] < required) break;
+            boolean keepOnBench = bench[star] > 0;
+            lost += Math.max(0, required - bench[star]) - (keepOnBench ? 0 : 1);
+            if (keepOnBench) bench[star + 1]++;
+            else board[star + 1]++;
+        }
+        return lost;
+    }
+
+    public static int countSameTemplateStar(Player player, String templateId, int star) {
         int count = 0;
         for (Unit unit : rosterInRemovalOrder(player)) {
             if (unit.getTemplate().getId().equals(templateId) && unit.getStar() == star) {
